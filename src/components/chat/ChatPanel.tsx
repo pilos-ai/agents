@@ -5,6 +5,7 @@ import { MessageBubble } from './MessageBubble'
 import { StreamingText } from './StreamingText'
 import { InputBar } from './InputBar'
 import { PermissionBanner } from './PermissionBanner'
+import { ThinkingBackground } from './ThinkingBackground'
 
 export function ChatPanel() {
   const messages = useConversationStore((s) => s.messages)
@@ -38,8 +39,10 @@ export function ChatPanel() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+      {/* Messages with neural background */}
+      <div className="relative flex-1 min-h-0">
+        <ThinkingBackground />
+        <div ref={scrollRef} className="relative z-10 h-full overflow-y-auto px-4 py-3 space-y-3">
         {messages.map((msg, i) => {
           // isLast = true for the last assistant message (and no streaming in progress)
           const isLastAssistant =
@@ -71,6 +74,7 @@ export function ChatPanel() {
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* Permission approval banner */}
