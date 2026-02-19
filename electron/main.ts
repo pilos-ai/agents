@@ -5,6 +5,9 @@ import { registerIpcHandlers } from './ipc-handlers'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// Set app name (shown in macOS menu bar during dev)
+app.setName('Pilos Agents')
+
 // Disable hardware acceleration to prevent GPU process crashes on macOS
 app.disableHardwareAcceleration()
 

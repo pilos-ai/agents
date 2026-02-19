@@ -2,6 +2,8 @@ appId: com.pilos.agents
 productName: Pilos Agents
 copyright: Copyright © 2026
 
+afterPack: scripts/afterPack.cjs
+
 directories:
   buildResources: resources
   output: release
@@ -18,10 +20,11 @@ asarUnpack:
 
 mac:
   category: public.app-category.developer-tools
+  identity: null
   target:
     - target: dmg
       arch:
-        - universal
+        - arm64
   darkModeSupport: true
 
 win:
