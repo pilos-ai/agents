@@ -46,9 +46,9 @@ export function SettingsDialog() {
                   onChange={(e) => setProjectModel(e.target.value)}
                   className="w-full bg-neutral-800 text-neutral-100 text-sm rounded-md px-3 py-2 outline-none border border-neutral-700 focus:border-blue-500"
                 >
-                  <option value="sonnet">Claude Sonnet</option>
-                  <option value="opus">Claude Opus</option>
-                  <option value="haiku">Claude Haiku</option>
+                  <option value="sonnet">Sonnet</option>
+                  <option value="opus">Opus</option>
+                  <option value="haiku">Haiku</option>
                 </select>
               </div>
 
@@ -60,7 +60,7 @@ export function SettingsDialog() {
                     {
                       value: 'bypass',
                       label: 'Full access',
-                      desc: 'Claude can do everything without asking',
+                      desc: 'Pilos can do everything without asking',
                       color: 'text-green-400',
                     },
                     {
@@ -72,7 +72,7 @@ export function SettingsDialog() {
                     {
                       value: 'plan',
                       label: 'Read only',
-                      desc: 'Claude can only read files — no edits, no commands',
+                      desc: 'Pilos can only read files — no edits, no commands',
                       color: 'text-red-400',
                     },
                   ].map((mode) => (

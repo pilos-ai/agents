@@ -34,7 +34,7 @@ export function PermissionBanner() {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-yellow-200">
-            Claude wants to {isBash ? 'run' : 'use'}: <span className="text-white">{permissionRequest.toolName}</span>
+            Pilos wants to {isBash ? 'run' : 'use'}: <span className="text-white">{permissionRequest.toolName}</span>
           </p>
           {displayInfo && (
             <pre className={`mt-1.5 text-xs rounded px-2 py-1.5 overflow-x-auto max-h-40 whitespace-pre-wrap ${

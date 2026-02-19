@@ -176,7 +176,7 @@ export function InputBar() {
           onChange={handleInput}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder={images.length > 0 ? 'Add a message about the image...' : 'Send a message to Claude...'}
+          placeholder={images.length > 0 ? 'Add a message about the image...' : 'Send a message to Pilos...'}
           rows={1}
           className="flex-1 min-w-0 bg-neutral-800 text-neutral-100 rounded-lg px-4 py-2 text-sm resize-none outline-none focus:ring-1 focus:ring-blue-500/50 placeholder-neutral-500"
           disabled={isLoading}
