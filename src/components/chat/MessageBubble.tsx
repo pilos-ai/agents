@@ -1,0 +1,95 @@
+import { useMemo } from 'react'
+import type { ConversationMessage, ContentBlock } from '../../types'
+import { ToolUseBlock } from './ToolUseBlock'
+import { ToolResultBlock } from './ToolResultBlock'
+import { ThinkingBlock } from './ThinkingBlock'
+import { MarkdownRenderer } from './MarkdownRenderer'
+import { OptionButtons, detectOptions } from './OptionButtons'
+
+interface Props {
+  message: ConversationMessage
+  isLast?: boolean
+}
+
+export function MessageBubble({ message, isLast }: Props) {
+  const isUser = message.role === 'user'
+
+  const options = useMemo(() => {
+    if (isUser || !isLast) return []
+    return detectOptions(message.content)
+  }, [message.content, isUser, isLast])
+
+  // If we have content blocks, render them
+  if (message.contentBlocks && message.contentBlocks.length > 0) {
+    return (
+      <div className="space-y-2">
+        {message.contentBlocks.map((block, i) => renderContentBlock(block, i, isLast && i === message.contentBlocks!.length - 1))}
+      </div>
+    )
+  }
+
+  // Simple text message
+  return (
+    <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+      <div
+        className={`max-w-[85%] rounded-lg px-4 py-2.5 ${
+          isUser
+            ? 'bg-blue-600 text-white'
+            : 'bg-neutral-800/60 text-neutral-100'
+        }`}
+      >
+        {/* Show attached images */}
+        {message.images && message.images.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {message.images.map((img, i) => (
+              <img
+                key={i}
+                src={`data:${img.mediaType};base64,${img.data}`}
+                alt={img.name || 'attachment'}
+                className="max-h-48 max-w-full rounded-md"
+              />
+            ))}
+          </div>
+        )}
+        {isUser ? (
+          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+        ) : (
+          <div className="markdown-content text-sm">
+            <MarkdownRenderer content={message.content} />
+          </div>
+        )}
+      </div>
+      {options.length > 0 && <OptionButtons options={options} />}
+    </div>
+  )
+}
+
+function renderContentBlock(block: ContentBlock, index: number, isLastBlock?: boolean) {
+  switch (block.type) {
+    case 'text': {
+      const options = isLastBlock ? detectOptions(block.text) : []
+      return (
+        <div key={index} className="flex flex-col items-start">
+          <div className="max-w-[85%] rounded-lg px-4 py-2.5 bg-neutral-800/60 text-neutral-100">
+            <div className="markdown-content text-sm">
+              <MarkdownRenderer content={block.text} />
+            </div>
+          </div>
+          {options.length > 0 && <OptionButtons options={options} />}
+        </div>
+      )
+    }
+
+    case 'tool_use':
+      return <ToolUseBlock key={index} block={block} />
+
+    case 'tool_result':
+      return <ToolResultBlock key={index} block={block} />
+
+    case 'thinking':
+      return <ThinkingBlock key={index} text={block.thinking} />
+
+    default:
+      return null
+  }
+}

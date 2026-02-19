@@ -1,0 +1,38 @@
+appId: com.claude-code.desktop
+productName: Claude Code Desktop
+copyright: Copyright © 2026
+
+directories:
+  buildResources: resources
+  output: release
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - node_modules/**/*
+  - package.json
+
+asarUnpack:
+  - "node_modules/better-sqlite3/**"
+  - "node_modules/node-pty/**"
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch:
+        - universal
+  darkModeSupport: true
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  category: Development
