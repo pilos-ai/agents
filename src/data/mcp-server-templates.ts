@@ -23,6 +23,13 @@ export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
       env: { GITHUB_TOKEN: '' },
     },
     requiredEnvVars: ['GITHUB_TOKEN'],
+    setupSteps: [
+      'Go to github.com > Settings > Developer settings > Personal access tokens > Tokens (classic)',
+      'Click "Generate new token (classic)"',
+      'Select scopes: repo, read:org, read:user',
+      'Copy the generated token and paste it as GITHUB_TOKEN below',
+    ],
+    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/github',
   },
   {
     id: 'figma',
@@ -37,6 +44,13 @@ export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
       env: { FIGMA_API_KEY: '' },
     },
     requiredEnvVars: ['FIGMA_API_KEY'],
+    setupSteps: [
+      'Open Figma and go to Settings (top-left avatar)',
+      'Scroll to "Personal access tokens"',
+      'Click "Create new token", give it a description',
+      'Copy the token and paste it as FIGMA_API_KEY below',
+    ],
+    docsUrl: 'https://www.figma.com/developers/api#access-tokens',
   },
   {
     id: 'linear',
@@ -51,6 +65,13 @@ export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
       env: { LINEAR_API_KEY: '' },
     },
     requiredEnvVars: ['LINEAR_API_KEY'],
+    setupSteps: [
+      'Open Linear and go to Settings > API',
+      'Under "Personal API keys", click "Create key"',
+      'Give it a label, then copy the key',
+      'Paste it as LINEAR_API_KEY below',
+    ],
+    docsUrl: 'https://developers.linear.app/docs/graphql/working-with-the-graphql-api#personal-api-keys',
   },
   {
     id: 'jira',
@@ -65,6 +86,13 @@ export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
       env: { JIRA_URL: '', JIRA_EMAIL: '', JIRA_API_TOKEN: '' },
     },
     requiredEnvVars: ['JIRA_URL', 'JIRA_EMAIL', 'JIRA_API_TOKEN'],
+    setupSteps: [
+      'Set JIRA_URL to your Atlassian domain (e.g. https://yourteam.atlassian.net)',
+      'Set JIRA_EMAIL to your Atlassian account email',
+      'Go to id.atlassian.com/manage-profile/security/api-tokens',
+      'Click "Create API token", copy it, and paste as JIRA_API_TOKEN',
+    ],
+    docsUrl: 'https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/',
   },
   {
     id: 'slack',
@@ -79,6 +107,13 @@ export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
       env: { SLACK_BOT_TOKEN: '' },
     },
     requiredEnvVars: ['SLACK_BOT_TOKEN'],
+    setupSteps: [
+      'Go to api.slack.com/apps and create a new app (or select existing)',
+      'Under "OAuth & Permissions", add bot scopes: channels:read, chat:write, users:read',
+      'Install the app to your workspace',
+      'Copy the "Bot User OAuth Token" (starts with xoxb-) and paste as SLACK_BOT_TOKEN',
+    ],
+    docsUrl: 'https://api.slack.com/tutorials/tracks/getting-a-token',
   },
   {
     id: 'google-calendar',
@@ -93,6 +128,14 @@ export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
       env: { GOOGLE_CALENDAR_CREDENTIALS: '' },
     },
     requiredEnvVars: ['GOOGLE_CALENDAR_CREDENTIALS'],
+    setupSteps: [
+      'Go to console.cloud.google.com and create a project (or select existing)',
+      'Enable the Google Calendar API under "APIs & Services"',
+      'Create OAuth 2.0 credentials (Desktop app type)',
+      'Download the JSON credentials file',
+      'Paste the full JSON content as GOOGLE_CALENDAR_CREDENTIALS',
+    ],
+    docsUrl: 'https://developers.google.com/calendar/api/quickstart/nodejs',
   },
   {
     id: 'supabase',
@@ -107,6 +150,14 @@ export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
       env: { SUPABASE_URL: '', SUPABASE_SERVICE_KEY: '' },
     },
     requiredEnvVars: ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY'],
+    setupSteps: [
+      'Open your Supabase project dashboard',
+      'Go to Settings > API',
+      'Copy "Project URL" and paste as SUPABASE_URL',
+      'Copy "service_role" key (under Project API keys) and paste as SUPABASE_SERVICE_KEY',
+      'Warning: service_role key bypasses RLS — use with caution',
+    ],
+    docsUrl: 'https://supabase.com/docs/guides/api#api-url-and-keys',
   },
   {
     id: 'playwright',
@@ -121,6 +172,10 @@ export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
       env: {},
     },
     requiredEnvVars: [],
+    setupSteps: [
+      'No configuration needed — works out of the box',
+      'Playwright will download browser binaries on first run if needed',
+    ],
   },
   {
     id: 'filesystem',
@@ -135,5 +190,10 @@ export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
       env: {},
     },
     requiredEnvVars: [],
+    setupSteps: [
+      'No configuration needed — works out of the box',
+      'You can optionally pass allowed directories as additional args',
+    ],
+    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem',
   },
 ]

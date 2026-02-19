@@ -198,6 +198,8 @@ export interface McpServerTemplate {
   category: string
   config: McpServerConfig
   requiredEnvVars: string[]
+  setupSteps: string[]
+  docsUrl?: string
 }
 
 // ── CLI Check Types ──
