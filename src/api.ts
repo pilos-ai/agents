@@ -30,7 +30,7 @@ const stubAPI: ElectronAPI = {
     getRecent: () => Promise.resolve([]),
     addRecent: noopAsync,
     removeRecent: noopAsync,
-    getSettings: () => Promise.resolve({ model: 'sonnet', permissionMode: 'bypass' }),
+    getSettings: () => Promise.resolve({ model: 'sonnet', permissionMode: 'bypass', mode: 'solo' as const, agents: [] }),
     setSettings: noopAsync,
   },
   terminal: {

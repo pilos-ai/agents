@@ -1,0 +1,73 @@
+import type { AgentDefinition } from '../types'
+
+export const AGENT_TEMPLATES: AgentDefinition[] = [
+  {
+    id: 'pm',
+    name: 'PM',
+    emoji: '\u{1F4CB}',
+    color: 'blue',
+    role: 'Project Manager',
+    personality: 'You are a pragmatic project manager who breaks down tasks into clear steps, tracks priorities, and keeps the team focused. You ask clarifying questions and define acceptance criteria.',
+    expertise: ['task breakdown', 'priorities', 'requirements', 'coordination'],
+  },
+  {
+    id: 'architect',
+    name: 'Architect',
+    emoji: '\u{1F3D7}\uFE0F',
+    color: 'purple',
+    role: 'Software Architect',
+    personality: 'You are a thoughtful software architect who focuses on system design, scalability, and maintainable patterns. You consider trade-offs and propose clean abstractions.',
+    expertise: ['system design', 'patterns', 'trade-offs', 'architecture'],
+  },
+  {
+    id: 'developer',
+    name: 'Dev',
+    emoji: '\u{1F4BB}',
+    color: 'green',
+    role: 'Senior Developer',
+    personality: 'You are a skilled developer who writes clean, efficient code. You focus on implementation details, debugging, and practical solutions. You handle all tool use (file edits, bash commands).',
+    expertise: ['implementation', 'debugging', 'code review', 'refactoring'],
+  },
+  {
+    id: 'designer',
+    name: 'Designer',
+    emoji: '\u{1F3A8}',
+    color: 'pink',
+    role: 'UI/UX Designer',
+    personality: 'You are a detail-oriented designer who cares about user experience, accessibility, and visual consistency. You suggest layout improvements and design system patterns.',
+    expertise: ['UI/UX', 'accessibility', 'visual design', 'user flows'],
+  },
+  {
+    id: 'qa',
+    name: 'QA',
+    emoji: '\u{1F50D}',
+    color: 'orange',
+    role: 'QA Engineer',
+    personality: 'You are a thorough QA engineer who thinks about edge cases, error handling, and test coverage. You review code for bugs and suggest test strategies.',
+    expertise: ['testing', 'edge cases', 'code review', 'quality'],
+  },
+  {
+    id: 'devops',
+    name: 'DevOps',
+    emoji: '\u{1F680}',
+    color: 'cyan',
+    role: 'DevOps Engineer',
+    personality: 'You are a DevOps engineer focused on CI/CD, deployment, infrastructure, and operational concerns. You think about reliability, monitoring, and automation.',
+    expertise: ['CI/CD', 'deployment', 'infrastructure', 'automation'],
+  },
+]
+
+export const AGENT_COLORS: Record<string, { text: string; bgLight: string; border: string }> = {
+  blue:   { text: 'text-blue-400',   bgLight: 'bg-blue-600/15',   border: 'border-blue-500/30' },
+  purple: { text: 'text-purple-400', bgLight: 'bg-purple-600/15', border: 'border-purple-500/30' },
+  green:  { text: 'text-green-400',  bgLight: 'bg-green-600/15',  border: 'border-green-500/30' },
+  pink:   { text: 'text-pink-400',   bgLight: 'bg-pink-600/15',   border: 'border-pink-500/30' },
+  orange: { text: 'text-orange-400', bgLight: 'bg-orange-600/15', border: 'border-orange-500/30' },
+  cyan:   { text: 'text-cyan-400',   bgLight: 'bg-cyan-600/15',   border: 'border-cyan-500/30' },
+}
+
+export const TEAM_PRESETS: Record<string, string[]> = {
+  'Full Team': ['pm', 'architect', 'developer', 'designer', 'qa'],
+  'Dev Team': ['architect', 'developer', 'qa'],
+  'Design Sprint': ['pm', 'designer', 'developer'],
+}

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useConversationStore } from '../../store/useConversationStore'
 import { useProjectStore } from '../../store/useProjectStore'
+import { AGENT_COLORS } from '../../data/agent-templates'
 import { MessageBubble } from './MessageBubble'
 import { StreamingText } from './StreamingText'
 import { InputBar } from './InputBar'
@@ -53,27 +54,44 @@ export function ChatPanel() {
         })}
 
         {/* Streaming content */}
-        {streaming.isStreaming && (
-          <div className="flex justify-start">
-            <div className="max-w-[85%] rounded-lg px-4 py-3 bg-neutral-800/60 text-neutral-100">
-              {streaming.thinking && (
-                <div className="mb-2 text-neutral-400 text-xs italic border-l-2 border-neutral-600 pl-2">
-                  {streaming.thinking.slice(-500)}
+        {streaming.isStreaming && (() => {
+          const streamingAgent = activeTab?.mode === 'team' && streaming.currentAgentName
+            ? activeTab.agents.find((a) => a.name === streaming.currentAgentName)
+            : null
+          const agentColors = streamingAgent ? AGENT_COLORS[streamingAgent.color] || AGENT_COLORS.blue : null
+
+          return (
+            <div className="flex flex-col items-start">
+              {streamingAgent && (
+                <div className="flex items-center gap-1.5 mb-1 ml-1">
+                  <span className="text-base">{streamingAgent.emoji}</span>
+                  <span className={`text-xs font-semibold ${agentColors!.text}`}>{streamingAgent.name}</span>
                 </div>
               )}
-              {streaming.text ? (
-                <StreamingText text={streaming.text} />
-              ) : (
-                !streaming.thinking && (
-                  <div className="flex items-center gap-2 text-neutral-400 text-sm">
-                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
-                    Thinking...
+              <div className={`max-w-[85%] rounded-lg px-4 py-3 text-neutral-100 ${
+                agentColors
+                  ? `${agentColors.bgLight} border-l-2 ${agentColors.border}`
+                  : 'bg-neutral-800/60'
+              }`}>
+                {streaming.thinking && (
+                  <div className="mb-2 text-neutral-400 text-xs italic border-l-2 border-neutral-600 pl-2">
+                    {streaming.thinking.slice(-500)}
                   </div>
-                )
-              )}
+                )}
+                {streaming.text ? (
+                  <StreamingText text={streaming.text} />
+                ) : (
+                  !streaming.thinking && (
+                    <div className="flex items-center gap-2 text-neutral-400 text-sm">
+                      <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
+                      Thinking...
+                    </div>
+                  )
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
         </div>
       </div>
 

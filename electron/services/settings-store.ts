@@ -11,6 +11,16 @@ interface Project {
 interface ProjectSettings {
   model: string
   permissionMode: string
+  mode: 'solo' | 'team'
+  agents: Array<{
+    id: string
+    name: string
+    emoji: string
+    color: string
+    role: string
+    personality: string
+    expertise: string[]
+  }>
 }
 
 interface Settings {
@@ -33,6 +43,8 @@ const DEFAULTS: Settings = {
 const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   model: 'sonnet',
   permissionMode: 'bypass',
+  mode: 'solo',
+  agents: [],
 }
 
 export class SettingsStore {

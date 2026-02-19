@@ -11,6 +11,7 @@ export interface ClaudeSessionOptions {
   permissionMode?: string
   resume?: boolean
   images?: Array<{ data: string; mediaType: string }>
+  appendSystemPrompt?: string
 }
 
 interface ToolUse {
@@ -73,6 +74,10 @@ export class ClaudeProcess {
     }
     // 'supervised' mode: no special flags — CLI uses default permissions
     // which auto-approves reads but denies writes/bash. We intercept denials.
+
+    if (options.appendSystemPrompt) {
+      args.push('--append-system-prompt', options.appendSystemPrompt)
+    }
 
     // Strip all Claude Code env vars to allow nested sessions,
     // and ensure PATH includes common CLI install locations

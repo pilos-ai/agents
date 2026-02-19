@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { ConversationMessage, ContentBlock } from '../../types'
+import { AGENT_COLORS } from '../../data/agent-templates'
 import { ToolUseBlock } from './ToolUseBlock'
 import { ToolResultBlock } from './ToolResultBlock'
 import { ThinkingBlock } from './ThinkingBlock'
@@ -24,6 +25,25 @@ export function MessageBubble({ message, isLast }: Props) {
     return (
       <div className="space-y-2">
         {message.contentBlocks.map((block, i) => renderContentBlock(block, i, isLast && i === message.contentBlocks!.length - 1))}
+      </div>
+    )
+  }
+
+  // Agent-attributed message (team mode)
+  if (!isUser && message.agentName) {
+    const colors = AGENT_COLORS[message.agentColor || 'blue'] || AGENT_COLORS.blue
+    return (
+      <div className="flex flex-col items-start">
+        <div className="flex items-center gap-1.5 mb-1 ml-1">
+          <span className="text-base">{message.agentEmoji}</span>
+          <span className={`text-xs font-semibold ${colors.text}`}>{message.agentName}</span>
+        </div>
+        <div className={`max-w-[85%] rounded-lg px-4 py-2.5 ${colors.bgLight} border-l-2 ${colors.border} text-neutral-100`}>
+          <div className="markdown-content text-sm">
+            <MarkdownRenderer content={message.content} />
+          </div>
+        </div>
+        {options.length > 0 && <OptionButtons options={options} />}
       </div>
     )
   }

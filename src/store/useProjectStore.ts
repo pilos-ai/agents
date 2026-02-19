@@ -1,13 +1,14 @@
 import { create } from 'zustand'
 import { api } from '../api'
 import { useConversationStore } from './useConversationStore'
-import type { Project, Conversation, ConversationMessage, ContentBlock, ClaudeEvent } from '../types'
+import type { Project, Conversation, ConversationMessage, ContentBlock, ClaudeEvent, ProjectMode, AgentDefinition } from '../types'
 
 interface StreamingSnapshot {
   text: string
   contentBlocks: ContentBlock[]
   thinking: string
   isStreaming: boolean
+  currentAgentName: string | null
 }
 
 export interface ConversationSnapshot {
@@ -25,6 +26,8 @@ export interface ProjectTab {
   snapshot: ConversationSnapshot | null
   model: string
   permissionMode: string
+  mode: ProjectMode
+  agents: AgentDefinition[]
 }
 
 interface ProjectStore {
@@ -41,6 +44,11 @@ interface ProjectStore {
   setActiveProject: (dirPath: string) => Promise<void>
   setProjectModel: (model: string) => void
   setProjectPermissionMode: (mode: string) => void
+  setProjectMode: (mode: ProjectMode) => void
+  setProjectAgents: (agents: AgentDefinition[]) => void
+  addProjectAgent: (agent: AgentDefinition) => void
+  removeProjectAgent: (id: string) => void
+  updateProjectAgent: (id: string, updates: Partial<AgentDefinition>) => void
   removeRecentProject: (dirPath: string) => Promise<void>
 
   // Event routing
@@ -52,7 +60,7 @@ const emptySnapshot: ConversationSnapshot = {
   conversations: [],
   activeConversationId: null,
   messages: [],
-  streaming: { text: '', contentBlocks: [], thinking: '', isStreaming: false },
+  streaming: { text: '', contentBlocks: [], thinking: '', isStreaming: false, currentAgentName: null },
   isWaitingForResponse: false,
   hasActiveSession: false,
 }
@@ -121,6 +129,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       snapshot: null,
       model: settings.model || 'sonnet',
       permissionMode: settings.permissionMode || 'bypass',
+      mode: settings.mode || 'solo',
+      agents: settings.agents || [],
     }
 
     openProjects.push(newTab)
@@ -159,7 +169,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           conversations: [],
           activeConversationId: null,
           messages: [],
-          streaming: { text: '', contentBlocks: [], thinking: '', isStreaming: false },
+          streaming: { text: '', contentBlocks: [], thinking: '', isStreaming: false, currentAgentName: null },
           isWaitingForResponse: false,
           hasActiveSession: false,
           permissionRequest: null,
@@ -217,6 +227,75 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       ),
     })
     api.projects.setSettings(dirPath, { permissionMode: mode })
+  },
+
+  setProjectMode: (mode: ProjectMode) => {
+    const state = get()
+    if (!state.activeProjectPath) return
+    const dirPath = state.activeProjectPath
+    set({
+      openProjects: state.openProjects.map((p) =>
+        p.projectPath === dirPath ? { ...p, mode } : p
+      ),
+    })
+    api.projects.setSettings(dirPath, { mode })
+  },
+
+  setProjectAgents: (agents: AgentDefinition[]) => {
+    const state = get()
+    if (!state.activeProjectPath) return
+    const dirPath = state.activeProjectPath
+    set({
+      openProjects: state.openProjects.map((p) =>
+        p.projectPath === dirPath ? { ...p, agents } : p
+      ),
+    })
+    api.projects.setSettings(dirPath, { agents })
+  },
+
+  addProjectAgent: (agent: AgentDefinition) => {
+    const state = get()
+    if (!state.activeProjectPath) return
+    const dirPath = state.activeProjectPath
+    const tab = state.openProjects.find((p) => p.projectPath === dirPath)
+    if (!tab) return
+    const agents = [...tab.agents, agent]
+    set({
+      openProjects: state.openProjects.map((p) =>
+        p.projectPath === dirPath ? { ...p, agents } : p
+      ),
+    })
+    api.projects.setSettings(dirPath, { agents })
+  },
+
+  removeProjectAgent: (id: string) => {
+    const state = get()
+    if (!state.activeProjectPath) return
+    const dirPath = state.activeProjectPath
+    const tab = state.openProjects.find((p) => p.projectPath === dirPath)
+    if (!tab) return
+    const agents = tab.agents.filter((a) => a.id !== id)
+    set({
+      openProjects: state.openProjects.map((p) =>
+        p.projectPath === dirPath ? { ...p, agents } : p
+      ),
+    })
+    api.projects.setSettings(dirPath, { agents })
+  },
+
+  updateProjectAgent: (id: string, updates: Partial<AgentDefinition>) => {
+    const state = get()
+    if (!state.activeProjectPath) return
+    const dirPath = state.activeProjectPath
+    const tab = state.openProjects.find((p) => p.projectPath === dirPath)
+    if (!tab) return
+    const agents = tab.agents.map((a) => (a.id === id ? { ...a, ...updates } : a))
+    set({
+      openProjects: state.openProjects.map((p) =>
+        p.projectPath === dirPath ? { ...p, agents } : p
+      ),
+    })
+    api.projects.setSettings(dirPath, { agents })
   },
 
   removeRecentProject: async (dirPath: string) => {

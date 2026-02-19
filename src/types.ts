@@ -9,6 +9,8 @@ export interface Project {
 export interface ProjectSettings {
   model: string          // default 'sonnet'
   permissionMode: string // default 'bypass'
+  mode: ProjectMode      // default 'solo'
+  agents: AgentDefinition[] // default []
 }
 
 // ── Claude CLI Event Types ──
@@ -114,6 +116,10 @@ export interface ConversationMessage {
   toolName?: string
   toolInput?: string
   toolResult?: string
+  agentId?: string
+  agentName?: string
+  agentEmoji?: string
+  agentColor?: string
   timestamp: number
 }
 
@@ -134,6 +140,20 @@ export interface TrackedProcess {
   status: 'running' | 'stopped' | 'exited'
   exitCode?: number
 }
+
+// ── Multi-Agent Team Types ──
+
+export interface AgentDefinition {
+  id: string
+  name: string         // e.g. "Dev"
+  emoji: string        // e.g. "💻"
+  color: string        // tailwind key: 'blue' | 'purple' | 'green' | 'pink' | 'orange' | 'cyan'
+  role: string         // e.g. "Senior Developer"
+  personality: string  // system prompt personality text
+  expertise: string[]  // e.g. ['implementation', 'debugging']
+}
+
+export type ProjectMode = 'solo' | 'team'
 
 // ── CLI Check Types ──
 

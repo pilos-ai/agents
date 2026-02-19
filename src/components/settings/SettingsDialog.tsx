@@ -1,5 +1,6 @@
 import { useAppStore } from '../../store/useAppStore'
 import { useProjectStore } from '../../store/useProjectStore'
+import { AgentManager } from '../agents/AgentManager'
 
 export function SettingsDialog() {
   const setSettingsOpen = useAppStore((s) => s.setSettingsOpen)
@@ -10,6 +11,11 @@ export function SettingsDialog() {
   const openProjects = useProjectStore((s) => s.openProjects)
   const setProjectModel = useProjectStore((s) => s.setProjectModel)
   const setProjectPermissionMode = useProjectStore((s) => s.setProjectPermissionMode)
+  const setProjectMode = useProjectStore((s) => s.setProjectMode)
+  const setProjectAgents = useProjectStore((s) => s.setProjectAgents)
+  const addProjectAgent = useProjectStore((s) => s.addProjectAgent)
+  const removeProjectAgent = useProjectStore((s) => s.removeProjectAgent)
+  const updateProjectAgent = useProjectStore((s) => s.updateProjectAgent)
 
   const activeTab = openProjects.find((p) => p.projectPath === activeProjectPath)
 
@@ -103,6 +109,48 @@ export function SettingsDialog() {
                   Changes apply to new sessions. Restart the chat after changing.
                 </p>
               </div>
+
+              {/* Mode Toggle */}
+              <div>
+                <label className="block text-xs font-medium text-neutral-400 mb-1.5">Mode</label>
+                <div className="flex gap-2">
+                  {([
+                    { value: 'solo', label: 'Solo', desc: 'Single AI assistant' },
+                    { value: 'team', label: 'Team', desc: 'Multi-agent collaboration' },
+                  ] as const).map((m) => (
+                    <button
+                      key={m.value}
+                      onClick={() => setProjectMode(m.value)}
+                      className={`flex-1 p-3 rounded-lg border text-left transition-colors ${
+                        activeTab.mode === m.value
+                          ? 'border-blue-500/50 bg-blue-500/10'
+                          : 'border-neutral-700 bg-neutral-800/50 hover:border-neutral-600'
+                      }`}
+                    >
+                      <div className="text-sm font-medium text-neutral-200">{m.label}</div>
+                      <div className="text-xs text-neutral-500 mt-0.5">{m.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Agent Manager (team mode only) */}
+              {activeTab.mode === 'team' && (
+                <div>
+                  <label className="block text-xs font-medium text-neutral-400 mb-1.5">Team Agents</label>
+                  <AgentManager
+                    agents={activeTab.agents}
+                    onSetAgents={setProjectAgents}
+                    onAddAgent={addProjectAgent}
+                    onRemoveAgent={removeProjectAgent}
+                    onUpdateAgent={updateProjectAgent}
+                  />
+                </div>
+              )}
+
+              <p className="text-xs text-neutral-500 italic">
+                Changes apply to new sessions. Restart the chat after changing.
+              </p>
 
               <div className="border-t border-neutral-800 pt-4" />
             </>

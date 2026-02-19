@@ -1,13 +1,16 @@
 import { create } from 'zustand'
 import { api } from '../api'
 import { useProjectStore, getActiveProjectTab } from './useProjectStore'
-import type { Conversation, ConversationMessage, ContentBlock, ClaudeEvent, ImageAttachment } from '../types'
+import { buildTeamSystemPrompt } from '../utils/team-prompt-builder'
+import { AGENT_COLORS } from '../data/agent-templates'
+import type { Conversation, ConversationMessage, ContentBlock, ClaudeEvent, ImageAttachment, AgentDefinition } from '../types'
 
 interface StreamingState {
   text: string
   contentBlocks: ContentBlock[]
   thinking: string
   isStreaming: boolean
+  currentAgentName: string | null
 }
 
 interface ConversationStore {
@@ -38,6 +41,55 @@ const emptyStreaming: StreamingState = {
   contentBlocks: [],
   thinking: '',
   isStreaming: false,
+  currentAgentName: null,
+}
+
+/** Parse text into agent-attributed segments for team mode */
+function parseAgentSegments(
+  text: string,
+  agents: AgentDefinition[]
+): Array<{ agentName: string | null; agentId?: string; agentEmoji?: string; agentColor?: string; text: string }> {
+  const agentNameSet = new Set(agents.map((a) => a.name))
+  const lines = text.split('\n')
+  const segments: Array<{ agentName: string | null; agentId?: string; agentEmoji?: string; agentColor?: string; text: string }> = []
+  let current: { agentName: string | null; agentId?: string; agentEmoji?: string; agentColor?: string; lines: string[] } = {
+    agentName: null,
+    lines: [],
+  }
+
+  for (const line of lines) {
+    const match = line.match(/^\[([A-Za-z_\s]+)\]\s*$/)
+    if (match) {
+      const name = match[1].trim()
+      if (agentNameSet.has(name)) {
+        // Flush current segment
+        if (current.lines.length > 0 || current.agentName) {
+          const text = current.lines.join('\n').trim()
+          if (text) {
+            segments.push({ agentName: current.agentName, agentId: current.agentId, agentEmoji: current.agentEmoji, agentColor: current.agentColor, text })
+          }
+        }
+        const agent = agents.find((a) => a.name === name)
+        current = {
+          agentName: name,
+          agentId: agent?.id,
+          agentEmoji: agent?.emoji,
+          agentColor: agent?.color,
+          lines: [],
+        }
+        continue
+      }
+    }
+    current.lines.push(line)
+  }
+
+  // Flush last segment
+  const lastText = current.lines.join('\n').trim()
+  if (lastText) {
+    segments.push({ agentName: current.agentName, agentId: current.agentId, agentEmoji: current.agentEmoji, agentColor: current.agentColor, text: lastText })
+  }
+
+  return segments
 }
 
 export const useConversationStore = create<ConversationStore>((set, get) => ({
@@ -114,6 +166,12 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       // Register this conversation for event routing
       useProjectStore.getState().registerConversation(conversationId, projectPath)
 
+      // Build team system prompt if in team mode
+      let appendSystemPrompt: string | undefined
+      if (tab?.mode === 'team' && tab.agents.length > 0) {
+        appendSystemPrompt = buildTeamSystemPrompt(tab.agents)
+      }
+
       await api.claude.startSession(conversationId, {
         prompt: text,
         images: images,
@@ -121,6 +179,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         workingDirectory: projectPath || undefined,
         model: tab?.model,
         permissionMode: tab?.permissionMode,
+        appendSystemPrompt,
       })
     } else {
       await api.claude.sendMessage(conversationId, text, images)
@@ -218,12 +277,32 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       case 'content_block_delta': {
         const delta = event.delta as { type: string; text?: string; thinking?: string }
         if (delta.type === 'text_delta' && delta.text) {
-          set((s) => ({
-            streaming: {
-              ...s.streaming,
-              text: s.streaming.text + delta.text,
-            },
-          }))
+          const tab = getActiveProjectTab()
+          set((s) => {
+            const newText = s.streaming.text + delta.text
+            let currentAgentName = s.streaming.currentAgentName
+
+            // Detect [AgentName] markers in team mode
+            if (tab?.mode === 'team' && tab.agents.length > 0) {
+              const agentNameSet = new Set(tab.agents.map((a) => a.name))
+              const lines = newText.split('\n')
+              for (let i = lines.length - 1; i >= 0; i--) {
+                const m = lines[i].match(/^\[([A-Za-z_\s]+)\]\s*$/)
+                if (m && agentNameSet.has(m[1].trim())) {
+                  currentAgentName = m[1].trim()
+                  break
+                }
+              }
+            }
+
+            return {
+              streaming: {
+                ...s.streaming,
+                text: newText,
+                currentAgentName,
+              },
+            }
+          })
         } else if (delta.type === 'thinking_delta' && delta.thinking) {
           set((s) => ({
             streaming: {
@@ -261,27 +340,53 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         finalText = finalText || streaming.text
 
         if (finalText) {
-          // Check if last message is already an assistant message (from 'assistant' events)
-          const messages = get().messages
-          const lastMsg = messages[messages.length - 1]
-          if (lastMsg?.role === 'assistant' && lastMsg.type === 'text') {
-            // Update existing message with final text
-            set({
-              messages: [
-                ...messages.slice(0, -1),
-                { ...lastMsg, content: finalText },
-              ],
-            })
-          } else {
-            get().addMessage({
-              role: 'assistant',
-              type: 'text',
-              content: finalText,
+          const tab = getActiveProjectTab()
+
+          // In team mode, parse agent segments and create per-agent messages
+          if (tab?.mode === 'team' && tab.agents.length > 0) {
+            const segments = parseAgentSegments(finalText, tab.agents)
+
+            // Remove any existing assistant message from streaming (assistant events)
+            const messages = get().messages
+            const lastMsg = messages[messages.length - 1]
+            const baseMessages = lastMsg?.role === 'assistant' && lastMsg.type === 'text'
+              ? messages.slice(0, -1)
+              : [...messages]
+
+            const agentMessages: ConversationMessage[] = segments.map((seg) => ({
+              role: 'assistant' as const,
+              type: 'text' as const,
+              content: seg.text,
+              agentId: seg.agentId,
+              agentName: seg.agentName || undefined,
+              agentEmoji: seg.agentEmoji,
+              agentColor: seg.agentColor,
               timestamp: Date.now(),
-            })
+            }))
+
+            set({ messages: [...baseMessages, ...agentMessages] })
+          } else {
+            // Solo mode — same as before
+            const messages = get().messages
+            const lastMsg = messages[messages.length - 1]
+            if (lastMsg?.role === 'assistant' && lastMsg.type === 'text') {
+              set({
+                messages: [
+                  ...messages.slice(0, -1),
+                  { ...lastMsg, content: finalText },
+                ],
+              })
+            } else {
+              get().addMessage({
+                role: 'assistant',
+                type: 'text',
+                content: finalText,
+                timestamp: Date.now(),
+              })
+            }
           }
 
-          // Save to DB
+          // Save full text to DB (single message regardless of mode)
           if (activeConversationId) {
             api.conversations.saveMessage(activeConversationId, {
               role: 'assistant',
