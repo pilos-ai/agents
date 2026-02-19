@@ -5,6 +5,11 @@ const noopAsync = () => Promise.resolve(null as never)
 const noopUnsub = () => noop
 
 const stubAPI: ElectronAPI = {
+  cli: {
+    check: () => Promise.resolve({ available: true, npmAvailable: true }),
+    install: () => Promise.resolve(true),
+    onInstallOutput: noopUnsub,
+  },
   claude: {
     startSession: noopAsync,
     sendMessage: noopAsync,

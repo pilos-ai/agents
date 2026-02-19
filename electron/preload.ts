@@ -1,6 +1,17 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('api', {
+  // CLI Checker
+  cli: {
+    check: () => ipcRenderer.invoke('cli:check'),
+    install: () => ipcRenderer.invoke('cli:install'),
+    onInstallOutput: (callback: (data: unknown) => void) => {
+      const handler = (_event: unknown, data: unknown) => callback(data)
+      ipcRenderer.on('cli:installOutput', handler)
+      return () => ipcRenderer.removeListener('cli:installOutput', handler)
+    },
+  },
+
   // Claude CLI
   claude: {
     startSession: (sessionId: string, options: Record<string, unknown>) =>

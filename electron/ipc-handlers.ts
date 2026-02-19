@@ -4,12 +4,14 @@ import { TerminalManager } from './core/terminal-manager'
 import { ProcessTracker } from './core/process-tracker'
 import { Database } from './core/database'
 import { SettingsStore } from './services/settings-store'
+import { CliChecker } from './services/cli-checker'
 
 let claudeProcess: ClaudeProcess
 let terminalManager: TerminalManager
 let processTracker: ProcessTracker
 let database: Database
 let settings: SettingsStore
+let cliChecker: CliChecker
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   settings = new SettingsStore()
@@ -17,6 +19,16 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   claudeProcess = new ClaudeProcess(mainWindow, settings)
   terminalManager = new TerminalManager(mainWindow)
   processTracker = new ProcessTracker(mainWindow)
+  cliChecker = new CliChecker(mainWindow)
+
+  // ── CLI Checker ──
+  ipcMain.handle('cli:check', async () => {
+    return cliChecker.check()
+  })
+
+  ipcMain.handle('cli:install', async () => {
+    return cliChecker.install()
+  })
 
   // ── Claude CLI ──
   ipcMain.handle('claude:startSession', async (_event, sessionId: string, options) => {

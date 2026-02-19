@@ -1,7 +1,16 @@
 import { create } from 'zustand'
 import { api } from '../api'
 
+export type CliStatus = 'checking' | 'ready' | 'missing' | 'installing' | 'install_failed' | 'error'
+
 interface AppStore {
+  // CLI Status
+  cliStatus: CliStatus
+  cliVersion?: string
+  cliNpmAvailable: boolean
+  cliError?: string
+  cliInstallLog: string
+
   // UI State
   sidebarWidth: number
   rightPanelWidth: number
@@ -13,6 +22,9 @@ interface AppStore {
   terminalFontSize: number
 
   // Actions
+  checkCli: () => Promise<void>
+  installCli: () => Promise<void>
+  appendCliInstallLog: (text: string) => void
   setSidebarWidth: (w: number) => void
   setRightPanelWidth: (w: number) => void
   toggleRightPanel: () => void
@@ -22,13 +34,49 @@ interface AppStore {
   loadSettings: () => Promise<void>
 }
 
-export const useAppStore = create<AppStore>((set) => ({
+export const useAppStore = create<AppStore>((set, get) => ({
+  cliStatus: 'checking',
+  cliNpmAvailable: false,
+  cliInstallLog: '',
+
   sidebarWidth: 220,
   rightPanelWidth: 350,
   rightPanelOpen: false,
   settingsOpen: false,
   activeRightTab: 'terminal',
   terminalFontSize: 13,
+
+  checkCli: async () => {
+    set({ cliStatus: 'checking' })
+    try {
+      const result = await api.cli.check()
+      if (result.available) {
+        set({ cliStatus: 'ready', cliVersion: result.version, cliNpmAvailable: result.npmAvailable })
+      } else {
+        set({ cliStatus: 'missing', cliError: result.error, cliNpmAvailable: result.npmAvailable })
+      }
+    } catch (err) {
+      set({ cliStatus: 'error', cliError: String(err) })
+    }
+  },
+
+  installCli: async () => {
+    set({ cliStatus: 'installing', cliInstallLog: '' })
+    try {
+      const success = await api.cli.install()
+      if (success) {
+        await get().checkCli()
+      } else {
+        set({ cliStatus: 'install_failed' })
+      }
+    } catch {
+      set({ cliStatus: 'install_failed' })
+    }
+  },
+
+  appendCliInstallLog: (text) => {
+    set((s) => ({ cliInstallLog: s.cliInstallLog + text }))
+  },
 
   setSidebarWidth: (w) => {
     set({ sidebarWidth: w })

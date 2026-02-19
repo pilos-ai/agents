@@ -135,9 +135,28 @@ export interface TrackedProcess {
   exitCode?: number
 }
 
+// ── CLI Check Types ──
+
+export interface CliCheckResult {
+  available: boolean
+  version?: string
+  npmAvailable: boolean
+  error?: string
+}
+
+export interface CliInstallOutput {
+  stream: 'stdout' | 'stderr'
+  data: string
+}
+
 // ── API Types (exposed via preload) ──
 
 export interface ElectronAPI {
+  cli: {
+    check: () => Promise<CliCheckResult>
+    install: () => Promise<boolean>
+    onInstallOutput: (callback: (data: CliInstallOutput) => void) => () => void
+  }
   claude: {
     startSession: (sessionId: string, options: Record<string, unknown>) => Promise<void>
     sendMessage: (sessionId: string, message: string, images?: ImageAttachment[]) => Promise<void>

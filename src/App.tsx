@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { AppShell } from './components/layout/AppShell'
 import { ProjectTabBar } from './components/layout/ProjectTabBar'
 import { WelcomeScreen } from './components/welcome/WelcomeScreen'
+import { SetupScreen } from './components/setup/SetupScreen'
 import { SettingsDialog } from './components/settings/SettingsDialog'
 import { useProjectStore } from './store/useProjectStore'
 import { useAppStore } from './store/useAppStore'
@@ -14,10 +15,13 @@ export default function App() {
   const openProjects = useProjectStore((s) => s.openProjects)
   const loadSettings = useAppStore((s) => s.loadSettings)
   const settingsOpen = useAppStore((s) => s.settingsOpen)
+  const cliStatus = useAppStore((s) => s.cliStatus)
+  const checkCli = useAppStore((s) => s.checkCli)
 
   const hasOpenProjects = openProjects.length > 0
 
   useEffect(() => {
+    checkCli()
     loadSettings()
     loadRecentProjects()
 
@@ -33,7 +37,9 @@ export default function App() {
       {/* macOS drag region */}
       <div className="titlebar-drag h-8 flex-shrink-0" />
 
-      {hasOpenProjects ? (
+      {cliStatus !== 'ready' ? (
+        <SetupScreen />
+      ) : hasOpenProjects ? (
         <>
           <ProjectTabBar />
           <AppShell />
