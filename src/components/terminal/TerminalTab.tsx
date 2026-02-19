@@ -7,9 +7,10 @@ import { api } from '../../api'
 
 interface Props {
   id: string
+  cwd?: string
 }
 
-export function TerminalTab({ id }: Props) {
+export function TerminalTab({ id, cwd }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -47,7 +48,7 @@ export function TerminalTab({ id }: Props) {
 
     // Create PTY on backend
     const { cols, rows } = term
-    api.terminal.create(id, { cols, rows })
+    api.terminal.create(id, { cols, rows, cwd })
 
     // Terminal input -> PTY
     term.onData((data: string) => {

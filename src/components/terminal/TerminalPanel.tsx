@@ -1,22 +1,25 @@
 import { useState, useCallback } from 'react'
 import { TerminalTab } from './TerminalTab'
+import { useProjectStore } from '../../store/useProjectStore'
 import { api } from '../../api'
 
 interface Tab {
   id: string
   label: string
+  cwd?: string
 }
 
 export function TerminalPanel() {
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
+  const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
 
   const createTab = useCallback(() => {
     const id = `term-${Date.now()}`
     const label = `Terminal ${tabs.length + 1}`
-    setTabs((prev) => [...prev, { id, label }])
+    setTabs((prev) => [...prev, { id, label, cwd: activeProjectPath || undefined }])
     setActiveTabId(id)
-  }, [tabs.length])
+  }, [tabs.length, activeProjectPath])
 
   const closeTab = useCallback((id: string) => {
     api.terminal.destroy(id)
@@ -91,7 +94,7 @@ export function TerminalPanel() {
             key={tab.id}
             className={`absolute inset-0 ${activeTabId === tab.id ? 'block' : 'hidden'}`}
           >
-            <TerminalTab id={tab.id} />
+            <TerminalTab id={tab.id} cwd={tab.cwd} />
           </div>
         ))}
       </div>
