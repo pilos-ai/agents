@@ -3,7 +3,7 @@ import type { AgentDefinition } from '../../types'
 import { AGENT_COLORS } from '../../data/agent-templates'
 
 interface Props {
-  agent: AgentDefinition
+  agent: AgentDefinition | null // null = creating new custom agent
   onSave: (agent: AgentDefinition) => void
   onClose: () => void
 }
@@ -11,18 +11,21 @@ interface Props {
 const COLOR_OPTIONS = Object.keys(AGENT_COLORS) as string[]
 
 export function AgentEditModal({ agent, onSave, onClose }: Props) {
-  const [name, setName] = useState(agent.name)
-  const [emoji, setEmoji] = useState(agent.emoji)
-  const [color, setColor] = useState(agent.color)
-  const [role, setRole] = useState(agent.role)
-  const [personality, setPersonality] = useState(agent.personality)
-  const [expertiseStr, setExpertiseStr] = useState(agent.expertise.join(', '))
+  const isNew = !agent
+  const [name, setName] = useState(agent?.name || '')
+  const [emoji, setEmoji] = useState(agent?.emoji || '🤖')
+  const [color, setColor] = useState(agent?.color || 'blue')
+  const [role, setRole] = useState(agent?.role || '')
+  const [personality, setPersonality] = useState(agent?.personality || '')
+  const [expertiseStr, setExpertiseStr] = useState(agent?.expertise.join(', ') || '')
 
   const handleSave = () => {
+    if (!name.trim()) return
+    const id = agent?.id || name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
     onSave({
-      ...agent,
+      id,
       name: name.trim(),
-      emoji: emoji.trim(),
+      emoji: emoji.trim() || '🤖',
       color,
       role: role.trim(),
       personality: personality.trim(),
@@ -34,7 +37,7 @@ export function AgentEditModal({ agent, onSave, onClose }: Props) {
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
       <div className="bg-neutral-900 border border-neutral-700 rounded-xl w-[420px] shadow-2xl">
         <div className="flex items-center justify-between px-5 py-3 border-b border-neutral-800">
-          <h3 className="text-sm font-semibold">Edit Agent</h3>
+          <h3 className="text-sm font-semibold">{isNew ? 'Create Custom Agent' : 'Edit Agent'}</h3>
           <button onClick={onClose} className="text-neutral-400 hover:text-white">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -49,6 +52,7 @@ export function AgentEditModal({ agent, onSave, onClose }: Props) {
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Advisor"
                 className="w-full bg-neutral-800 text-sm text-neutral-100 rounded-md px-3 py-1.5 border border-neutral-700 outline-none focus:border-blue-500"
               />
             </div>
@@ -88,6 +92,7 @@ export function AgentEditModal({ agent, onSave, onClose }: Props) {
             <input
               value={role}
               onChange={(e) => setRole(e.target.value)}
+              placeholder="e.g. Financial Advisor"
               className="w-full bg-neutral-800 text-sm text-neutral-100 rounded-md px-3 py-1.5 border border-neutral-700 outline-none focus:border-blue-500"
             />
           </div>
@@ -98,6 +103,7 @@ export function AgentEditModal({ agent, onSave, onClose }: Props) {
               value={personality}
               onChange={(e) => setPersonality(e.target.value)}
               rows={3}
+              placeholder="Describe how this agent should behave, what it focuses on, and its communication style..."
               className="w-full bg-neutral-800 text-sm text-neutral-100 rounded-md px-3 py-1.5 border border-neutral-700 outline-none focus:border-blue-500 resize-none"
             />
           </div>
@@ -108,7 +114,7 @@ export function AgentEditModal({ agent, onSave, onClose }: Props) {
               value={expertiseStr}
               onChange={(e) => setExpertiseStr(e.target.value)}
               className="w-full bg-neutral-800 text-sm text-neutral-100 rounded-md px-3 py-1.5 border border-neutral-700 outline-none focus:border-blue-500"
-              placeholder="e.g. implementation, debugging, code review"
+              placeholder="e.g. budgeting, forecasting, compliance"
             />
           </div>
         </div>
@@ -125,7 +131,7 @@ export function AgentEditModal({ agent, onSave, onClose }: Props) {
             disabled={!name.trim()}
             className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm rounded-md transition-colors"
           >
-            Save
+            {isNew ? 'Create' : 'Save'}
           </button>
         </div>
       </div>

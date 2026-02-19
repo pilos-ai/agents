@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { AgentDefinition } from '../../types'
-import { AGENT_TEMPLATES, AGENT_COLORS, TEAM_PRESETS } from '../../data/agent-templates'
+import { AGENT_TEMPLATES, AGENT_COLORS, TEAM_PRESETS, AGENT_TEMPLATE_CATEGORIES } from '../../data/agent-templates'
 import { AgentEditModal } from './AgentEditModal'
 
 interface Props {
@@ -14,9 +14,9 @@ interface Props {
 export function AgentManager({ agents, onSetAgents, onAddAgent, onRemoveAgent, onUpdateAgent }: Props) {
   const [showTemplatePicker, setShowTemplatePicker] = useState(false)
   const [editingAgent, setEditingAgent] = useState<AgentDefinition | null>(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
 
   const usedIds = new Set(agents.map((a) => a.id))
-  const availableTemplates = AGENT_TEMPLATES.filter((t) => !usedIds.has(t.id))
 
   const handlePreset = (presetName: string) => {
     const ids = TEAM_PRESETS[presetName]
@@ -32,12 +32,17 @@ export function AgentManager({ agents, onSetAgents, onAddAgent, onRemoveAgent, o
     setEditingAgent(null)
   }
 
+  const handleCreateSave = (newAgent: AgentDefinition) => {
+    onAddAgent(newAgent)
+    setShowCreateModal(false)
+  }
+
   return (
     <div className="space-y-3">
       {/* Presets */}
       <div>
         <label className="block text-xs text-neutral-400 mb-1.5">Quick Presets</label>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {Object.keys(TEAM_PRESETS).map((name) => (
             <button
               key={name}
@@ -89,54 +94,77 @@ export function AgentManager({ agents, onSetAgents, onAddAgent, onRemoveAgent, o
         </div>
       )}
 
-      {/* Add agent button */}
-      {availableTemplates.length > 0 && (
-        <div>
-          {showTemplatePicker ? (
-            <div className="grid grid-cols-2 gap-2">
-              {availableTemplates.map((template) => {
-                const colors = AGENT_COLORS[template.color] || AGENT_COLORS.blue
-                return (
-                  <button
-                    key={template.id}
-                    onClick={() => {
-                      onAddAgent(template)
-                      setShowTemplatePicker(false)
-                    }}
-                    className={`flex items-center gap-2 p-2 rounded-lg border border-neutral-700 bg-neutral-800/50 hover:${colors.border} hover:${colors.bgLight} transition-colors text-left`}
-                  >
-                    <span className="text-base">{template.emoji}</span>
-                    <div>
-                      <div className="text-xs font-medium text-neutral-200">{template.name}</div>
-                      <div className="text-[10px] text-neutral-500">{template.role}</div>
-                    </div>
-                  </button>
-                )
-              })}
-              <button
-                onClick={() => setShowTemplatePicker(false)}
-                className="flex items-center justify-center p-2 rounded-lg border border-neutral-700 bg-neutral-800/50 text-neutral-500 hover:text-neutral-300 transition-colors text-xs"
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowTemplatePicker(true)}
-              className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-400 transition-colors"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              Add Agent
-            </button>
-          )}
+      {/* Template picker (categorized) */}
+      {showTemplatePicker && (
+        <div className="border border-neutral-700 rounded-lg p-3 space-y-3 bg-neutral-800/30">
+          {AGENT_TEMPLATE_CATEGORIES.map((category) => {
+            const available = category.templates.filter((t) => !usedIds.has(t.id))
+            if (available.length === 0) return null
+            return (
+              <div key={category.name}>
+                <label className="block text-[10px] font-medium text-neutral-500 uppercase tracking-wider mb-1.5">
+                  {category.name}
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {available.map((template) => {
+                    const colors = AGENT_COLORS[template.color] || AGENT_COLORS.blue
+                    return (
+                      <button
+                        key={template.id}
+                        onClick={() => {
+                          onAddAgent(template)
+                          setShowTemplatePicker(false)
+                        }}
+                        className={`flex items-center gap-2 p-2 rounded-lg border border-neutral-700 bg-neutral-800/50 hover:${colors.border} hover:${colors.bgLight} transition-colors text-left`}
+                      >
+                        <span className="text-base">{template.emoji}</span>
+                        <div className="min-w-0">
+                          <div className="text-xs font-medium text-neutral-200">{template.name}</div>
+                          <div className="text-[10px] text-neutral-500 truncate">{template.role}</div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+          <button
+            onClick={() => setShowTemplatePicker(false)}
+            className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+          >
+            Cancel
+          </button>
         </div>
       )}
 
-      {agents.length === 0 && (
+      {/* Action buttons */}
+      {!showTemplatePicker && (
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowTemplatePicker(true)}
+            className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-400 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Add from Template
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-400 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Create Custom
+          </button>
+        </div>
+      )}
+
+      {agents.length === 0 && !showTemplatePicker && (
         <p className="text-xs text-neutral-500 italic">
-          No agents configured. Choose a preset or add agents individually.
+          No agents configured. Choose a preset, add from templates, or create a custom agent.
         </p>
       )}
 
@@ -146,6 +174,15 @@ export function AgentManager({ agents, onSetAgents, onAddAgent, onRemoveAgent, o
           agent={editingAgent}
           onSave={handleEditSave}
           onClose={() => setEditingAgent(null)}
+        />
+      )}
+
+      {/* Create custom modal */}
+      {showCreateModal && (
+        <AgentEditModal
+          agent={null}
+          onSave={handleCreateSave}
+          onClose={() => setShowCreateModal(false)}
         />
       )}
     </div>
