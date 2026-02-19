@@ -5,6 +5,7 @@ import { ProcessTracker } from './core/process-tracker'
 import { Database } from './core/database'
 import { SettingsStore } from './services/settings-store'
 import { CliChecker } from './services/cli-checker'
+import { writeMcpConfig } from './services/mcp-config-writer'
 
 let claudeProcess: ClaudeProcess
 let terminalManager: TerminalManager
@@ -134,6 +135,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle('projects:setSettings', async (_event, dirPath: string, partial: Record<string, unknown>) => {
     return settings.setProjectSettings(dirPath, partial)
+  })
+
+  // ── MCP ──
+  ipcMain.handle('mcp:writeConfig', async (_event, projectPath: string, servers) => {
+    return writeMcpConfig(projectPath, servers)
   })
 
   // ── Dialogs ──

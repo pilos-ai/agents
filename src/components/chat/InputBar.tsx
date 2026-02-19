@@ -34,6 +34,7 @@ export function InputBar() {
   const setProjectModel = useProjectStore((s) => s.setProjectModel)
   const activeTab = openProjects.find((p) => p.projectPath === activeProjectPath)
   const model = activeTab?.model || 'sonnet'
+  const mcpCount = activeTab?.mcpServers?.filter((s) => s.enabled).length || 0
 
   const isLoading = isWaitingForResponse || streaming.isStreaming
 
@@ -192,6 +193,14 @@ export function InputBar() {
           <option value="opus">Opus</option>
           <option value="haiku">Haiku</option>
         </select>
+
+        {/* MCP badge */}
+        {mcpCount > 0 && (
+          <div className="flex items-center gap-1 px-2 py-1 h-[36px] bg-neutral-800 border border-green-500/30 rounded-md text-green-400 text-xs shrink-0">
+            <span>MCP</span>
+            <span className="font-medium">{mcpCount}</span>
+          </div>
+        )}
 
         {/* Send / Stop button */}
         {isLoading ? (

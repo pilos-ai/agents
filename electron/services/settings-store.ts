@@ -21,6 +21,14 @@ interface ProjectSettings {
     personality: string
     expertise: string[]
   }>
+  mcpServers: Array<{
+    id: string
+    name: string
+    icon: string
+    description: string
+    enabled: boolean
+    config: Record<string, unknown>
+  }>
 }
 
 interface Settings {
@@ -45,6 +53,7 @@ const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   permissionMode: 'bypass',
   mode: 'solo',
   agents: [],
+  mcpServers: [],
 }
 
 export class SettingsStore {

@@ -92,6 +92,12 @@ contextBridge.exposeInMainWorld('api', {
     getAll: () => ipcRenderer.invoke('settings:getAll'),
   },
 
+  // MCP
+  mcp: {
+    writeConfig: (projectPath: string, servers: unknown[]) =>
+      ipcRenderer.invoke('mcp:writeConfig', projectPath, servers),
+  },
+
   // Dialogs
   dialog: {
     openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),

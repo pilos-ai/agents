@@ -30,7 +30,7 @@ const stubAPI: ElectronAPI = {
     getRecent: () => Promise.resolve([]),
     addRecent: noopAsync,
     removeRecent: noopAsync,
-    getSettings: () => Promise.resolve({ model: 'sonnet', permissionMode: 'bypass', mode: 'solo' as const, agents: [] }),
+    getSettings: () => Promise.resolve({ model: 'sonnet', permissionMode: 'bypass', mode: 'solo' as const, agents: [], mcpServers: [] }),
     setSettings: noopAsync,
   },
   terminal: {
@@ -50,6 +50,9 @@ const stubAPI: ElectronAPI = {
     get: noopAsync,
     set: noopAsync,
     getAll: () => Promise.resolve({}),
+  },
+  mcp: {
+    writeConfig: () => Promise.resolve('/tmp/stub-mcp.json'),
   },
   dialog: {
     openDirectory: () => Promise.resolve(null),

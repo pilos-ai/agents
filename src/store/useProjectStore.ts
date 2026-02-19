@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { api } from '../api'
 import { useConversationStore } from './useConversationStore'
-import type { Project, Conversation, ConversationMessage, ContentBlock, ClaudeEvent, ProjectMode, AgentDefinition } from '../types'
+import type { Project, Conversation, ConversationMessage, ContentBlock, ClaudeEvent, ProjectMode, AgentDefinition, McpServer } from '../types'
 
 interface StreamingSnapshot {
   text: string
@@ -28,6 +28,7 @@ export interface ProjectTab {
   permissionMode: string
   mode: ProjectMode
   agents: AgentDefinition[]
+  mcpServers: McpServer[]
 }
 
 interface ProjectStore {
@@ -49,6 +50,11 @@ interface ProjectStore {
   addProjectAgent: (agent: AgentDefinition) => void
   removeProjectAgent: (id: string) => void
   updateProjectAgent: (id: string, updates: Partial<AgentDefinition>) => void
+  setProjectMcpServers: (servers: McpServer[]) => void
+  addProjectMcpServer: (server: McpServer) => void
+  removeProjectMcpServer: (id: string) => void
+  updateProjectMcpServer: (id: string, updates: Partial<McpServer>) => void
+  toggleProjectMcpServer: (id: string) => void
   removeRecentProject: (dirPath: string) => Promise<void>
 
   // Event routing
@@ -131,6 +137,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       permissionMode: settings.permissionMode || 'bypass',
       mode: settings.mode || 'solo',
       agents: settings.agents || [],
+      mcpServers: settings.mcpServers || [],
     }
 
     openProjects.push(newTab)
@@ -296,6 +303,80 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       ),
     })
     api.projects.setSettings(dirPath, { agents })
+  },
+
+  setProjectMcpServers: (mcpServers: McpServer[]) => {
+    const state = get()
+    if (!state.activeProjectPath) return
+    const dirPath = state.activeProjectPath
+    set({
+      openProjects: state.openProjects.map((p) =>
+        p.projectPath === dirPath ? { ...p, mcpServers } : p
+      ),
+    })
+    api.projects.setSettings(dirPath, { mcpServers })
+  },
+
+  addProjectMcpServer: (server: McpServer) => {
+    const state = get()
+    if (!state.activeProjectPath) return
+    const dirPath = state.activeProjectPath
+    const tab = state.openProjects.find((p) => p.projectPath === dirPath)
+    if (!tab) return
+    const mcpServers = [...tab.mcpServers, server]
+    set({
+      openProjects: state.openProjects.map((p) =>
+        p.projectPath === dirPath ? { ...p, mcpServers } : p
+      ),
+    })
+    api.projects.setSettings(dirPath, { mcpServers })
+  },
+
+  removeProjectMcpServer: (id: string) => {
+    const state = get()
+    if (!state.activeProjectPath) return
+    const dirPath = state.activeProjectPath
+    const tab = state.openProjects.find((p) => p.projectPath === dirPath)
+    if (!tab) return
+    const mcpServers = tab.mcpServers.filter((s) => s.id !== id)
+    set({
+      openProjects: state.openProjects.map((p) =>
+        p.projectPath === dirPath ? { ...p, mcpServers } : p
+      ),
+    })
+    api.projects.setSettings(dirPath, { mcpServers })
+  },
+
+  updateProjectMcpServer: (id: string, updates: Partial<McpServer>) => {
+    const state = get()
+    if (!state.activeProjectPath) return
+    const dirPath = state.activeProjectPath
+    const tab = state.openProjects.find((p) => p.projectPath === dirPath)
+    if (!tab) return
+    const mcpServers = tab.mcpServers.map((s) => (s.id === id ? { ...s, ...updates } : s))
+    set({
+      openProjects: state.openProjects.map((p) =>
+        p.projectPath === dirPath ? { ...p, mcpServers } : p
+      ),
+    })
+    api.projects.setSettings(dirPath, { mcpServers })
+  },
+
+  toggleProjectMcpServer: (id: string) => {
+    const state = get()
+    if (!state.activeProjectPath) return
+    const dirPath = state.activeProjectPath
+    const tab = state.openProjects.find((p) => p.projectPath === dirPath)
+    if (!tab) return
+    const mcpServers = tab.mcpServers.map((s) =>
+      s.id === id ? { ...s, enabled: !s.enabled } : s
+    )
+    set({
+      openProjects: state.openProjects.map((p) =>
+        p.projectPath === dirPath ? { ...p, mcpServers } : p
+      ),
+    })
+    api.projects.setSettings(dirPath, { mcpServers })
   },
 
   removeRecentProject: async (dirPath: string) => {

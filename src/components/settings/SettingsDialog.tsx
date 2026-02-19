@@ -1,6 +1,7 @@
 import { useAppStore } from '../../store/useAppStore'
 import { useProjectStore } from '../../store/useProjectStore'
 import { AgentManager } from '../agents/AgentManager'
+import { McpServerManager } from '../mcp/McpServerManager'
 
 export function SettingsDialog() {
   const setSettingsOpen = useAppStore((s) => s.setSettingsOpen)
@@ -16,8 +17,13 @@ export function SettingsDialog() {
   const addProjectAgent = useProjectStore((s) => s.addProjectAgent)
   const removeProjectAgent = useProjectStore((s) => s.removeProjectAgent)
   const updateProjectAgent = useProjectStore((s) => s.updateProjectAgent)
+  const addProjectMcpServer = useProjectStore((s) => s.addProjectMcpServer)
+  const removeProjectMcpServer = useProjectStore((s) => s.removeProjectMcpServer)
+  const updateProjectMcpServer = useProjectStore((s) => s.updateProjectMcpServer)
+  const toggleProjectMcpServer = useProjectStore((s) => s.toggleProjectMcpServer)
 
   const activeTab = openProjects.find((p) => p.projectPath === activeProjectPath)
+  const mcpEnabledCount = activeTab?.mcpServers?.filter((s) => s.enabled).length || 0
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
@@ -147,6 +153,23 @@ export function SettingsDialog() {
                   />
                 </div>
               )}
+
+              {/* MCP Servers */}
+              <div>
+                <label className="block text-xs font-medium text-neutral-400 mb-1.5">
+                  MCP Servers
+                  {mcpEnabledCount > 0 && (
+                    <span className="ml-2 text-green-400">{mcpEnabledCount} active</span>
+                  )}
+                </label>
+                <McpServerManager
+                  servers={activeTab.mcpServers || []}
+                  onAdd={addProjectMcpServer}
+                  onRemove={removeProjectMcpServer}
+                  onUpdate={(id, updates) => updateProjectMcpServer(id, updates)}
+                  onToggle={toggleProjectMcpServer}
+                />
+              </div>
 
               <p className="text-xs text-neutral-500 italic">
                 Changes apply to new sessions. Restart the chat after changing.

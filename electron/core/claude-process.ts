@@ -12,6 +12,7 @@ export interface ClaudeSessionOptions {
   resume?: boolean
   images?: Array<{ data: string; mediaType: string }>
   appendSystemPrompt?: string
+  mcpConfigPath?: string
 }
 
 interface ToolUse {
@@ -77,6 +78,10 @@ export class ClaudeProcess {
 
     if (options.appendSystemPrompt) {
       args.push('--append-system-prompt', options.appendSystemPrompt)
+    }
+
+    if (options.mcpConfigPath) {
+      args.push('--mcp-config', options.mcpConfigPath)
     }
 
     // Strip all Claude Code env vars to allow nested sessions,

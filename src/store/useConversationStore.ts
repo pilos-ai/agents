@@ -172,6 +172,12 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         appendSystemPrompt = buildTeamSystemPrompt(tab.agents)
       }
 
+      // Generate MCP config if servers are configured
+      let mcpConfigPath: string | undefined
+      if (tab?.mcpServers?.some((s) => s.enabled)) {
+        mcpConfigPath = await api.mcp.writeConfig(projectPath, tab.mcpServers)
+      }
+
       await api.claude.startSession(conversationId, {
         prompt: text,
         images: images,
@@ -180,6 +186,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         model: tab?.model,
         permissionMode: tab?.permissionMode,
         appendSystemPrompt,
+        mcpConfigPath,
       })
     } else {
       await api.claude.sendMessage(conversationId, text, images)

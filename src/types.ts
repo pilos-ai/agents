@@ -11,6 +11,7 @@ export interface ProjectSettings {
   permissionMode: string // default 'bypass'
   mode: ProjectMode      // default 'solo'
   agents: AgentDefinition[] // default []
+  mcpServers: McpServer[]   // default []
 }
 
 // ── Claude CLI Event Types ──
@@ -155,6 +156,50 @@ export interface AgentDefinition {
 
 export type ProjectMode = 'solo' | 'team'
 
+// ── MCP Server Types ──
+
+export type McpServerType = 'stdio' | 'http' | 'sse'
+
+export interface McpServerStdio {
+  type: 'stdio'
+  command: string
+  args: string[]
+  env?: Record<string, string>
+}
+
+export interface McpServerHttp {
+  type: 'http'
+  url: string
+  headers?: Record<string, string>
+}
+
+export interface McpServerSse {
+  type: 'sse'
+  url: string
+  headers?: Record<string, string>
+}
+
+export type McpServerConfig = McpServerStdio | McpServerHttp | McpServerSse
+
+export interface McpServer {
+  id: string
+  name: string
+  icon: string
+  description: string
+  enabled: boolean
+  config: McpServerConfig
+}
+
+export interface McpServerTemplate {
+  id: string
+  name: string
+  icon: string
+  description: string
+  category: string
+  config: McpServerConfig
+  requiredEnvVars: string[]
+}
+
 // ── CLI Check Types ──
 
 export interface CliCheckResult {
@@ -217,6 +262,9 @@ export interface ElectronAPI {
     get: (key: string) => Promise<unknown>
     set: (key: string, value: unknown) => Promise<void>
     getAll: () => Promise<Record<string, unknown>>
+  }
+  mcp: {
+    writeConfig: (projectPath: string, servers: McpServer[]) => Promise<string>
   }
   dialog: {
     openDirectory: () => Promise<string | null>
