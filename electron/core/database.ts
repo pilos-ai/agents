@@ -64,6 +64,7 @@ export class Database {
         title TEXT NOT NULL DEFAULT 'New Chat',
         model TEXT NOT NULL DEFAULT 'sonnet',
         working_directory TEXT NOT NULL DEFAULT '',
+        project_path TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
@@ -84,9 +85,26 @@ export class Database {
       CREATE INDEX IF NOT EXISTS idx_messages_conversation
         ON messages(conversation_id, created_at);
     `)
+
+    // Migration: add project_path column if missing (existing DBs)
+    this.migrate()
   }
 
-  listConversations(): Conversation[] {
+  private migrate(): void {
+    const columns = this.db!.prepare("PRAGMA table_info(conversations)").all() as Array<{ name: string }>
+    const hasProjectPath = columns.some((c) => c.name === 'project_path')
+    if (!hasProjectPath) {
+      this.db!.exec("ALTER TABLE conversations ADD COLUMN project_path TEXT NOT NULL DEFAULT ''")
+    }
+    this.db!.exec("CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project_path, updated_at DESC)")
+  }
+
+  listConversations(projectPath?: string): Conversation[] {
+    if (projectPath !== undefined) {
+      return this.db!.prepare(
+        'SELECT * FROM conversations WHERE project_path = ? ORDER BY updated_at DESC'
+      ).all(projectPath) as unknown as Conversation[]
+    }
     return this.db!.prepare(
       'SELECT * FROM conversations ORDER BY updated_at DESC'
     ).all() as unknown as Conversation[]
@@ -98,11 +116,11 @@ export class Database {
     ).get(id) as unknown as Conversation | undefined
   }
 
-  createConversation(title: string, id?: string): Conversation {
+  createConversation(title: string, projectPath = '', id?: string): Conversation {
     const convId = id || crypto.randomUUID()
     this.db!.prepare(
-      'INSERT INTO conversations (id, title) VALUES (?, ?)'
-    ).run(convId, title)
+      'INSERT INTO conversations (id, title, project_path) VALUES (?, ?, ?)'
+    ).run(convId, title, projectPath)
     return this.getConversation(convId)!
   }
 

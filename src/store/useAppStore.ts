@@ -9,11 +9,8 @@ interface AppStore {
   settingsOpen: boolean
   activeRightTab: 'terminal' | 'processes'
 
-  // Settings
-  model: string
-  workingDirectory: string
+  // Global settings
   terminalFontSize: number
-  permissionMode: string
 
   // Actions
   setSidebarWidth: (w: number) => void
@@ -21,10 +18,7 @@ interface AppStore {
   toggleRightPanel: () => void
   setSettingsOpen: (open: boolean) => void
   setActiveRightTab: (tab: 'terminal' | 'processes') => void
-  setModel: (model: string) => void
-  setWorkingDirectory: (dir: string) => void
   setTerminalFontSize: (size: number) => void
-  setPermissionMode: (mode: string) => void
   loadSettings: () => Promise<void>
 }
 
@@ -34,10 +28,7 @@ export const useAppStore = create<AppStore>((set) => ({
   rightPanelOpen: false,
   settingsOpen: false,
   activeRightTab: 'terminal',
-  model: 'sonnet',
-  workingDirectory: '',
   terminalFontSize: 13,
-  permissionMode: 'bypass',
 
   setSidebarWidth: (w) => {
     set({ sidebarWidth: w })
@@ -55,33 +46,15 @@ export const useAppStore = create<AppStore>((set) => ({
 
   setActiveRightTab: (tab) => set({ activeRightTab: tab }),
 
-  setModel: (model) => {
-    set({ model })
-    api.settings.set('model', model)
-  },
-
-  setWorkingDirectory: (dir) => {
-    set({ workingDirectory: dir })
-    api.settings.set('workingDirectory', dir)
-  },
-
   setTerminalFontSize: (size) => {
     set({ terminalFontSize: size })
     api.settings.set('terminalFontSize', size)
   },
 
-  setPermissionMode: (mode) => {
-    set({ permissionMode: mode })
-    api.settings.set('permissionMode', mode)
-  },
-
   loadSettings: async () => {
     const all = await api.settings.getAll()
     set({
-      model: (all.model as string) || 'sonnet',
-      workingDirectory: (all.workingDirectory as string) || '',
       terminalFontSize: (all.terminalFontSize as number) || 13,
-      permissionMode: (all.permissionMode as string) || 'bypass',
       sidebarWidth: (all.sidebarWidth as number) || 220,
       rightPanelWidth: (all.rightPanelWidth as number) || 350,
     })

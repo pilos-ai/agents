@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useConversationStore } from '../../store/useConversationStore'
+import { useProjectStore } from '../../store/useProjectStore'
 import { MessageBubble } from './MessageBubble'
 import { StreamingText } from './StreamingText'
 import { InputBar } from './InputBar'
@@ -9,6 +10,9 @@ export function ChatPanel() {
   const messages = useConversationStore((s) => s.messages)
   const streaming = useConversationStore((s) => s.streaming)
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
+  const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
+  const openProjects = useProjectStore((s) => s.openProjects)
+  const activeTab = openProjects.find((p) => p.projectPath === activeProjectPath)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -23,8 +27,11 @@ export function ChatPanel() {
         <svg className="w-12 h-12 mb-4 text-neutral-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
         </svg>
-        <p className="text-sm font-medium">Claude Code Desktop</p>
+        <p className="text-sm font-medium">{activeTab?.projectName || 'Pilos Agents'}</p>
         <p className="text-xs mt-1">Start a new chat or select an existing one</p>
+        {activeTab && (
+          <p className="text-[10px] text-neutral-600 mt-2">{activeTab.projectPath}</p>
+        )}
       </div>
     )
   }

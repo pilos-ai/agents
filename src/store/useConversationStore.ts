@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { api } from '../api'
+import { useProjectStore, getActiveProjectTab } from './useProjectStore'
 import type { Conversation, ConversationMessage, ContentBlock, ClaudeEvent, ImageAttachment } from '../types'
 
 interface StreamingState {
@@ -20,7 +21,7 @@ interface ConversationStore {
   permissionRequest: { sessionId: string; toolName: string; toolInput: Record<string, unknown> } | null
 
   // Actions
-  loadConversations: () => Promise<void>
+  loadConversations: (projectPath?: string) => Promise<void>
   setActiveConversation: (id: string | null) => Promise<void>
   createConversation: (title?: string) => Promise<string>
   deleteConversation: (id: string) => Promise<void>
@@ -48,8 +49,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   hasActiveSession: false,
   permissionRequest: null,
 
-  loadConversations: async () => {
-    const conversations = await api.conversations.list()
+  loadConversations: async (projectPath?: string) => {
+    const conversations = await api.conversations.list(projectPath)
     set({ conversations })
   },
 
@@ -62,8 +63,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   },
 
   createConversation: async (title = 'New Chat') => {
-    const conv = await api.conversations.create(title)
-    await get().loadConversations()
+    const projectPath = useProjectStore.getState().activeProjectPath || ''
+    const conv = await api.conversations.create(title, projectPath)
+    await get().loadConversations(projectPath)
     await get().setActiveConversation(conv.id)
     return conv.id
   },
@@ -73,7 +75,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     if (get().activeConversationId === id) {
       set({ activeConversationId: null, messages: [] })
     }
-    await get().loadConversations()
+    const projectPath = useProjectStore.getState().activeProjectPath || ''
+    await get().loadConversations(projectPath)
   },
 
   sendMessage: async (text, images) => {
@@ -105,10 +108,19 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     // Always start a new session if none is active for this conversation
     if (!get().hasActiveSession) {
       const hasHistory = get().messages.length > 1
+      const tab = getActiveProjectTab()
+      const projectPath = useProjectStore.getState().activeProjectPath || ''
+
+      // Register this conversation for event routing
+      useProjectStore.getState().registerConversation(conversationId, projectPath)
+
       await api.claude.startSession(conversationId, {
         prompt: text,
         images: images,
         resume: hasHistory,
+        workingDirectory: projectPath || undefined,
+        model: tab?.model,
+        permissionMode: tab?.permissionMode,
       })
     } else {
       await api.claude.sendMessage(conversationId, text, images)
@@ -292,7 +304,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
               activeConversationId,
               firstUserMsg.content.slice(0, 50)
             )
-            get().loadConversations()
+            const projectPath = useProjectStore.getState().activeProjectPath || ''
+            get().loadConversations(projectPath)
           }
         }
         break

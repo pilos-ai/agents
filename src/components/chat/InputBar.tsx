@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { useConversationStore } from '../../store/useConversationStore'
-import { useAppStore } from '../../store/useAppStore'
+import { useProjectStore } from '../../store/useProjectStore'
 import type { ImageAttachment } from '../../types'
 
 const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
@@ -29,8 +29,11 @@ export function InputBar() {
   const abortSession = useConversationStore((s) => s.abortSession)
   const isWaitingForResponse = useConversationStore((s) => s.isWaitingForResponse)
   const streaming = useConversationStore((s) => s.streaming)
-  const model = useAppStore((s) => s.model)
-  const setModel = useAppStore((s) => s.setModel)
+  const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
+  const openProjects = useProjectStore((s) => s.openProjects)
+  const setProjectModel = useProjectStore((s) => s.setProjectModel)
+  const activeTab = openProjects.find((p) => p.projectPath === activeProjectPath)
+  const model = activeTab?.model || 'sonnet'
 
   const isLoading = isWaitingForResponse || streaming.isStreaming
 
@@ -182,7 +185,7 @@ export function InputBar() {
         {/* Model selector */}
         <select
           value={model}
-          onChange={(e) => setModel(e.target.value)}
+          onChange={(e) => setProjectModel(e.target.value)}
           className="bg-neutral-800 text-neutral-300 text-xs rounded-md px-2 py-2 h-[36px] outline-none border border-neutral-700 cursor-pointer shrink-0"
         >
           <option value="sonnet">Sonnet</option>

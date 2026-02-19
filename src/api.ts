@@ -15,11 +15,18 @@ const stubAPI: ElectronAPI = {
   conversations: {
     list: () => Promise.resolve([]),
     get: noopAsync,
-    create: (title: string) => Promise.resolve({ id: crypto.randomUUID(), title, model: 'sonnet', working_directory: '', created_at: '', updated_at: '' }),
+    create: (title: string) => Promise.resolve({ id: crypto.randomUUID(), title, model: 'sonnet', working_directory: '', project_path: '', created_at: '', updated_at: '' }),
     updateTitle: noopAsync,
     delete: noopAsync,
     getMessages: () => Promise.resolve([]),
     saveMessage: noopAsync,
+  },
+  projects: {
+    getRecent: () => Promise.resolve([]),
+    addRecent: noopAsync,
+    removeRecent: noopAsync,
+    getSettings: () => Promise.resolve({ model: 'sonnet', permissionMode: 'bypass' }),
+    setSettings: noopAsync,
   },
   terminal: {
     create: noopAsync,

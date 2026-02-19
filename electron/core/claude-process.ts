@@ -8,6 +8,7 @@ export interface ClaudeSessionOptions {
   prompt?: string
   model?: string
   workingDirectory?: string
+  permissionMode?: string
   resume?: boolean
   images?: Array<{ data: string; mediaType: string }>
 }
@@ -45,9 +46,9 @@ export class ClaudeProcess {
     // Kill existing session if any
     this.abort(sessionId)
 
-    const model = String(options.model || (await this.settings.get('model')) || 'sonnet')
-    const cwd = String(options.workingDirectory || (await this.settings.get('workingDirectory')) || process.cwd())
-    const permissionMode = String((await this.settings.get('permissionMode')) || 'bypass')
+    const model = String(options.model || 'sonnet')
+    const cwd = String(options.workingDirectory || process.cwd())
+    const permissionMode = String(options.permissionMode || 'bypass')
 
     // Generate a unique session ID per spawn to avoid "session already in use"
     const cliSessionId = randomUUID()

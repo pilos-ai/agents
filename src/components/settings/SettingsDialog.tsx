@@ -1,21 +1,17 @@
 import { useAppStore } from '../../store/useAppStore'
-import { api } from '../../api'
+import { useProjectStore } from '../../store/useProjectStore'
 
 export function SettingsDialog() {
   const setSettingsOpen = useAppStore((s) => s.setSettingsOpen)
-  const model = useAppStore((s) => s.model)
-  const setModel = useAppStore((s) => s.setModel)
-  const workingDirectory = useAppStore((s) => s.workingDirectory)
-  const setWorkingDirectory = useAppStore((s) => s.setWorkingDirectory)
   const terminalFontSize = useAppStore((s) => s.terminalFontSize)
   const setTerminalFontSize = useAppStore((s) => s.setTerminalFontSize)
-  const permissionMode = useAppStore((s) => s.permissionMode)
-  const setPermissionMode = useAppStore((s) => s.setPermissionMode)
 
-  const handleSelectDirectory = async () => {
-    const dir = await api.dialog.openDirectory()
-    if (dir) setWorkingDirectory(dir)
-  }
+  const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
+  const openProjects = useProjectStore((s) => s.openProjects)
+  const setProjectModel = useProjectStore((s) => s.setProjectModel)
+  const setProjectPermissionMode = useProjectStore((s) => s.setProjectPermissionMode)
+
+  const activeTab = openProjects.find((p) => p.projectPath === activeProjectPath)
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
@@ -35,90 +31,86 @@ export function SettingsDialog() {
 
         {/* Content */}
         <div className="px-6 py-4 space-y-5">
-          {/* Model */}
-          <div>
-            <label className="block text-xs font-medium text-neutral-400 mb-1.5">Default Model</label>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="w-full bg-neutral-800 text-neutral-100 text-sm rounded-md px-3 py-2 outline-none border border-neutral-700 focus:border-blue-500"
-            >
-              <option value="sonnet">Claude Sonnet</option>
-              <option value="opus">Claude Opus</option>
-              <option value="haiku">Claude Haiku</option>
-            </select>
-          </div>
+          {/* ── Project Settings ── */}
+          {activeTab && (
+            <>
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="text-xs font-semibold text-blue-400 uppercase tracking-wider">Project: {activeTab.projectName}</h3>
+              </div>
 
-          {/* Working Directory */}
-          <div>
-            <label className="block text-xs font-medium text-neutral-400 mb-1.5">Working Directory</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={workingDirectory}
-                onChange={(e) => setWorkingDirectory(e.target.value)}
-                placeholder="Default: current directory"
-                className="flex-1 bg-neutral-800 text-neutral-100 text-sm rounded-md px-3 py-2 outline-none border border-neutral-700 focus:border-blue-500"
-              />
-              <button
-                onClick={handleSelectDirectory}
-                className="px-3 py-2 bg-neutral-700 hover:bg-neutral-600 text-sm rounded-md transition-colors"
-              >
-                Browse
-              </button>
-            </div>
-          </div>
-
-          {/* Permission Mode */}
-          <div>
-            <label className="block text-xs font-medium text-neutral-400 mb-1.5">Permission Mode</label>
-            <div className="space-y-2">
-              {[
-                {
-                  value: 'bypass',
-                  label: 'Full access',
-                  desc: 'Claude can do everything without asking',
-                  color: 'text-green-400',
-                },
-                {
-                  value: 'supervised',
-                  label: 'Ask before changes',
-                  desc: 'Approve/deny each write or command (like the terminal)',
-                  color: 'text-yellow-400',
-                },
-                {
-                  value: 'plan',
-                  label: 'Read only',
-                  desc: 'Claude can only read files — no edits, no commands',
-                  color: 'text-red-400',
-                },
-              ].map((mode) => (
-                <label
-                  key={mode.value}
-                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                    permissionMode === mode.value
-                      ? 'border-blue-500/50 bg-blue-500/10'
-                      : 'border-neutral-700 bg-neutral-800/50 hover:border-neutral-600'
-                  }`}
+              {/* Model */}
+              <div>
+                <label className="block text-xs font-medium text-neutral-400 mb-1.5">Model</label>
+                <select
+                  value={activeTab.model}
+                  onChange={(e) => setProjectModel(e.target.value)}
+                  className="w-full bg-neutral-800 text-neutral-100 text-sm rounded-md px-3 py-2 outline-none border border-neutral-700 focus:border-blue-500"
                 >
-                  <input
-                    type="radio"
-                    name="permissionMode"
-                    value={mode.value}
-                    checked={permissionMode === mode.value}
-                    onChange={(e) => setPermissionMode(e.target.value)}
-                    className="mt-0.5 accent-blue-500"
-                  />
-                  <div>
-                    <span className={`text-sm font-medium ${mode.color}`}>{mode.label}</span>
-                    <p className="text-xs text-neutral-500 mt-0.5">{mode.desc}</p>
-                  </div>
-                </label>
-              ))}
-            </div>
-            <p className="text-xs text-neutral-500 mt-2 italic">
-              Changes apply to new sessions. Restart the chat after changing.
-            </p>
+                  <option value="sonnet">Claude Sonnet</option>
+                  <option value="opus">Claude Opus</option>
+                  <option value="haiku">Claude Haiku</option>
+                </select>
+              </div>
+
+              {/* Permission Mode */}
+              <div>
+                <label className="block text-xs font-medium text-neutral-400 mb-1.5">Permission Mode</label>
+                <div className="space-y-2">
+                  {[
+                    {
+                      value: 'bypass',
+                      label: 'Full access',
+                      desc: 'Claude can do everything without asking',
+                      color: 'text-green-400',
+                    },
+                    {
+                      value: 'supervised',
+                      label: 'Ask before changes',
+                      desc: 'Approve/deny each write or command (like the terminal)',
+                      color: 'text-yellow-400',
+                    },
+                    {
+                      value: 'plan',
+                      label: 'Read only',
+                      desc: 'Claude can only read files — no edits, no commands',
+                      color: 'text-red-400',
+                    },
+                  ].map((mode) => (
+                    <label
+                      key={mode.value}
+                      className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        activeTab.permissionMode === mode.value
+                          ? 'border-blue-500/50 bg-blue-500/10'
+                          : 'border-neutral-700 bg-neutral-800/50 hover:border-neutral-600'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="permissionMode"
+                        value={mode.value}
+                        checked={activeTab.permissionMode === mode.value}
+                        onChange={(e) => setProjectPermissionMode(e.target.value)}
+                        className="mt-0.5 accent-blue-500"
+                      />
+                      <div>
+                        <span className={`text-sm font-medium ${mode.color}`}>{mode.label}</span>
+                        <p className="text-xs text-neutral-500 mt-0.5">{mode.desc}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-neutral-500 mt-2 italic">
+                  Changes apply to new sessions. Restart the chat after changing.
+                </p>
+              </div>
+
+              <div className="border-t border-neutral-800 pt-4" />
+            </>
+          )}
+
+          {/* ── Global Settings ── */}
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Global</h3>
           </div>
 
           {/* Terminal Font Size */}

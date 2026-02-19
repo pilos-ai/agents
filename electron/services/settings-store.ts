@@ -2,21 +2,37 @@ import fs from 'fs'
 import path from 'path'
 import { app } from 'electron'
 
-interface Settings {
+interface Project {
+  path: string
+  name: string
+  lastOpened: string
+}
+
+interface ProjectSettings {
   model: string
-  workingDirectory: string
+  permissionMode: string
+}
+
+interface Settings {
   terminalFontSize: number
   rightPanelWidth: number
   sidebarWidth: number
+  recentProjects: Project[]
+  projects: Record<string, ProjectSettings>
   [key: string]: unknown
 }
 
 const DEFAULTS: Settings = {
-  model: 'sonnet',
-  workingDirectory: '',
   terminalFontSize: 13,
   rightPanelWidth: 350,
   sidebarWidth: 220,
+  recentProjects: [],
+  projects: {},
+}
+
+const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
+  model: 'sonnet',
+  permissionMode: 'bypass',
 }
 
 export class SettingsStore {
@@ -52,5 +68,41 @@ export class SettingsStore {
 
   getAll(): Settings {
     return { ...this.data }
+  }
+
+  // ── Recent Projects ──
+
+  getRecentProjects(): Project[] {
+    return this.data.recentProjects || []
+  }
+
+  addRecentProject(dirPath: string): void {
+    const projects = (this.data.recentProjects || []).filter((p) => p.path !== dirPath)
+    projects.unshift({
+      path: dirPath,
+      name: path.basename(dirPath),
+      lastOpened: new Date().toISOString(),
+    })
+    // Keep max 20 recent projects
+    this.data.recentProjects = projects.slice(0, 20)
+    this.save()
+  }
+
+  removeRecentProject(dirPath: string): void {
+    this.data.recentProjects = (this.data.recentProjects || []).filter((p) => p.path !== dirPath)
+    this.save()
+  }
+
+  // ── Per-Project Settings ──
+
+  getProjectSettings(dirPath: string): ProjectSettings {
+    const stored = this.data.projects?.[dirPath]
+    return { ...DEFAULT_PROJECT_SETTINGS, ...stored }
+  }
+
+  setProjectSettings(dirPath: string, partial: Partial<ProjectSettings>): void {
+    if (!this.data.projects) this.data.projects = {}
+    this.data.projects[dirPath] = { ...this.getProjectSettings(dirPath), ...partial }
+    this.save()
   }
 }

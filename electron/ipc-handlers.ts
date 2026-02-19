@@ -36,16 +36,16 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   })
 
   // ── Conversations ──
-  ipcMain.handle('conversations:list', async () => {
-    return database.listConversations()
+  ipcMain.handle('conversations:list', async (_event, projectPath?: string) => {
+    return database.listConversations(projectPath)
   })
 
   ipcMain.handle('conversations:get', async (_event, id: string) => {
     return database.getConversation(id)
   })
 
-  ipcMain.handle('conversations:create', async (_event, title: string) => {
-    return database.createConversation(title)
+  ipcMain.handle('conversations:create', async (_event, title: string, projectPath?: string) => {
+    return database.createConversation(title, projectPath || '')
   })
 
   ipcMain.handle('conversations:updateTitle', async (_event, id: string, title: string) => {
@@ -101,6 +101,27 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle('settings:getAll', async () => {
     return settings.getAll()
+  })
+
+  // ── Projects ──
+  ipcMain.handle('projects:getRecent', async () => {
+    return settings.getRecentProjects()
+  })
+
+  ipcMain.handle('projects:addRecent', async (_event, dirPath: string) => {
+    return settings.addRecentProject(dirPath)
+  })
+
+  ipcMain.handle('projects:removeRecent', async (_event, dirPath: string) => {
+    return settings.removeRecentProject(dirPath)
+  })
+
+  ipcMain.handle('projects:getSettings', async (_event, dirPath: string) => {
+    return settings.getProjectSettings(dirPath)
+  })
+
+  ipcMain.handle('projects:setSettings', async (_event, dirPath: string, partial: Record<string, unknown>) => {
+    return settings.setProjectSettings(dirPath, partial)
   })
 
   // ── Dialogs ──

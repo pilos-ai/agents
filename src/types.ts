@@ -1,3 +1,16 @@
+// ── Project Types ──
+
+export interface Project {
+  path: string       // unique key, absolute dir path
+  name: string       // basename
+  lastOpened: string  // ISO date
+}
+
+export interface ProjectSettings {
+  model: string          // default 'sonnet'
+  permissionMode: string // default 'bypass'
+}
+
 // ── Claude CLI Event Types ──
 
 export interface ClaudeEvent {
@@ -109,6 +122,7 @@ export interface Conversation {
   title: string
   model: string
   working_directory: string
+  project_path: string
   created_at: string
   updated_at: string
 }
@@ -132,13 +146,20 @@ export interface ElectronAPI {
     onEvent: (callback: (data: ClaudeEvent) => void) => () => void
   }
   conversations: {
-    list: () => Promise<Conversation[]>
+    list: (projectPath?: string) => Promise<Conversation[]>
     get: (id: string) => Promise<Conversation | null>
-    create: (title: string) => Promise<Conversation>
+    create: (title: string, projectPath?: string) => Promise<Conversation>
     updateTitle: (id: string, title: string) => Promise<void>
     delete: (id: string) => Promise<void>
     getMessages: (conversationId: string) => Promise<ConversationMessage[]>
     saveMessage: (conversationId: string, message: Partial<ConversationMessage>) => Promise<ConversationMessage>
+  }
+  projects: {
+    getRecent: () => Promise<Project[]>
+    addRecent: (dirPath: string) => Promise<void>
+    removeRecent: (dirPath: string) => Promise<void>
+    getSettings: (dirPath: string) => Promise<ProjectSettings>
+    setSettings: (dirPath: string, settings: Partial<ProjectSettings>) => Promise<void>
   }
   terminal: {
     create: (id: string, options?: Record<string, unknown>) => Promise<void>

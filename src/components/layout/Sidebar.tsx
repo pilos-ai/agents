@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useConversationStore } from '../../store/useConversationStore'
 import { useAppStore } from '../../store/useAppStore'
+import { useProjectStore } from '../../store/useProjectStore'
 import { api } from '../../api'
 
 export function Sidebar() {
@@ -13,6 +14,10 @@ export function Sidebar() {
   const setSettingsOpen = useAppStore((s) => s.setSettingsOpen)
   const toggleRightPanel = useAppStore((s) => s.toggleRightPanel)
   const rightPanelOpen = useAppStore((s) => s.rightPanelOpen)
+
+  const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
+  const openProjects = useProjectStore((s) => s.openProjects)
+  const activeTab = openProjects.find((p) => p.projectPath === activeProjectPath)
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -64,6 +69,14 @@ export function Sidebar() {
           </svg>
         </button>
       </div>
+
+      {/* Project info */}
+      {activeTab && (
+        <div className="px-3 pb-2 border-b border-neutral-800 mb-2">
+          <p className="text-xs font-medium text-neutral-300 truncate">{activeTab.projectName}</p>
+          <p className="text-[10px] text-neutral-600 truncate">{activeTab.projectPath}</p>
+        </div>
+      )}
 
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto px-2">

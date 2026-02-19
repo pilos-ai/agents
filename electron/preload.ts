@@ -20,9 +20,9 @@ contextBridge.exposeInMainWorld('api', {
 
   // Conversations
   conversations: {
-    list: () => ipcRenderer.invoke('conversations:list'),
+    list: (projectPath?: string) => ipcRenderer.invoke('conversations:list', projectPath),
     get: (id: string) => ipcRenderer.invoke('conversations:get', id),
-    create: (title: string) => ipcRenderer.invoke('conversations:create', title),
+    create: (title: string, projectPath?: string) => ipcRenderer.invoke('conversations:create', title, projectPath),
     updateTitle: (id: string, title: string) =>
       ipcRenderer.invoke('conversations:updateTitle', id, title),
     delete: (id: string) => ipcRenderer.invoke('conversations:delete', id),
@@ -30,6 +30,16 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('conversations:getMessages', conversationId),
     saveMessage: (conversationId: string, message: Record<string, unknown>) =>
       ipcRenderer.invoke('conversations:saveMessage', conversationId, message),
+  },
+
+  // Projects
+  projects: {
+    getRecent: () => ipcRenderer.invoke('projects:getRecent'),
+    addRecent: (dirPath: string) => ipcRenderer.invoke('projects:addRecent', dirPath),
+    removeRecent: (dirPath: string) => ipcRenderer.invoke('projects:removeRecent', dirPath),
+    getSettings: (dirPath: string) => ipcRenderer.invoke('projects:getSettings', dirPath),
+    setSettings: (dirPath: string, settings: Record<string, unknown>) =>
+      ipcRenderer.invoke('projects:setSettings', dirPath, settings),
   },
 
   // Terminal
