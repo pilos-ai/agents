@@ -98,6 +98,12 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('mcp:writeConfig', projectPath, servers),
   },
 
+  // Files
+  files: {
+    revertEdit: (filePath: string, oldString: string, newString: string) =>
+      ipcRenderer.invoke('files:revertEdit', filePath, oldString, newString),
+  },
+
   // Dialogs
   dialog: {
     openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),

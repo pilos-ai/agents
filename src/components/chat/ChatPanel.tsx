@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useConversationStore } from '../../store/useConversationStore'
 import { useProjectStore } from '../../store/useProjectStore'
 import { AGENT_COLORS } from '../../data/agent-templates'
@@ -17,11 +17,17 @@ export function ChatPanel() {
   const activeTab = openProjects.find((p) => p.projectPath === activeProjectPath)
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  const scrollToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      }
+    })
+  }, [])
+
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [messages, streaming.text, streaming.thinking])
+    scrollToBottom()
+  }, [messages, streaming.text, streaming.thinking, streaming.contentBlocks, scrollToBottom])
 
   if (!activeConversationId) {
     return (
@@ -53,21 +59,27 @@ export function ChatPanel() {
           return <MessageBubble key={i} message={msg} isLast={isLastAssistant} />
         })}
 
-        {/* Streaming content */}
+        {/* Streaming content — only text/thinking; tool blocks are added to messages by content_block_stop */}
         {streaming.isStreaming && (() => {
           const streamingAgent = activeTab?.mode === 'team' && streaming.currentAgentName
             ? activeTab.agents.find((a) => a.name === streaming.currentAgentName)
             : null
           const agentColors = streamingAgent ? AGENT_COLORS[streamingAgent.color] || AGENT_COLORS.blue : null
 
+          // Hide streaming bubble when only tool blocks are in progress (no text/thinking)
+          const hasToolActivity = streaming.contentBlocks.some(b => b.type === 'tool_use' || b.type === 'tool_result')
+          if (!streaming.text && !streaming.thinking && hasToolActivity) return null
+
           return (
-            <div className="flex flex-col items-start">
+            <div className="flex flex-col items-start space-y-1">
               {streamingAgent && (
                 <div className="flex items-center gap-1.5 mb-1 ml-1">
                   <span className="text-base">{streamingAgent.emoji}</span>
                   <span className={`text-xs font-semibold ${agentColors!.text}`}>{streamingAgent.name}</span>
                 </div>
               )}
+
+              {/* Text / thinking bubble */}
               <div className={`max-w-[85%] rounded-lg px-4 py-3 text-neutral-100 ${
                 agentColors
                   ? `${agentColors.bgLight} border-l-2 ${agentColors.border}`

@@ -281,6 +281,10 @@ export interface ElectronAPI {
   mcp: {
     writeConfig: (projectPath: string, servers: McpServer[]) => Promise<string>
   }
+  files: {
+    revertEdit: (filePath: string, oldString: string, newString: string) =>
+      Promise<{ success: boolean; error?: string }>
+  }
   dialog: {
     openDirectory: () => Promise<string | null>
   }

@@ -10,6 +10,7 @@ interface StreamingSnapshot {
   thinking: string
   isStreaming: boolean
   currentAgentName: string | null
+  _partialJson: string
 }
 
 export interface ConversationSnapshot {
@@ -67,7 +68,7 @@ const emptySnapshot: ConversationSnapshot = {
   conversations: [],
   activeConversationId: null,
   messages: [],
-  streaming: { text: '', contentBlocks: [], thinking: '', isStreaming: false, currentAgentName: null },
+  streaming: { text: '', contentBlocks: [], thinking: '', isStreaming: false, currentAgentName: null, _partialJson: '' },
   isWaitingForResponse: false,
   hasActiveSession: false,
 }
@@ -177,7 +178,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           conversations: [],
           activeConversationId: null,
           messages: [],
-          streaming: { text: '', contentBlocks: [], thinking: '', isStreaming: false, currentAgentName: null },
+          streaming: { text: '', contentBlocks: [], thinking: '', isStreaming: false, currentAgentName: null, _partialJson: '' },
           isWaitingForResponse: false,
           hasActiveSession: false,
           permissionRequest: null,

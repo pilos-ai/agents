@@ -3,7 +3,7 @@ import { api } from '../api'
 import { useProjectStore, getActiveProjectTab } from './useProjectStore'
 import { buildTeamSystemPrompt } from '../utils/team-prompt-builder'
 import { AGENT_COLORS } from '../data/agent-templates'
-import type { Conversation, ConversationMessage, ContentBlock, ClaudeEvent, ImageAttachment, AgentDefinition } from '../types'
+import type { Conversation, ConversationMessage, ContentBlock, ClaudeEvent, ImageAttachment, AgentDefinition, ToolUseBlock, ToolResultBlock } from '../types'
 
 interface StreamingState {
   text: string
@@ -11,6 +11,7 @@ interface StreamingState {
   thinking: string
   isStreaming: boolean
   currentAgentName: string | null
+  _partialJson: string
 }
 
 interface ConversationStore {
@@ -42,6 +43,7 @@ const emptyStreaming: StreamingState = {
   thinking: '',
   isStreaming: false,
   currentAgentName: null,
+  _partialJson: '',
 }
 
 /** Parse text into agent-attributed segments for team mode */
@@ -109,8 +111,37 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   setActiveConversation: async (id) => {
     set({ activeConversationId: id, messages: [], streaming: { ...emptyStreaming }, hasActiveSession: false })
     if (id) {
-      const messages = await api.conversations.getMessages(id)
-      set({ messages })
+      const loaded = await api.conversations.getMessages(id)
+
+      // For old messages without agent attribution, re-parse [AgentName] markers
+      const tab = getActiveProjectTab()
+      if (tab?.mode === 'team' && tab.agents.length > 0) {
+        const messages: ConversationMessage[] = []
+        for (const msg of loaded) {
+          if (msg.role === 'assistant' && !msg.agentName && msg.content) {
+            const segments = parseAgentSegments(msg.content, tab.agents)
+            if (segments.length > 1 || (segments.length === 1 && segments[0].agentName)) {
+              for (const seg of segments) {
+                messages.push({
+                  ...msg,
+                  content: seg.text,
+                  agentId: seg.agentId,
+                  agentName: seg.agentName || undefined,
+                  agentEmoji: seg.agentEmoji,
+                  agentColor: seg.agentColor,
+                })
+              }
+            } else {
+              messages.push(msg)
+            }
+          } else {
+            messages.push(msg)
+          }
+        }
+        set({ messages })
+      } else {
+        set({ messages: loaded })
+      }
     }
   },
 
@@ -220,40 +251,99 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       }
 
       case 'assistant': {
-        // Each assistant event contains the full message with all content blocks so far.
-        // We only care about the latest version (which has the most content blocks).
+        // The CLI sends assistant events with accumulated content blocks per turn.
+        // Extract tool_use blocks as separate messages, text/thinking → streaming.
         const msg = event.message as { id?: string; content: ContentBlock[] }
         if (!msg?.content) break
 
-        // Extract text from content blocks
+        const tab = getActiveProjectTab()
+        const convId = get().activeConversationId
+
+        // Update streaming text/thinking from this turn's content
         const textContent = msg.content
           .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
           .map((b) => b.text)
           .join('')
+        const thinkingContent = msg.content
+          .filter((b): b is { type: 'thinking'; thinking: string } => b.type === 'thinking')
+          .map((b) => b.thinking)
+          .join('')
 
-        if (!textContent) break // Skip thinking-only or tool_use-only messages
+        if (textContent || thinkingContent) {
+          set((s) => {
+            let currentAgentName = s.streaming.currentAgentName
 
-        // Check if we already have a message for this assistant turn
-        // (the CLI sends updated assistant events as new blocks are added)
-        const messages = get().messages
-        const lastMsg = messages[messages.length - 1]
-        if (lastMsg?.role === 'assistant' && lastMsg.type === 'text') {
-          // Update the last assistant message in-place
-          set({
-            messages: [
-              ...messages.slice(0, -1),
-              { ...lastMsg, content: textContent, contentBlocks: msg.content },
-            ],
-          })
-        } else {
-          get().addMessage({
-            role: 'assistant',
-            type: 'text',
-            content: textContent,
-            contentBlocks: msg.content,
-            timestamp: Date.now(),
+            // Detect [AgentName] markers in team mode
+            if (tab?.mode === 'team' && tab.agents.length > 0 && textContent) {
+              const agentNameSet = new Set(tab.agents.map((a) => a.name))
+              const lines = textContent.split('\n')
+              for (let i = lines.length - 1; i >= 0; i--) {
+                const m = lines[i].match(/^\[([A-Za-z_\s]+)\]\s*$/)
+                if (m && agentNameSet.has(m[1].trim())) {
+                  currentAgentName = m[1].trim()
+                  break
+                }
+              }
+            }
+
+            return {
+              streaming: {
+                ...s.streaming,
+                isStreaming: true,
+                text: textContent || s.streaming.text,
+                thinking: thinkingContent || s.streaming.thinking,
+                currentAgentName,
+              },
+            }
           })
         }
+
+        // Extract tool_use blocks and add as separate messages
+        const toolUseBlocks = msg.content.filter((b): b is ToolUseBlock => b.type === 'tool_use')
+        for (const block of toolUseBlocks) {
+          // Skip if already added (dedup by tool_use id)
+          const alreadyAdded = get().messages.some((m) =>
+            m.contentBlocks?.some((b) => b.type === 'tool_use' && (b as ToolUseBlock).id === block.id)
+          )
+          if (alreadyAdded) continue
+
+          // Get current agent for attribution in team mode
+          const currentAgent = get().streaming.currentAgentName
+          const agent = tab?.mode === 'team' && currentAgent
+            ? tab.agents.find((a) => a.name === currentAgent)
+            : null
+
+          const toolMsg: ConversationMessage = {
+            role: 'assistant',
+            type: 'tool_use',
+            content: '',
+            contentBlocks: [block],
+            agentName: agent?.name,
+            agentEmoji: agent?.emoji,
+            agentColor: agent?.color,
+            timestamp: Date.now(),
+          }
+
+          get().addMessage(toolMsg)
+
+          if (convId) {
+            api.conversations.saveMessage(convId, {
+              role: toolMsg.role,
+              type: toolMsg.type,
+              content: toolMsg.content,
+              contentBlocks: toolMsg.contentBlocks,
+              agentName: toolMsg.agentName,
+              agentEmoji: toolMsg.agentEmoji,
+              agentColor: toolMsg.agentColor,
+            })
+          }
+        }
+
+        // Also mark streaming as active
+        if (!get().streaming.isStreaming) {
+          set((s) => ({ streaming: { ...s.streaming, isStreaming: true } }))
+        }
+
         break
       }
 
@@ -282,7 +372,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       }
 
       case 'content_block_delta': {
-        const delta = event.delta as { type: string; text?: string; thinking?: string }
+        const delta = event.delta as { type: string; text?: string; thinking?: string; partial_json?: string }
         if (delta.type === 'text_delta' && delta.text) {
           const tab = getActiveProjectTab()
           set((s) => {
@@ -317,12 +407,134 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
               thinking: s.streaming.thinking + delta.thinking,
             },
           }))
+        } else if (delta.type === 'input_json_delta' && delta.partial_json) {
+          // Accumulate partial JSON for tool_use input
+          set((s) => ({
+            streaming: {
+              ...s.streaming,
+              _partialJson: s.streaming._partialJson + delta.partial_json,
+            },
+          }))
         }
         break
       }
 
       case 'content_block_stop': {
-        // A content block finished
+        // Finalize the last tool_use block with accumulated partial JSON input
+        set((s) => {
+          if (!s.streaming._partialJson) return s
+          const blocks = [...s.streaming.contentBlocks]
+          const lastBlock = blocks[blocks.length - 1]
+          if (lastBlock?.type === 'tool_use') {
+            try {
+              const input = JSON.parse(s.streaming._partialJson)
+              blocks[blocks.length - 1] = { ...lastBlock, input } as ContentBlock
+            } catch { /* partial JSON incomplete, keep as-is */ }
+          }
+          return {
+            streaming: {
+              ...s.streaming,
+              contentBlocks: blocks,
+              _partialJson: '',
+            },
+          }
+        })
+
+        // Add completed tool_use/tool_result blocks as separate messages in the chat
+        const { streaming: st } = get()
+        const lastBlock = st.contentBlocks[st.contentBlocks.length - 1]
+        if (lastBlock && (lastBlock.type === 'tool_use' || lastBlock.type === 'tool_result')) {
+          const convId = get().activeConversationId
+
+          // Get current agent attribution for team mode
+          const tab = getActiveProjectTab()
+          const agent = tab?.mode === 'team' && st.currentAgentName
+            ? tab.agents.find((a) => a.name === st.currentAgentName)
+            : null
+
+          const msg: ConversationMessage = {
+            role: 'assistant',
+            type: lastBlock.type as 'tool_use' | 'tool_result',
+            content: '',
+            contentBlocks: [lastBlock],
+            agentName: agent?.name,
+            agentEmoji: agent?.emoji,
+            agentColor: agent?.color,
+            timestamp: Date.now(),
+          }
+
+          get().addMessage(msg)
+
+          // Save to DB immediately
+          if (convId) {
+            api.conversations.saveMessage(convId, {
+              role: msg.role,
+              type: msg.type,
+              content: msg.content,
+              contentBlocks: msg.contentBlocks,
+              agentName: msg.agentName,
+              agentEmoji: msg.agentEmoji,
+              agentColor: msg.agentColor,
+            })
+          }
+        }
+        break
+      }
+
+      case 'user': {
+        // CLI sends tool_result blocks in user events — add as separate messages
+        const userMsg = event.message as { content?: ContentBlock[] }
+        if (!userMsg?.content) break
+
+        const toolResults = userMsg.content.filter(
+          (b): b is ToolResultBlock => b.type === 'tool_result'
+        )
+
+        for (const block of toolResults) {
+          // Skip permission denials (handled by permission_request event)
+          if (block.is_error && typeof block.content === 'string' &&
+            (block.content.includes('requires approval') || block.content.includes('requested permissions') || block.content.includes("haven't granted"))) {
+            continue
+          }
+
+          // Skip if already added (dedup by tool_use_id)
+          const alreadyAdded = get().messages.some((m) =>
+            m.contentBlocks?.some((b) => b.type === 'tool_result' && (b as ToolResultBlock).tool_use_id === block.tool_use_id)
+          )
+          if (alreadyAdded) continue
+
+          const convId = get().activeConversationId
+          const tab = getActiveProjectTab()
+          const currentAgent = get().streaming.currentAgentName
+          const agent = tab?.mode === 'team' && currentAgent
+            ? tab.agents.find((a) => a.name === currentAgent)
+            : null
+
+          const resultMsg: ConversationMessage = {
+            role: 'assistant',
+            type: 'tool_result',
+            content: '',
+            contentBlocks: [block],
+            agentName: agent?.name,
+            agentEmoji: agent?.emoji,
+            agentColor: agent?.color,
+            timestamp: Date.now(),
+          }
+
+          get().addMessage(resultMsg)
+
+          if (convId) {
+            api.conversations.saveMessage(convId, {
+              role: resultMsg.role,
+              type: resultMsg.type,
+              content: resultMsg.content,
+              contentBlocks: resultMsg.contentBlocks,
+              agentName: resultMsg.agentName,
+              agentEmoji: resultMsg.agentEmoji,
+              agentColor: resultMsg.agentColor,
+            })
+          }
+        }
         break
       }
 
@@ -346,20 +558,14 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
         finalText = finalText || streaming.text
 
+        // Tool blocks (tool_use, tool_result) are already added as separate messages
+        // by content_block_stop. Here we only handle the text content.
         if (finalText) {
           const tab = getActiveProjectTab()
 
-          // In team mode, parse agent segments and create per-agent messages
           if (tab?.mode === 'team' && tab.agents.length > 0) {
+            // In team mode, parse agent segments and create per-agent text messages
             const segments = parseAgentSegments(finalText, tab.agents)
-
-            // Remove any existing assistant message from streaming (assistant events)
-            const messages = get().messages
-            const lastMsg = messages[messages.length - 1]
-            const baseMessages = lastMsg?.role === 'assistant' && lastMsg.type === 'text'
-              ? messages.slice(0, -1)
-              : [...messages]
-
             const agentMessages: ConversationMessage[] = segments.map((seg) => ({
               role: 'assistant' as const,
               type: 'text' as const,
@@ -370,36 +576,38 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
               agentColor: seg.agentColor,
               timestamp: Date.now(),
             }))
-
-            set({ messages: [...baseMessages, ...agentMessages] })
+            set((s) => ({ messages: [...s.messages, ...agentMessages] }))
           } else {
-            // Solo mode — same as before
-            const messages = get().messages
-            const lastMsg = messages[messages.length - 1]
-            if (lastMsg?.role === 'assistant' && lastMsg.type === 'text') {
-              set({
-                messages: [
-                  ...messages.slice(0, -1),
-                  { ...lastMsg, content: finalText },
-                ],
-              })
-            } else {
-              get().addMessage({
-                role: 'assistant',
-                type: 'text',
-                content: finalText,
-                timestamp: Date.now(),
-              })
-            }
-          }
-
-          // Save full text to DB (single message regardless of mode)
-          if (activeConversationId) {
-            api.conversations.saveMessage(activeConversationId, {
+            // Solo mode — add text as a message
+            get().addMessage({
               role: 'assistant',
               type: 'text',
               content: finalText,
+              timestamp: Date.now(),
             })
+          }
+
+          // Save text messages to DB (tool blocks already saved by content_block_stop)
+          if (activeConversationId) {
+            const msgs = get().messages
+            const toSave: ConversationMessage[] = []
+            for (let i = msgs.length - 1; i >= 0; i--) {
+              if (msgs[i].role === 'assistant' && msgs[i].type === 'text') {
+                toSave.unshift(msgs[i])
+              } else {
+                break
+              }
+            }
+            for (const m of toSave) {
+              api.conversations.saveMessage(activeConversationId, {
+                role: m.role,
+                type: m.type,
+                content: m.content,
+                agentName: m.agentName,
+                agentEmoji: m.agentEmoji,
+                agentColor: m.agentColor,
+              })
+            }
           }
         }
 
@@ -409,7 +617,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         })
 
         // Auto-generate title from first assistant response
-        if (get().messages.length <= 3 && activeConversationId) {
+        const userMsgCount = get().messages.filter((m) => m.role === 'user').length
+        if (userMsgCount <= 1 && activeConversationId) {
           const firstUserMsg = get().messages.find((m) => m.role === 'user')
           if (firstUserMsg) {
             api.conversations.updateTitle(
@@ -447,6 +656,13 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         })
         break
       }
+
+      case 'system':
+      case 'rate_limit_event':
+      case 'raw':
+      case 'stderr':
+        // Informational events — no UI action needed
+        break
 
       default: {
         // Catch permission-related events with alternate type names

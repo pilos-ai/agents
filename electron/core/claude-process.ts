@@ -119,8 +119,8 @@ export class ClaudeProcess {
 
     this.emit(sessionId, { type: 'session:started', sessionId })
 
-    // Send initial prompt if provided and not resuming
-    if (options.prompt && !options.resume) {
+    // Send initial prompt if provided
+    if (options.prompt) {
       this.sendMessage(sessionId, options.prompt, options.images)
     }
 

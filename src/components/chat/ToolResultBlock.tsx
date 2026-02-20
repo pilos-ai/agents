@@ -6,16 +6,25 @@ interface Props {
   block: ToolResultBlockType
 }
 
+const PREVIEW_LINES = 6
+const PREVIEW_CHARS = 120
+
 export function ToolResultBlock({ block }: Props) {
-  const [expanded, setExpanded] = useState(false)
   const isError = block.is_error
 
   const content = typeof block.content === 'string'
     ? block.content
     : block.content?.map((c) => c.text || '').join('\n') || ''
 
-  const preview = content.split('\n').slice(0, 3).join('\n')
-  const hasMore = content.split('\n').length > 3
+  const lines = content.split('\n')
+  const lineCount = lines.length
+  const hasMore = lineCount > PREVIEW_LINES
+  const isShort = !hasMore
+
+  // Auto-expand errors and short results
+  const [expanded, setExpanded] = useState(isError || isShort)
+
+  const preview = lines.slice(0, PREVIEW_LINES).join('\n')
 
   return (
     <div className="my-1 ml-5">
@@ -33,9 +42,14 @@ export function ToolResultBlock({ block }: Props) {
           <span className={`text-xs ${isError ? 'text-red-400' : 'text-green-400'}`}>
             {isError ? '✗ Error' : '✓ Result'}
           </span>
+          {hasMore && (
+            <span className="text-xs text-neutral-500">
+              ({lineCount} lines)
+            </span>
+          )}
           {!expanded && content && (
             <span className="text-xs text-neutral-500 truncate flex-1">
-              {preview.slice(0, 80)}
+              {preview.slice(0, PREVIEW_CHARS)}
             </span>
           )}
           {hasMore && (
@@ -51,7 +65,7 @@ export function ToolResultBlock({ block }: Props) {
           )}
         </button>
 
-        {(expanded || !hasMore) && content && (
+        {expanded && content && (
           <div className="px-3 pb-2">
             <CodeBlock language="" code={content} />
           </div>

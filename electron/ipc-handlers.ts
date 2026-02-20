@@ -70,11 +70,38 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   })
 
   ipcMain.handle('conversations:getMessages', async (_event, conversationId: string) => {
-    return database.getMessages(conversationId)
+    const rows = database.getMessages(conversationId)
+    // Map DB snake_case to renderer camelCase
+    return rows.map((r) => ({
+      id: r.id,
+      role: r.role,
+      type: r.type,
+      content: r.content,
+      toolName: r.tool_name,
+      toolInput: r.tool_input,
+      toolResult: r.tool_result,
+      agentName: r.agent_name,
+      agentEmoji: r.agent_emoji,
+      agentColor: r.agent_color,
+      contentBlocks: r.content_blocks ? JSON.parse(r.content_blocks) : undefined,
+      timestamp: new Date(r.created_at).getTime(),
+    }))
   })
 
   ipcMain.handle('conversations:saveMessage', async (_event, conversationId: string, message) => {
-    return database.saveMessage(conversationId, message)
+    // Map renderer camelCase to DB snake_case
+    return database.saveMessage(conversationId, {
+      role: message.role,
+      type: message.type,
+      content: message.content,
+      tool_name: message.toolName,
+      tool_input: message.toolInput,
+      tool_result: message.toolResult,
+      agent_name: message.agentName,
+      agent_emoji: message.agentEmoji,
+      agent_color: message.agentColor,
+      content_blocks: message.contentBlocks ? JSON.stringify(message.contentBlocks) : null,
+    })
   })
 
   // ── Terminal ──
@@ -140,6 +167,17 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // ── MCP ──
   ipcMain.handle('mcp:writeConfig', async (_event, projectPath: string, servers) => {
     return writeMcpConfig(projectPath, servers)
+  })
+
+  // ── Files ──
+  ipcMain.handle('files:revertEdit', async (_event, filePath: string, oldString: string, newString: string) => {
+    const fs = await import('fs/promises')
+    const content = await fs.readFile(filePath, 'utf-8')
+    if (!content.includes(newString)) {
+      return { success: false, error: 'Content no longer matches — file may have changed' }
+    }
+    await fs.writeFile(filePath, content.replace(newString, oldString), 'utf-8')
+    return { success: true }
   })
 
   // ── Dialogs ──

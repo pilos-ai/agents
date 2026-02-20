@@ -33,6 +33,10 @@ export interface Message {
   tool_name?: string
   tool_input?: string
   tool_result?: string
+  agent_name?: string | null
+  agent_emoji?: string | null
+  agent_color?: string | null
+  content_blocks?: string | null  // JSON-encoded ContentBlock[]
   created_at: string
 }
 
@@ -97,6 +101,22 @@ export class Database {
       this.db!.exec("ALTER TABLE conversations ADD COLUMN project_path TEXT NOT NULL DEFAULT ''")
     }
     this.db!.exec("CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project_path, updated_at DESC)")
+
+    // Migration: add agent and content_blocks columns to messages
+    const msgColumns = this.db!.prepare("PRAGMA table_info(messages)").all() as Array<{ name: string }>
+    const msgColNames = new Set(msgColumns.map((c) => c.name))
+    if (!msgColNames.has('agent_name')) {
+      this.db!.exec("ALTER TABLE messages ADD COLUMN agent_name TEXT")
+    }
+    if (!msgColNames.has('agent_emoji')) {
+      this.db!.exec("ALTER TABLE messages ADD COLUMN agent_emoji TEXT")
+    }
+    if (!msgColNames.has('agent_color')) {
+      this.db!.exec("ALTER TABLE messages ADD COLUMN agent_color TEXT")
+    }
+    if (!msgColNames.has('content_blocks')) {
+      this.db!.exec("ALTER TABLE messages ADD COLUMN content_blocks TEXT")
+    }
   }
 
   listConversations(projectPath?: string): Conversation[] {
@@ -142,8 +162,8 @@ export class Database {
 
   saveMessage(conversationId: string, message: Partial<Message>): Message {
     const result = this.db!.prepare(`
-      INSERT INTO messages (conversation_id, role, type, content, tool_name, tool_input, tool_result)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO messages (conversation_id, role, type, content, tool_name, tool_input, tool_result, agent_name, agent_emoji, agent_color, content_blocks)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       conversationId,
       message.role || 'assistant',
@@ -151,7 +171,11 @@ export class Database {
       message.content || '',
       message.tool_name || null,
       message.tool_input || null,
-      message.tool_result || null
+      message.tool_result || null,
+      message.agent_name || null,
+      message.agent_emoji || null,
+      message.agent_color || null,
+      message.content_blocks || null
     )
 
     // Touch conversation updated_at

@@ -54,6 +54,9 @@ const stubAPI: ElectronAPI = {
   mcp: {
     writeConfig: () => Promise.resolve('/tmp/stub-mcp.json'),
   },
+  files: {
+    revertEdit: () => Promise.resolve({ success: false, error: 'stub' }),
+  },
   dialog: {
     openDirectory: () => Promise.resolve(null),
   },

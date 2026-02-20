@@ -20,30 +20,41 @@ export function MessageBubble({ message, isLast }: Props) {
     return detectOptions(message.content)
   }, [message.content, isUser, isLast])
 
-  // If we have content blocks, render them
-  if (message.contentBlocks && message.contentBlocks.length > 0) {
-    return (
-      <div className="space-y-2">
-        {message.contentBlocks.map((block, i) => renderContentBlock(block, i, isLast && i === message.contentBlocks!.length - 1))}
-      </div>
-    )
-  }
-
-  // Agent-attributed message (team mode)
+  // Agent-attributed message (team mode) — may also have tool blocks
   if (!isUser && message.agentName) {
     const colors = AGENT_COLORS[message.agentColor || 'blue'] || AGENT_COLORS.blue
+    // Extract non-text blocks (tool_use, tool_result) from contentBlocks
+    const toolBlocks = message.contentBlocks?.filter(b => b.type !== 'text') || []
+
     return (
       <div className="flex flex-col items-start">
         <div className="flex items-center gap-1.5 mb-1 ml-1">
           <span className="text-base">{message.agentEmoji}</span>
           <span className={`text-xs font-semibold ${colors.text}`}>{message.agentName}</span>
         </div>
-        <div className={`max-w-[85%] rounded-lg px-4 py-2.5 ${colors.bgLight} border-l-2 ${colors.border} text-neutral-100`}>
-          <div className="markdown-content text-sm">
-            <MarkdownRenderer content={message.content} />
+        {message.content && (
+          <div className={`max-w-[85%] rounded-lg px-4 py-2.5 ${colors.bgLight} border-l-2 ${colors.border} text-neutral-100`}>
+            <div className="markdown-content text-sm">
+              <MarkdownRenderer content={message.content} />
+            </div>
           </div>
-        </div>
+        )}
+        {/* Render tool blocks (Edit, Write, Bash, etc.) after agent text */}
+        {toolBlocks.length > 0 && (
+          <div className="w-full space-y-1 mt-1">
+            {toolBlocks.map((block, i) => renderContentBlock(block, i, false))}
+          </div>
+        )}
         {options.length > 0 && <OptionButtons options={options} />}
+      </div>
+    )
+  }
+
+  // Non-agent message with content blocks (solo mode)
+  if (message.contentBlocks && message.contentBlocks.length > 0) {
+    return (
+      <div className="space-y-2">
+        {message.contentBlocks.map((block, i) => renderContentBlock(block, i, isLast && i === message.contentBlocks!.length - 1))}
       </div>
     )
   }

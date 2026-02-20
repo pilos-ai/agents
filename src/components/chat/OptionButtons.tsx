@@ -7,16 +7,13 @@ interface DetectedOption {
 }
 
 /**
- * Detect option-like patterns in assistant messages:
- * - **Option Name** — description
- * - **Option Name** (recommended) — description
- * - 1. **Option Name** — description
- * - - **Option Name** — description
- * - 1. A simple todo app
- * - - A dashboard
+ * Detect option-like patterns in assistant messages.
+ * Only triggers when:
+ * 1. The list is at the END of the message (trailing list)
+ * 2. The text before the list contains a question or choice-presenting phrase
+ * 3. Items don't look like code/technical summaries (no heavy backtick usage)
  */
 export function detectOptions(text: string): DetectedOption[] {
-  const options: DetectedOption[] = []
   const lines = text.split('\n')
 
   // Matches: **Option** — desc, 1. **Option** (note) — desc, - **Option** - desc
@@ -24,55 +21,85 @@ export function detectOptions(text: string): DetectedOption[] {
   // Matches plain list items: "1. Some option", "- Some option", "• Some option"
   const plainListRegex = /^\s*(?:(\d+)[.)]\s+|[-*•]\s+)(.+)$/
 
-  let consecutiveOptions = 0
-  const candidates: DetectedOption[] = []
+  // Walk backwards from the end to find the trailing list block
+  let endIdx = lines.length - 1
+  while (endIdx >= 0 && lines[endIdx].trim() === '') endIdx--
+  if (endIdx < 0) return []
 
-  for (const line of lines) {
+  let startIdx = endIdx
+  while (startIdx >= 0) {
+    const trimmed = lines[startIdx].trim()
+    if (trimmed === '') { startIdx--; continue }
+    if (boldOptionRegex.test(trimmed) || plainListRegex.test(trimmed)) {
+      startIdx--
+    } else {
+      break
+    }
+  }
+  // startIdx is now the last non-list line before the trailing list
+  const listStart = startIdx + 1
+  if (listStart > endIdx) return [] // No trailing list
+
+  // Need at least 2 list items
+  const listLines = lines.slice(listStart, endIdx + 1).filter(l => l.trim() !== '')
+  if (listLines.length < 2) return []
+
+  // Check the context before the list — must suggest a choice/question
+  const preListText = lines.slice(0, listStart + 1).join('\n').trim()
+  // Look at the last non-empty paragraph before the list
+  const paragraphs = preListText.split(/\n\s*\n/)
+  const lastParagraph = paragraphs[paragraphs.length - 1]?.trim() || ''
+
+  const hasChoiceContext =
+    /\?\s*$/.test(lastParagraph) ||
+    /\b(which|choose|select|options?|prefer|approach|would you like|pick|here are|do you want)\b/i.test(lastParagraph)
+
+  if (!hasChoiceContext) return []
+
+  // Parse the trailing list items into options
+  const options: DetectedOption[] = []
+  for (const line of listLines) {
     const trimmed = line.trim()
-    const boldMatch = boldOptionRegex.exec(trimmed)
 
+    // Skip items with heavy backtick usage (code references = not choices)
+    const backtickCount = (trimmed.match(/`/g) || []).length
+    if (backtickCount >= 4) continue
+
+    const boldMatch = boldOptionRegex.exec(trimmed)
     if (boldMatch) {
-      consecutiveOptions++
+      const label = boldMatch[1].trim()
+      // Skip labels that are mostly code
+      if ((label.match(/`/g) || []).length >= 2 && label.length < 20) continue
       const annotation = (boldMatch[2] || '').toLowerCase()
-      candidates.push({
-        label: boldMatch[1].trim(),
+      options.push({
+        label,
         description: (boldMatch[3] || '').trim(),
         recommended: /recommend|prefer|suggest|default|best/i.test(annotation),
       })
     } else {
       const plainMatch = plainListRegex.exec(trimmed)
-      // Only consider plain list items that are short (likely options, not paragraphs)
-      if (plainMatch && plainMatch[2].length <= 80 && !plainMatch[2].includes('```')) {
-        consecutiveOptions++
-        const label = plainMatch[2].trim()
-          .replace(/[—–\-]\s.*$/, '') // Strip trailing description after dash
-          .replace(/\s*\(.*\)\s*$/, '') // Strip trailing parenthetical
+      if (plainMatch && plainMatch[2].length <= 60 && !plainMatch[2].includes('```')) {
+        const rawLabel = plainMatch[2].trim()
+        // Skip items that look like code/technical descriptions
+        if ((rawLabel.match(/`/g) || []).length >= 2) continue
+        if (rawLabel.endsWith(':')) continue // "App.jsx:" is a heading, not an option
+
+        const label = rawLabel
+          .replace(/[—–\-]\s.*$/, '')
+          .replace(/\s*\(.*\)\s*$/, '')
           .trim()
+        if (!label) continue
         const annotation = (plainMatch[2].match(/\(([^)]*)\)/)?.[1] || '').toLowerCase()
-        candidates.push({
+        options.push({
           label,
           description: '',
           recommended: /recommend|prefer|suggest|default|best/i.test(annotation),
         })
-      } else if (trimmed === '') {
-        // Allow blank lines between options
-      } else {
-        // Non-option line breaks the streak
-        if (consecutiveOptions >= 2) {
-          options.push(...candidates)
-        }
-        consecutiveOptions = 0
-        candidates.length = 0
       }
     }
   }
 
-  // Check remaining candidates
-  if (consecutiveOptions >= 2) {
-    options.push(...candidates)
-  }
-
-  return options
+  return options.length >= 2 ? options : []
 }
 
 interface Props {
