@@ -1,6 +1,8 @@
 {
   "name": "pilos-agents",
   "version": "1.0.0",
+  "description": "Pilos Agents — AI-powered multi-agent desktop app",
+  "author": "Pilos <hello@pilos.ai>",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -8,6 +10,7 @@
     "build": "vite build",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:win": "npm run build && electron-builder --win",
+    "dev:license-server": "cd packages/license-server && npm run seed && npm run dev",
     "postinstall": "electron-builder install-app-deps && node scripts/codesign.mjs"
   },
   "dependencies": {

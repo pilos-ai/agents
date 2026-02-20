@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { api } from '../api'
 import { useConversationStore } from './useConversationStore'
+import { useLicenseStore } from './useLicenseStore'
 import type { Project, Conversation, ConversationMessage, ContentBlock, ClaudeEvent, ProjectMode, AgentDefinition, McpServer } from '../types'
 
 interface StreamingSnapshot {
@@ -266,6 +267,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const dirPath = state.activeProjectPath
     const tab = state.openProjects.find((p) => p.projectPath === dirPath)
     if (!tab) return
+    const flags = useLicenseStore.getState().flags
+    if (tab.agents.length >= flags.maxAgents) return
     const agents = [...tab.agents, agent]
     set({
       openProjects: state.openProjects.map((p) =>
@@ -323,6 +326,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const dirPath = state.activeProjectPath
     const tab = state.openProjects.find((p) => p.projectPath === dirPath)
     if (!tab) return
+    const flags = useLicenseStore.getState().flags
+    if (tab.mcpServers.length >= flags.maxMcpServers) return
     const mcpServers = [...tab.mcpServers, server]
     set({
       openProjects: state.openProjects.map((p) =>

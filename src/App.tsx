@@ -6,6 +6,7 @@ import { SetupScreen } from './components/setup/SetupScreen'
 import { SettingsDialog } from './components/settings/SettingsDialog'
 import { useProjectStore } from './store/useProjectStore'
 import { useAppStore } from './store/useAppStore'
+import { useLicenseStore } from './store/useLicenseStore'
 import { api } from './api'
 import type { ClaudeEvent } from './types'
 
@@ -24,6 +25,7 @@ export default function App() {
     checkCli()
     loadSettings()
     loadRecentProjects()
+    useLicenseStore.getState().checkLicense()
 
     const unsub = api.claude.onEvent((event: ClaudeEvent) => {
       routeClaudeEvent(event)
@@ -39,6 +41,8 @@ export default function App() {
 
       {cliStatus !== 'ready' ? (
         <SetupScreen />
+      ) : settingsOpen ? (
+        <SettingsDialog />
       ) : hasOpenProjects ? (
         <>
           <ProjectTabBar />
@@ -47,8 +51,6 @@ export default function App() {
       ) : (
         <WelcomeScreen />
       )}
-
-      {settingsOpen && <SettingsDialog />}
     </div>
   )
 }

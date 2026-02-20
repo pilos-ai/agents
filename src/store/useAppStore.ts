@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { api } from '../api'
 
 export type CliStatus = 'checking' | 'ready' | 'missing' | 'installing' | 'install_failed' | 'error'
+export type SettingsSection = 'project' | 'agents' | 'mcp' | 'license' | 'general'
 
 interface AppStore {
   // CLI Status
@@ -16,6 +17,7 @@ interface AppStore {
   rightPanelWidth: number
   rightPanelOpen: boolean
   settingsOpen: boolean
+  activeSettingsSection: SettingsSection
   activeRightTab: 'terminal' | 'processes'
 
   // Global settings
@@ -29,6 +31,7 @@ interface AppStore {
   setRightPanelWidth: (w: number) => void
   toggleRightPanel: () => void
   setSettingsOpen: (open: boolean) => void
+  setActiveSettingsSection: (section: SettingsSection) => void
   setActiveRightTab: (tab: 'terminal' | 'processes') => void
   setTerminalFontSize: (size: number) => void
   loadSettings: () => Promise<void>
@@ -43,6 +46,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   rightPanelWidth: 350,
   rightPanelOpen: false,
   settingsOpen: false,
+  activeSettingsSection: 'project',
   activeRightTab: 'terminal',
   terminalFontSize: 13,
 
@@ -90,7 +94,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
 
-  setSettingsOpen: (open) => set({ settingsOpen: open }),
+  setSettingsOpen: (open) => set({ settingsOpen: open, ...(open ? { activeSettingsSection: 'project' as const } : {}) }),
+
+  setActiveSettingsSection: (section) => set({ activeSettingsSection: section }),
 
   setActiveRightTab: (tab) => set({ activeRightTab: tab }),
 

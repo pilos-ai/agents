@@ -1,0 +1,4 @@
+[submodule "packages/pro"]
+	path = packages/pro
+	url = git@github.com:pilos-ai/agents-pro.git
+	branch = main

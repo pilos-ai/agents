@@ -2,6 +2,8 @@ import { useState } from 'react'
 import type { McpServer } from '../../types'
 import { MCP_SERVER_TEMPLATES, MCP_CATEGORIES } from '../../data/mcp-server-templates'
 import { McpServerEditModal } from './McpServerEditModal'
+import { useLicenseStore } from '../../store/useLicenseStore'
+import { ProBadge } from '../common/ProBadge'
 
 interface Props {
   servers: McpServer[]
@@ -15,6 +17,9 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
   const [showTemplatePicker, setShowTemplatePicker] = useState(false)
   const [editingServer, setEditingServer] = useState<McpServer | null>(null)
   const [showNewModal, setShowNewModal] = useState(false)
+
+  const flags = useLicenseStore((s) => s.flags)
+  const atLimit = servers.length >= flags.maxMcpServers
 
   const existingIds = new Set(servers.map((s) => s.id))
   const availableTemplates = MCP_SERVER_TEMPLATES.filter((t) => !existingIds.has(t.id))
@@ -161,27 +166,36 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
 
       {/* Action buttons */}
       {!showTemplatePicker && (
-        <div className="flex gap-3">
-          {availableTemplates.length > 0 && (
-            <button
-              onClick={() => setShowTemplatePicker(true)}
-              className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-400 transition-colors"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              Add from Template
-            </button>
+        <div className="flex gap-3 items-center">
+          {atLimit ? (
+            <div className="flex items-center gap-2 text-xs text-neutral-500">
+              <span>MCP server limit reached ({flags.maxMcpServers})</span>
+              <ProBadge label="Upgrade to unlock unlimited MCP servers" />
+            </div>
+          ) : (
+            <>
+              {availableTemplates.length > 0 && (
+                <button
+                  onClick={() => setShowTemplatePicker(true)}
+                  className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-400 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add from Template
+                </button>
+              )}
+              <button
+                onClick={() => setShowNewModal(true)}
+                className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-400 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Add Custom
+              </button>
+            </>
           )}
-          <button
-            onClick={() => setShowNewModal(true)}
-            className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-400 transition-colors"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            Add Custom
-          </button>
         </div>
       )}
 

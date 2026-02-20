@@ -12,6 +12,7 @@ files:
   - dist/**/*
   - dist-electron/**/*
   - node_modules/**/*
+  - packages/pro/**/*
   - package.json
 
 asarUnpack:

@@ -50,6 +50,12 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
+      '@pilos/pro': path.resolve(__dirname, 'packages/pro'),
     },
+  },
+  define: {
+    'window.__PILOS_LICENSE_SERVER__': JSON.stringify(
+      process.env.VITE_LICENSE_SERVER || ''
+    ),
   },
 })

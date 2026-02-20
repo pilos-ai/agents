@@ -1,0 +1,12 @@
+{
+  "name": "@pilos/agents-pro",
+  "version": "1.0.0",
+  "description": "Pilos Agents Pro — private closed-source extension module",
+  "type": "module",
+  "license": "BUSL-1.1",
+  "private": true,
+  "main": "./index.ts",
+  "exports": {
+    ".": "./index.ts"
+  }
+}

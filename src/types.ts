@@ -202,6 +202,19 @@ export interface McpServerTemplate {
   docsUrl?: string
 }
 
+// ── License & Pro Types ──
+
+export type LicenseTier = 'free' | 'pro' | 'teams'
+
+export interface ProFeatureFlags {
+  tier: LicenseTier
+  maxAgents: number        // free=3, pro/teams=Infinity
+  maxMcpServers: number    // free=3, pro/teams=Infinity
+  teamMode: boolean        // free=false
+  teamSync: boolean        // teams only
+  premiumAgents: boolean   // pro/teams
+}
+
 // ── CLI Check Types ──
 
 export interface CliCheckResult {
