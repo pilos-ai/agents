@@ -1,9 +1,30 @@
+import { useState, useEffect, type ComponentType } from 'react'
 import { Sidebar } from './Sidebar'
 import { ResizablePanel } from './ResizablePanel'
 import { ChatPanel } from '../chat/ChatPanel'
 import { TerminalPanel } from '../terminal/TerminalPanel'
-import { ProcessPanel } from '../processes/ProcessPanel'
+import { SessionInfoPanel } from '../session/SessionInfoPanel'
 import { useAppStore } from '../../store/useAppStore'
+
+// Lazily loaded PM components
+let PmStoriesPanel: ComponentType | null = null
+let PmBoardPanel: ComponentType | null = null
+let PmDashboardPanel: ComponentType | null = null
+let pmLoaded = false
+
+function loadPmComponents(): Promise<void> {
+  if (pmLoaded) return Promise.resolve()
+  return import('@pilos/agents-pm')
+    .then((mod) => {
+      PmStoriesPanel = mod.StoriesPanel
+      PmBoardPanel = mod.JiraBoardPanel
+      PmDashboardPanel = mod.JiraDashboardPanel
+      pmLoaded = true
+    })
+    .catch(() => {
+      pmLoaded = true // Don't retry
+    })
+}
 
 export function AppShell() {
   const sidebarWidth = useAppStore((s) => s.sidebarWidth)
@@ -13,6 +34,24 @@ export function AppShell() {
   const rightPanelOpen = useAppStore((s) => s.rightPanelOpen)
   const activeRightTab = useAppStore((s) => s.activeRightTab)
   const setActiveRightTab = useAppStore((s) => s.setActiveRightTab)
+  const activeView = useAppStore((s) => s.activeView)
+
+  const [, forceUpdate] = useState(0)
+
+  useEffect(() => {
+    if (activeView !== 'chat' && !pmLoaded) {
+      loadPmComponents().then(() => forceUpdate((n) => n + 1))
+    }
+  }, [activeView])
+
+  const renderMainPanel = () => {
+    switch (activeView) {
+      case 'stories': return PmStoriesPanel ? <PmStoriesPanel /> : null
+      case 'board': return PmBoardPanel ? <PmBoardPanel /> : null
+      case 'dashboard': return PmDashboardPanel ? <PmDashboardPanel /> : null
+      default: return <ChatPanel />
+    }
+  }
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -29,9 +68,9 @@ export function AppShell() {
         side="left"
       />
 
-      {/* Chat Panel */}
+      {/* Main Content Panel */}
       <div className="flex-1 flex flex-col min-w-0">
-        <ChatPanel />
+        {renderMainPanel()}
       </div>
 
       {/* Right Panel */}
@@ -61,20 +100,21 @@ export function AppShell() {
                 Terminal
               </button>
               <button
-                onClick={() => setActiveRightTab('processes')}
+                onClick={() => setActiveRightTab('session')}
                 className={`px-4 py-2 text-xs font-medium transition-colors ${
-                  activeRightTab === 'processes'
+                  activeRightTab === 'session'
                     ? 'text-blue-400 border-b-2 border-blue-400'
                     : 'text-neutral-400 hover:text-neutral-200'
                 }`}
               >
-                Processes
+                Session
               </button>
             </div>
 
             {/* Tab content */}
             <div className="flex-1 overflow-hidden">
-              {activeRightTab === 'terminal' ? <TerminalPanel /> : <ProcessPanel />}
+              {activeRightTab === 'terminal' && <TerminalPanel />}
+              {activeRightTab === 'session' && <SessionInfoPanel />}
             </div>
           </div>
         </>

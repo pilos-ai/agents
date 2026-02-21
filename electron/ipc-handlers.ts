@@ -13,14 +13,27 @@ let processTracker: ProcessTracker
 let database: Database
 let settings: SettingsStore
 let cliChecker: CliChecker
+let jiraOAuth: any  // Dynamically loaded from @pilos/agents-pm
+let jiraClient: any // Dynamically loaded from @pilos/agents-pm
 
-export function registerIpcHandlers(mainWindow: BrowserWindow): void {
+export async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
   settings = new SettingsStore()
   database = new Database()
   claudeProcess = new ClaudeProcess(mainWindow, settings)
   terminalManager = new TerminalManager(mainWindow)
   processTracker = new ProcessTracker(mainWindow)
   cliChecker = new CliChecker(mainWindow)
+
+  // Dynamically load PM/Jira services if available
+  let hasPm = false
+  try {
+    const pm = await import('@pilos/agents-pm/electron')
+    jiraOAuth = new pm.JiraOAuth(settings)
+    jiraClient = new pm.JiraClient(jiraOAuth)
+    hasPm = true
+  } catch {
+    // PM package not available — Jira/Stories handlers won't be registered
+  }
 
   // ── CLI Checker ──
   ipcMain.handle('cli:check', async () => {
@@ -33,7 +46,20 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   // ── Claude CLI ──
   ipcMain.handle('claude:startSession', async (_event, sessionId: string, options) => {
-    return claudeProcess.startSession(sessionId, options)
+    // Look up stored CLI session ID for resume
+    if (options.resume) {
+      const storedCliId = database.getConversationCliSessionId(sessionId)
+      if (storedCliId) {
+        options.cliSessionId = storedCliId
+        console.log(`[IPC] Resuming session ${sessionId} with CLI session ${storedCliId}`)
+      }
+    }
+
+    const cliSessionId = await claudeProcess.startSession(sessionId, options)
+
+    // Store the CLI session ID for future resume
+    database.updateConversationCliSessionId(sessionId, cliSessionId)
+    return cliSessionId
   })
 
   ipcMain.handle('claude:sendMessage', async (_event, sessionId: string, message: string, images?: Array<{ data: string; mediaType: string }>) => {
@@ -166,7 +192,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   // ── MCP ──
   ipcMain.handle('mcp:writeConfig', async (_event, projectPath: string, servers) => {
-    return writeMcpConfig(projectPath, servers)
+    return writeMcpConfig(projectPath, servers, settings)
   })
 
   // ── Files ──
@@ -187,4 +213,260 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     })
     return result.canceled ? null : result.filePaths[0]
   })
+
+  // ── Jira & Stories (only if PM package is available) ──
+  if (hasPm) {
+    // ── Jira OAuth (project-scoped) ──
+    ipcMain.handle('jira:setActiveProject', async (_event, projectPath: string) => {
+      jiraOAuth.setActiveProject(projectPath)
+    })
+
+    ipcMain.handle('jira:authorize', async (_event, projectPath: string) => {
+      jiraOAuth.setActiveProject(projectPath)
+      return jiraOAuth.authorize()
+    })
+
+    ipcMain.handle('jira:disconnect', async (_event, projectPath: string) => {
+      jiraOAuth.setActiveProject(projectPath)
+      jiraOAuth.disconnect()
+    })
+
+    ipcMain.handle('jira:getTokens', async (_event, projectPath: string) => {
+      jiraOAuth.setActiveProject(projectPath)
+      return jiraOAuth.getValidTokens()
+    })
+
+    // ── Jira API ──
+    ipcMain.handle('jira:getProjects', async () => {
+      return jiraClient.getProjects()
+    })
+
+    ipcMain.handle('jira:getBoards', async (_event, projectKey: string) => {
+      return jiraClient.getBoards(projectKey)
+    })
+
+    ipcMain.handle('jira:getBoardIssues', async (_event, boardId: number) => {
+      return jiraClient.getBoardIssues(boardId)
+    })
+
+    ipcMain.handle('jira:getSprints', async (_event, boardId: number) => {
+      return jiraClient.getSprints(boardId)
+    })
+
+    ipcMain.handle('jira:getSprintIssues', async (_event, sprintId: number) => {
+      return jiraClient.getSprintIssues(sprintId)
+    })
+
+    ipcMain.handle('jira:getIssues', async (_event, jql: string) => {
+      return jiraClient.getIssues(jql)
+    })
+
+    ipcMain.handle('jira:createEpic', async (_event, projectKey: string, summary: string, description: string) => {
+      return jiraClient.createEpic(projectKey, summary, description)
+    })
+
+    ipcMain.handle('jira:createSubTask', async (_event, parentKey: string, summary: string, description: string) => {
+      return jiraClient.createSubTask(parentKey, summary, description)
+    })
+
+    ipcMain.handle('jira:transitionIssue', async (_event, issueKey: string, transitionId: string) => {
+      return jiraClient.transitionIssue(issueKey, transitionId)
+    })
+
+    ipcMain.handle('jira:getTransitions', async (_event, issueKey: string) => {
+      return jiraClient.getTransitions(issueKey)
+    })
+
+    ipcMain.handle('jira:getUsers', async (_event, projectKey: string) => {
+      return jiraClient.getUsers(projectKey)
+    })
+
+    ipcMain.handle('jira:getIssue', async (_event, issueKey: string) => {
+      return jiraClient.getIssue(issueKey)
+    })
+
+    ipcMain.handle('jira:saveBoardConfig', async (_event, projectPath: string, config: { projectKey: string; boardId: number; boardName: string }) => {
+      const allConfigs = settings.get('jiraBoardConfigs') as Record<string, unknown> || {}
+      allConfigs[projectPath] = config
+      settings.set('jiraBoardConfigs', allConfigs)
+    })
+
+    ipcMain.handle('jira:getBoardConfig', async (_event, projectPath: string) => {
+      const allConfigs = settings.get('jiraBoardConfigs') as Record<string, unknown> || {}
+      return allConfigs[projectPath] || null
+    })
+
+    // ── Stories ──
+    ipcMain.handle('stories:list', async (_event, projectPath: string) => {
+      const rows = database.listStories(projectPath)
+      return rows.map(mapStoryRow)
+    })
+
+    ipcMain.handle('stories:get', async (_event, id: string) => {
+      const row = database.getStory(id)
+      return row ? mapStoryRow(row) : null
+    })
+
+    ipcMain.handle('stories:create', async (_event, story: Record<string, unknown>) => {
+      const row = database.createStory({
+        project_path: story.projectPath,
+        title: story.title,
+        description: story.description,
+        status: story.status,
+        priority: story.priority,
+        story_points: story.storyPoints,
+        jira_epic_key: story.jiraEpicKey,
+        jira_epic_id: story.jiraEpicId,
+        jira_project_key: story.jiraProjectKey,
+        jira_sync_status: story.jiraSyncStatus,
+        coverage_data: story.coverageData ? JSON.stringify(story.coverageData) : null,
+      })
+      return mapStoryRow(row)
+    })
+
+    ipcMain.handle('stories:update', async (_event, id: string, updates: Record<string, unknown>) => {
+      const dbUpdates: Record<string, unknown> = {}
+      if ('title' in updates) dbUpdates.title = updates.title
+      if ('description' in updates) dbUpdates.description = updates.description
+      if ('status' in updates) dbUpdates.status = updates.status
+      if ('priority' in updates) dbUpdates.priority = updates.priority
+      if ('storyPoints' in updates) dbUpdates.story_points = updates.storyPoints
+      if ('jiraEpicKey' in updates) dbUpdates.jira_epic_key = updates.jiraEpicKey
+      if ('jiraEpicId' in updates) dbUpdates.jira_epic_id = updates.jiraEpicId
+      if ('jiraProjectKey' in updates) dbUpdates.jira_project_key = updates.jiraProjectKey
+      if ('jiraSyncStatus' in updates) dbUpdates.jira_sync_status = updates.jiraSyncStatus
+      if ('jiraLastSynced' in updates) dbUpdates.jira_last_synced = updates.jiraLastSynced
+      if ('coverageData' in updates) dbUpdates.coverage_data = updates.coverageData ? JSON.stringify(updates.coverageData) : null
+      const row = database.updateStory(id, dbUpdates)
+      return mapStoryRow(row)
+    })
+
+    ipcMain.handle('stories:delete', async (_event, id: string) => {
+      database.deleteStory(id)
+    })
+
+    ipcMain.handle('stories:getCriteria', async (_event, storyId: string) => {
+      const rows = database.getStoryCriteria(storyId)
+      return rows.map(mapCriterionRow)
+    })
+
+    ipcMain.handle('stories:addCriterion', async (_event, storyId: string, description: string) => {
+      const row = database.addStoryCriterion(storyId, description)
+      return mapCriterionRow(row)
+    })
+
+    ipcMain.handle('stories:updateCriterion', async (_event, id: string, updates: Record<string, unknown>) => {
+      const dbUpdates: Record<string, unknown> = {}
+      if ('description' in updates) dbUpdates.description = updates.description
+      if ('orderIndex' in updates) dbUpdates.order_index = updates.orderIndex
+      if ('isCovered' in updates) dbUpdates.is_covered = updates.isCovered ? 1 : 0
+      if ('coveredFiles' in updates) dbUpdates.covered_files = updates.coveredFiles ? JSON.stringify(updates.coveredFiles) : null
+      if ('coveredExplanation' in updates) dbUpdates.covered_explanation = updates.coveredExplanation
+      if ('jiraTaskKey' in updates) dbUpdates.jira_task_key = updates.jiraTaskKey
+      if ('jiraTaskId' in updates) dbUpdates.jira_task_id = updates.jiraTaskId
+      const row = database.updateStoryCriterion(id, dbUpdates)
+      return mapCriterionRow(row)
+    })
+
+    ipcMain.handle('stories:deleteCriterion', async (_event, id: string) => {
+      database.deleteStoryCriterion(id)
+    })
+
+    ipcMain.handle('stories:reorderCriteria', async (_event, storyId: string, criterionIds: string[]) => {
+      database.reorderStoryCriteria(storyId, criterionIds)
+    })
+
+    ipcMain.handle('stories:pushToJira', async (_event, storyId: string, projectKey: string) => {
+      const storyRow = database.getStory(storyId)
+      if (!storyRow) throw new Error('Story not found')
+      const story = mapStoryRow(storyRow)
+
+      // Create epic in Jira
+      const epic = await jiraClient.createEpic(projectKey, story.title, story.description)
+
+      // Create sub-tasks for each criterion
+      const criteria = database.getStoryCriteria(storyId)
+      for (const row of criteria) {
+        const criterion = mapCriterionRow(row)
+        const subTask = await jiraClient.createSubTask(epic.key, criterion.description, '')
+        database.updateStoryCriterion(criterion.id, {
+          jira_task_key: subTask.key,
+          jira_task_id: subTask.id,
+        })
+      }
+
+      // Update story with Jira info
+      database.updateStory(storyId, {
+        jira_epic_key: epic.key,
+        jira_epic_id: epic.id,
+        jira_project_key: projectKey,
+        jira_sync_status: 'synced',
+        jira_last_synced: new Date().toISOString(),
+      })
+    })
+
+    ipcMain.handle('stories:syncFromJira', async (_event, storyId: string) => {
+      const storyRow = database.getStory(storyId)
+      if (!storyRow || !storyRow.jira_epic_key) throw new Error('Story not synced to Jira')
+
+      // Get all sub-tasks
+      const criteria = database.getStoryCriteria(storyId)
+      for (const row of criteria) {
+        if (row.jira_task_key) {
+          const issue = await jiraClient.getIssue(row.jira_task_key as string)
+          // Map Jira status to covered status
+          const isDone = issue.status.categoryKey === 'done'
+          database.updateStoryCriterion(row.id as string, { is_covered: isDone ? 1 : 0 })
+        }
+      }
+
+      database.updateStory(storyId, {
+        jira_sync_status: 'synced',
+        jira_last_synced: new Date().toISOString(),
+      })
+    })
+
+    ipcMain.handle('stories:analyzeCoverage', async (_event, storyId: string) => {
+      // Coverage analysis will be handled by the renderer via a Claude session
+      // This handler just updates the coverage data after analysis
+      mainWindow.webContents.send('stories:coverageStarted', { storyId })
+    })
+  }
+}
+
+// ── Row Mappers ──
+
+function mapStoryRow(row: Record<string, unknown>) {
+  return {
+    id: row.id as string,
+    projectPath: row.project_path as string,
+    title: row.title as string,
+    description: row.description as string,
+    status: row.status as string,
+    priority: row.priority as string,
+    storyPoints: row.story_points as number | undefined,
+    jiraEpicKey: row.jira_epic_key as string | undefined,
+    jiraEpicId: row.jira_epic_id as string | undefined,
+    jiraProjectKey: row.jira_project_key as string | undefined,
+    jiraSyncStatus: (row.jira_sync_status as string) || 'local',
+    jiraLastSynced: row.jira_last_synced as string | undefined,
+    coverageData: row.coverage_data ? JSON.parse(row.coverage_data as string) : undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  }
+}
+
+function mapCriterionRow(row: Record<string, unknown>) {
+  return {
+    id: row.id as string,
+    storyId: row.story_id as string,
+    description: row.description as string,
+    orderIndex: row.order_index as number,
+    isCovered: Boolean(row.is_covered),
+    coveredFiles: row.covered_files ? JSON.parse(row.covered_files as string) : undefined,
+    coveredExplanation: row.covered_explanation as string | undefined,
+    jiraTaskKey: row.jira_task_key as string | undefined,
+    jiraTaskId: row.jira_task_id as string | undefined,
+    createdAt: row.created_at as string,
+  }
 }

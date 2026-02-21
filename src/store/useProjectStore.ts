@@ -209,7 +209,16 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     if (tab?.snapshot) {
       restoreConversationSnapshot(tab.snapshot)
     } else {
-      // First time — load from DB
+      // First time — clear stale state, then load from DB
+      useConversationStore.setState({
+        activeConversationId: null,
+        messages: [],
+        streaming: { text: '', contentBlocks: [], thinking: '', isStreaming: false, currentAgentName: null, _partialJson: '' },
+        isWaitingForResponse: false,
+        hasActiveSession: false,
+        processLogs: [],
+        permissionRequest: null,
+      })
       await useConversationStore.getState().loadConversations(dirPath)
     }
   },

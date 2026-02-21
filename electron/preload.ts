@@ -108,4 +108,56 @@ contextBridge.exposeInMainWorld('api', {
   dialog: {
     openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
   },
+
+  // Jira
+  jira: {
+    setActiveProject: (projectPath: string) => ipcRenderer.invoke('jira:setActiveProject', projectPath),
+    authorize: (projectPath: string) => ipcRenderer.invoke('jira:authorize', projectPath),
+    disconnect: (projectPath: string) => ipcRenderer.invoke('jira:disconnect', projectPath),
+    getTokens: (projectPath: string) => ipcRenderer.invoke('jira:getTokens', projectPath),
+    getProjects: () => ipcRenderer.invoke('jira:getProjects'),
+    getBoards: (projectKey: string) => ipcRenderer.invoke('jira:getBoards', projectKey),
+    getBoardIssues: (boardId: number) => ipcRenderer.invoke('jira:getBoardIssues', boardId),
+    getSprints: (boardId: number) => ipcRenderer.invoke('jira:getSprints', boardId),
+    getSprintIssues: (sprintId: number) => ipcRenderer.invoke('jira:getSprintIssues', sprintId),
+    getIssues: (jql: string) => ipcRenderer.invoke('jira:getIssues', jql),
+    createEpic: (projectKey: string, summary: string, description: string) =>
+      ipcRenderer.invoke('jira:createEpic', projectKey, summary, description),
+    createSubTask: (parentKey: string, summary: string, description: string) =>
+      ipcRenderer.invoke('jira:createSubTask', parentKey, summary, description),
+    transitionIssue: (issueKey: string, transitionId: string) =>
+      ipcRenderer.invoke('jira:transitionIssue', issueKey, transitionId),
+    getTransitions: (issueKey: string) => ipcRenderer.invoke('jira:getTransitions', issueKey),
+    getUsers: (projectKey: string) => ipcRenderer.invoke('jira:getUsers', projectKey),
+    getIssue: (issueKey: string) => ipcRenderer.invoke('jira:getIssue', issueKey),
+    saveBoardConfig: (projectPath: string, config: { projectKey: string; boardId: number; boardName: string }) =>
+      ipcRenderer.invoke('jira:saveBoardConfig', projectPath, config),
+    getBoardConfig: (projectPath: string) => ipcRenderer.invoke('jira:getBoardConfig', projectPath),
+  },
+
+  // Stories
+  stories: {
+    list: (projectPath: string) => ipcRenderer.invoke('stories:list', projectPath),
+    get: (id: string) => ipcRenderer.invoke('stories:get', id),
+    create: (story: Record<string, unknown>) => ipcRenderer.invoke('stories:create', story),
+    update: (id: string, updates: Record<string, unknown>) => ipcRenderer.invoke('stories:update', id, updates),
+    delete: (id: string) => ipcRenderer.invoke('stories:delete', id),
+    getCriteria: (storyId: string) => ipcRenderer.invoke('stories:getCriteria', storyId),
+    addCriterion: (storyId: string, description: string) =>
+      ipcRenderer.invoke('stories:addCriterion', storyId, description),
+    updateCriterion: (id: string, updates: Record<string, unknown>) =>
+      ipcRenderer.invoke('stories:updateCriterion', id, updates),
+    deleteCriterion: (id: string) => ipcRenderer.invoke('stories:deleteCriterion', id),
+    reorderCriteria: (storyId: string, criterionIds: string[]) =>
+      ipcRenderer.invoke('stories:reorderCriteria', storyId, criterionIds),
+    pushToJira: (storyId: string, projectKey: string) =>
+      ipcRenderer.invoke('stories:pushToJira', storyId, projectKey),
+    syncFromJira: (storyId: string) => ipcRenderer.invoke('stories:syncFromJira', storyId),
+    analyzeCoverage: (storyId: string) => ipcRenderer.invoke('stories:analyzeCoverage', storyId),
+    onCoverageProgress: (callback: (data: unknown) => void) => {
+      const handler = (_event: unknown, data: unknown) => callback(data)
+      ipcRenderer.on('stories:coverageProgress', handler)
+      return () => ipcRenderer.removeListener('stories:coverageProgress', handler)
+    },
+  },
 })

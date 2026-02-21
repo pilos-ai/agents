@@ -10,6 +10,7 @@ export interface ClaudeSessionOptions {
   workingDirectory?: string
   permissionMode?: string
   resume?: boolean
+  cliSessionId?: string  // Reuse a previous CLI session ID for --resume
   images?: Array<{ data: string; mediaType: string }>
   appendSystemPrompt?: string
   mcpConfigPath?: string
@@ -44,7 +45,7 @@ export class ClaudeProcess {
     this.settings = settings
   }
 
-  async startSession(sessionId: string, options: ClaudeSessionOptions = {}): Promise<void> {
+  async startSession(sessionId: string, options: ClaudeSessionOptions = {}): Promise<string> {
     // Kill existing session if any
     this.abort(sessionId)
 
@@ -52,8 +53,9 @@ export class ClaudeProcess {
     const cwd = String(options.workingDirectory || process.cwd())
     const permissionMode = String(options.permissionMode || 'bypass')
 
-    // Generate a unique session ID per spawn to avoid "session already in use"
-    const cliSessionId = randomUUID()
+    // Reuse stored CLI session ID for resume, or generate a new one
+    const isResume = options.resume && options.cliSessionId
+    const cliSessionId = isResume ? options.cliSessionId! : randomUUID()
 
     const args: string[] = [
       '-p',
@@ -61,8 +63,14 @@ export class ClaudeProcess {
       '--output-format', 'stream-json',
       '--verbose',
       '--model', model,
-      '--session-id', cliSessionId,
     ]
+
+    if (isResume) {
+      // --continue <id> resumes a specific session by ID
+      args.push('--continue', cliSessionId)
+    } else {
+      args.push('--session-id', cliSessionId)
+    }
 
     // Permission modes:
     // - bypass: --dangerously-skip-permissions (everything auto-approved)
@@ -162,6 +170,8 @@ export class ClaudeProcess {
       this.sessions.delete(sessionId)
       this.emit(sessionId, { type: 'session:error', sessionId, error: err.message })
     })
+
+    return cliSessionId
   }
 
   sendMessage(sessionId: string, message: string, images?: Array<{ data: string; mediaType: string }>): void {

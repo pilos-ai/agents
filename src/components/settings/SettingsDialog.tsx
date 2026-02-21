@@ -1,3 +1,4 @@
+import { useState, useEffect, type ComponentType } from 'react'
 import { useAppStore } from '../../store/useAppStore'
 import type { SettingsSection } from '../../store/useAppStore'
 import { useProjectStore } from '../../store/useProjectStore'
@@ -7,6 +8,20 @@ import { AgentManager } from '../agents/AgentManager'
 import { McpServerManager } from '../mcp/McpServerManager'
 import { LicenseSection } from './LicenseSection'
 import { ProBadge } from '../common/ProBadge'
+
+// Lazily loaded PM integration card
+let PmJiraIntegrationCard: ComponentType | null = null
+let pmIntegrationAttempted = false
+
+function loadPmIntegration() {
+  if (pmIntegrationAttempted) return Promise.resolve()
+  pmIntegrationAttempted = true
+  return import('@pilos/agents-pm')
+    .then((mod) => {
+      PmJiraIntegrationCard = mod.JiraIntegrationCard
+    })
+    .catch(() => {})
+}
 
 const NAV_ITEMS: { key: SettingsSection; label: string; icon: React.ReactNode; teamOnly?: boolean }[] = [
   {
@@ -34,6 +49,15 @@ const NAV_ITEMS: { key: SettingsSection; label: string; icon: React.ReactNode; t
     icon: (
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
+      </svg>
+    ),
+  },
+  {
+    key: 'integrations',
+    label: 'Integrations',
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
       </svg>
     ),
   },
@@ -152,6 +176,8 @@ export function SettingsDialog() {
             updateProjectMcpServer={updateProjectMcpServer}
             toggleProjectMcpServer={toggleProjectMcpServer}
           />}
+
+          {activeSection === 'integrations' && <IntegrationsSection />}
 
           {activeSection === 'license' && <LicenseSettingsSection />}
 
@@ -352,6 +378,72 @@ function LicenseSettingsSection() {
       </div>
 
       <LicenseSection />
+    </div>
+  )
+}
+
+function IntegrationsSection() {
+  const [, forceUpdate] = useState(0)
+
+  useEffect(() => {
+    loadPmIntegration().then(() => forceUpdate((n) => n + 1))
+  }, [])
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold text-white">Integrations</h2>
+        <p className="text-sm text-neutral-400 mt-1">Connect project management and collaboration tools</p>
+      </div>
+
+      {PmJiraIntegrationCard && <PmJiraIntegrationCard />}
+
+      {/* Future integrations */}
+      {[
+        {
+          name: 'Linear',
+          desc: 'Issue tracking for modern teams',
+          logo: (
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3.03509 12.9431C3.24245 14.9227 4.10472 16.8468 5.62188 18.364C7.13904 19.8811 9.0631 20.7434 11.0428 20.9508L3.03509 12.9431Z" />
+              <path d="M3 11.4938L12.4921 20.9858C13.2976 20.9407 14.0981 20.7879 14.8704 20.5273L3.4585 9.11548C3.19793 9.88771 3.0451 10.6883 3 11.4938Z" />
+              <path d="M3.86722 8.10999L15.8758 20.1186C16.4988 19.8201 17.0946 19.4458 17.6493 18.9956L4.99021 6.33659C4.54006 6.89125 4.16573 7.487 3.86722 8.10999Z" />
+              <path d="M5.66301 5.59517C9.18091 2.12137 14.8488 2.135 18.3498 5.63604C21.8508 9.13708 21.8645 14.8049 18.3907 18.3228L5.66301 5.59517Z" />
+            </svg>
+          ),
+        },
+        {
+          name: 'GitHub Issues',
+          desc: 'Track issues alongside your code',
+          logo: (
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12Z" />
+            </svg>
+          ),
+        },
+        {
+          name: 'Notion',
+          desc: 'Docs, wikis, and project management',
+          logo: (
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L18.56 2.47c-.42-.326-.98-.7-2.055-.607L3.62 2.931c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.84-.046.933-.56.933-1.167V6.354c0-.606-.233-.933-.746-.886l-15.177.886c-.56.047-.747.327-.747.934zm14.337.745c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.514-1.635.514-.747 0-.933-.234-1.494-.933l-4.577-7.186v6.952l1.448.327s0 .84-1.168.84l-3.222.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.822 9.76c-.094-.42.14-1.026.793-1.073l3.456-.233 4.764 7.279v-6.44l-1.215-.14c-.093-.513.28-.886.747-.933zM2.332 1.166l13.542-1c1.634-.14 2.054-.046 3.08.7l4.25 2.986c.7.513.933.653.933 1.213v16.378c0 1.026-.373 1.632-1.68 1.726l-15.458.933c-.98.047-1.448-.093-1.961-.747l-3.127-4.066c-.56-.747-.793-1.306-.793-1.96V2.913c0-.82.373-1.586 1.214-1.746z" />
+            </svg>
+          ),
+        },
+      ].map((tool) => (
+        <div key={tool.name} className="p-4 rounded-lg border border-neutral-800 bg-neutral-900/50 opacity-40">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded bg-neutral-800 flex items-center justify-center text-neutral-500">
+              {tool.logo}
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-neutral-400">{tool.name}</p>
+              <p className="text-xs text-neutral-600">{tool.desc}</p>
+            </div>
+            <span className="text-[10px] text-neutral-600 border border-neutral-800 rounded px-1.5 py-0.5">Coming soon</span>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

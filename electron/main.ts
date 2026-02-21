@@ -13,7 +13,7 @@ app.disableHardwareAcceleration()
 
 let mainWindow: BrowserWindow | null = null
 
-function createWindow() {
+async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -43,7 +43,7 @@ function createWindow() {
 
   // Register IPC after loadURL so a failure doesn't block the window
   try {
-    registerIpcHandlers(mainWindow)
+    await registerIpcHandlers(mainWindow)
   } catch (err) {
     console.error('Failed to register IPC handlers:', err)
   }

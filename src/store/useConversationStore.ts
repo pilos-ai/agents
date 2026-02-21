@@ -2,8 +2,19 @@ import { create } from 'zustand'
 import { api } from '../api'
 import { useProjectStore, getActiveProjectTab } from './useProjectStore'
 import { buildTeamSystemPrompt } from '../utils/team-prompt-builder'
+import { restoreAgentIds } from '../utils/agent-names'
 import { AGENT_COLORS } from '../data/agent-templates'
 import type { Conversation, ConversationMessage, ContentBlock, ClaudeEvent, ImageAttachment, AgentDefinition, ToolUseBlock, ToolResultBlock } from '../types'
+
+export interface ProcessLogEntry {
+  timestamp: number
+  direction: 'in' | 'out'  // in = from Claude CLI, out = to Claude CLI
+  eventType: string
+  summary: string
+  raw: string
+}
+
+const MAX_PROCESS_LOGS = 500
 
 interface StreamingState {
   text: string
@@ -20,6 +31,7 @@ interface ConversationStore {
   activeConversationId: string | null
   messages: ConversationMessage[]
   streaming: StreamingState
+  processLogs: ProcessLogEntry[]
   isWaitingForResponse: boolean
   hasActiveSession: boolean
   permissionRequest: { sessionId: string; toolName: string; toolInput: Record<string, unknown> } | null
@@ -99,6 +111,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   activeConversationId: null,
   messages: [],
   streaming: { ...emptyStreaming },
+  processLogs: [],
   isWaitingForResponse: false,
   hasActiveSession: false,
   permissionRequest: null,
@@ -168,7 +181,10 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       conversationId = await get().createConversation(text.slice(0, 50))
     }
 
-    // Add user message (with image thumbnails for display)
+    // Restore any friendly agent names back to hex IDs for Claude CLI
+    const cliText = restoreAgentIds(text)
+
+    // Add user message (with image thumbnails for display — keep friendly names)
     const userMsg: ConversationMessage = {
       role: 'user',
       type: 'text',
@@ -203,14 +219,11 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         appendSystemPrompt = buildTeamSystemPrompt(tab.agents)
       }
 
-      // Generate MCP config if servers are configured
-      let mcpConfigPath: string | undefined
-      if (tab?.mcpServers?.some((s) => s.enabled)) {
-        mcpConfigPath = await api.mcp.writeConfig(projectPath, tab.mcpServers)
-      }
+      // Generate MCP config (always write — Jira MCP server is auto-injected server-side)
+      const mcpConfigPath = await api.mcp.writeConfig(projectPath, tab?.mcpServers || [])
 
       await api.claude.startSession(conversationId, {
-        prompt: text,
+        prompt: cliText,
         images: images,
         resume: hasHistory,
         workingDirectory: projectPath || undefined,
@@ -219,8 +232,26 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         appendSystemPrompt,
         mcpConfigPath,
       })
+      set((s) => ({
+        processLogs: [...s.processLogs, {
+          timestamp: Date.now(),
+          direction: 'out' as const,
+          eventType: 'startSession',
+          summary: `model=${tab?.model || 'sonnet'} resume=${hasHistory} cwd=${projectPath || '?'}`,
+          raw: JSON.stringify({ prompt: cliText.slice(0, 200), model: tab?.model, resume: hasHistory, permissionMode: tab?.permissionMode }),
+        }],
+      }))
     } else {
-      await api.claude.sendMessage(conversationId, text, images)
+      await api.claude.sendMessage(conversationId, cliText, images)
+      set((s) => ({
+        processLogs: [...s.processLogs, {
+          timestamp: Date.now(),
+          direction: 'out' as const,
+          eventType: 'sendMessage',
+          summary: `${cliText.slice(0, 100)}${cliText.length > 100 ? '...' : ''}`,
+          raw: JSON.stringify({ message: cliText.slice(0, 500) }),
+        }],
+      }))
     }
   },
 
@@ -244,9 +275,56 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     const { activeConversationId } = get()
     if (event.sessionId !== activeConversationId) return
 
+    // Log every incoming event to processLogs
+    {
+      const eventType = String(event.type || 'unknown')
+      const rawJson = JSON.stringify(event)
+      let summary = ''
+      if (eventType === 'assistant') {
+        const msg = event.message as { model?: string; content?: Array<{ type: string; name?: string }>; usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } }
+        const toolUses = msg?.content?.filter((b) => b.type === 'tool_use') || []
+        const usage = msg?.usage
+        const tokenInfo = usage
+          ? ` in=${usage.input_tokens || 0} out=${usage.output_tokens || 0} cache_r=${usage.cache_read_input_tokens || 0} cache_w=${usage.cache_creation_input_tokens || 0}`
+          : ''
+        if (toolUses.length > 0) {
+          summary = `model=${msg?.model || '?'} tools=[${toolUses.map((t) => t.name).join(', ')}]${tokenInfo}`
+        } else {
+          summary = `model=${msg?.model || '?'} content${tokenInfo}`
+        }
+      } else if (eventType === 'user') {
+        const msg = event.message as { content?: Array<{ type: string; tool_use_id?: string }> }
+        const results = msg?.content?.filter((b) => b.type === 'tool_result') || []
+        summary = results.length > 0 ? `tool_result x${results.length}` : 'user message'
+      } else if (eventType === 'result') {
+        const ev = event as Record<string, unknown>
+        summary = `cost=${ev.cost_usd || '?'} total=${ev.total_cost_usd || '?'} turns=${ev.num_turns || '?'} duration=${ev.duration_ms || '?'}ms`
+      } else if (eventType === 'rate_limit_event') {
+        const info = (event as Record<string, unknown>).rate_limit_info as { status?: string } | undefined
+        summary = `status=${info?.status || '?'}`
+      } else if (eventType === 'system') {
+        summary = String((event as Record<string, unknown>).subtype || '')
+      } else {
+        summary = rawJson.slice(0, 120)
+      }
+
+      const logEntry: ProcessLogEntry = {
+        timestamp: Date.now(),
+        direction: 'in',
+        eventType,
+        summary,
+        raw: rawJson,
+      }
+      set((s) => ({
+        processLogs: s.processLogs.length >= MAX_PROCESS_LOGS
+          ? [...s.processLogs.slice(-MAX_PROCESS_LOGS + 1), logEntry]
+          : [...s.processLogs, logEntry],
+      }))
+    }
+
     switch (event.type) {
       case 'session:started': {
-        set({ hasActiveSession: true })
+        set({ hasActiveSession: true, processLogs: [] })
         break
       }
 
@@ -657,8 +735,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         break
       }
 
-      case 'system':
       case 'rate_limit_event':
+      case 'system':
       case 'raw':
       case 'stderr':
         // Informational events — no UI action needed

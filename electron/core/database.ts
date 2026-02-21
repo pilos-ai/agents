@@ -88,6 +88,42 @@ export class Database {
 
       CREATE INDEX IF NOT EXISTS idx_messages_conversation
         ON messages(conversation_id, created_at);
+
+      CREATE TABLE IF NOT EXISTS stories (
+        id TEXT PRIMARY KEY,
+        project_path TEXT NOT NULL DEFAULT '',
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'draft',
+        priority TEXT NOT NULL DEFAULT 'medium',
+        story_points INTEGER,
+        jira_epic_key TEXT,
+        jira_epic_id TEXT,
+        jira_project_key TEXT,
+        jira_sync_status TEXT DEFAULT 'local',
+        jira_last_synced TEXT,
+        coverage_data TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_stories_project ON stories(project_path, updated_at DESC);
+
+      CREATE TABLE IF NOT EXISTS story_criteria (
+        id TEXT PRIMARY KEY,
+        story_id TEXT NOT NULL,
+        description TEXT NOT NULL,
+        order_index INTEGER NOT NULL DEFAULT 0,
+        is_covered INTEGER NOT NULL DEFAULT 0,
+        covered_files TEXT,
+        covered_explanation TEXT,
+        jira_task_key TEXT,
+        jira_task_id TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (story_id) REFERENCES stories(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_story_criteria_story ON story_criteria(story_id, order_index);
     `)
 
     // Migration: add project_path column if missing (existing DBs)
@@ -101,6 +137,11 @@ export class Database {
       this.db!.exec("ALTER TABLE conversations ADD COLUMN project_path TEXT NOT NULL DEFAULT ''")
     }
     this.db!.exec("CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project_path, updated_at DESC)")
+
+    // Migration: add cli_session_id to conversations
+    if (!columns.some((c) => c.name === 'cli_session_id')) {
+      this.db!.exec("ALTER TABLE conversations ADD COLUMN cli_session_id TEXT")
+    }
 
     // Migration: add agent and content_blocks columns to messages
     const msgColumns = this.db!.prepare("PRAGMA table_info(messages)").all() as Array<{ name: string }>
@@ -150,6 +191,19 @@ export class Database {
     ).run(title, id)
   }
 
+  updateConversationCliSessionId(id: string, cliSessionId: string): void {
+    this.db!.prepare(
+      'UPDATE conversations SET cli_session_id = ? WHERE id = ?'
+    ).run(cliSessionId, id)
+  }
+
+  getConversationCliSessionId(id: string): string | null {
+    const row = this.db!.prepare(
+      'SELECT cli_session_id FROM conversations WHERE id = ?'
+    ).get(id) as { cli_session_id: string | null } | undefined
+    return row?.cli_session_id || null
+  }
+
   deleteConversation(id: string): void {
     this.db!.prepare('DELETE FROM conversations WHERE id = ?').run(id)
   }
@@ -184,6 +238,111 @@ export class Database {
     ).run(conversationId)
 
     return this.db!.prepare('SELECT * FROM messages WHERE id = ?').get(result.lastInsertRowid) as unknown as Message
+  }
+
+  // ── Stories ──
+
+  listStories(projectPath: string): Record<string, unknown>[] {
+    return this.db!.prepare(
+      'SELECT * FROM stories WHERE project_path = ? ORDER BY updated_at DESC'
+    ).all(projectPath)
+  }
+
+  getStory(id: string): Record<string, unknown> | undefined {
+    return this.db!.prepare('SELECT * FROM stories WHERE id = ?').get(id)
+  }
+
+  createStory(story: Record<string, unknown>): Record<string, unknown> {
+    const id = (story.id as string) || crypto.randomUUID()
+    this.db!.prepare(`
+      INSERT INTO stories (id, project_path, title, description, status, priority, story_points, jira_epic_key, jira_epic_id, jira_project_key, jira_sync_status, coverage_data)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      story.project_path || '',
+      story.title || 'Untitled Story',
+      story.description || '',
+      story.status || 'draft',
+      story.priority || 'medium',
+      story.story_points ?? null,
+      story.jira_epic_key ?? null,
+      story.jira_epic_id ?? null,
+      story.jira_project_key ?? null,
+      story.jira_sync_status || 'local',
+      story.coverage_data ?? null,
+    )
+    return this.getStory(id)!
+  }
+
+  updateStory(id: string, updates: Record<string, unknown>): Record<string, unknown> {
+    const fields: string[] = []
+    const values: unknown[] = []
+    const allowed = ['title', 'description', 'status', 'priority', 'story_points', 'jira_epic_key', 'jira_epic_id', 'jira_project_key', 'jira_sync_status', 'jira_last_synced', 'coverage_data']
+    for (const key of allowed) {
+      if (key in updates) {
+        fields.push(`${key} = ?`)
+        values.push(updates[key])
+      }
+    }
+    if (fields.length === 0) return this.getStory(id)!
+    fields.push("updated_at = datetime('now')")
+    values.push(id)
+    this.db!.prepare(`UPDATE stories SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+    return this.getStory(id)!
+  }
+
+  deleteStory(id: string): void {
+    this.db!.prepare('DELETE FROM stories WHERE id = ?').run(id)
+  }
+
+  // ── Story Criteria ──
+
+  getStoryCriteria(storyId: string): Record<string, unknown>[] {
+    return this.db!.prepare(
+      'SELECT * FROM story_criteria WHERE story_id = ? ORDER BY order_index ASC'
+    ).all(storyId)
+  }
+
+  addStoryCriterion(storyId: string, description: string): Record<string, unknown> {
+    const id = crypto.randomUUID()
+    const maxOrder = this.db!.prepare(
+      'SELECT MAX(order_index) as max_idx FROM story_criteria WHERE story_id = ?'
+    ).get(storyId) as { max_idx: number | null } | undefined
+    const orderIndex = (maxOrder?.max_idx ?? -1) + 1
+
+    this.db!.prepare(`
+      INSERT INTO story_criteria (id, story_id, description, order_index)
+      VALUES (?, ?, ?, ?)
+    `).run(id, storyId, description, orderIndex)
+
+    return this.db!.prepare('SELECT * FROM story_criteria WHERE id = ?').get(id)!
+  }
+
+  updateStoryCriterion(id: string, updates: Record<string, unknown>): Record<string, unknown> {
+    const fields: string[] = []
+    const values: unknown[] = []
+    const allowed = ['description', 'order_index', 'is_covered', 'covered_files', 'covered_explanation', 'jira_task_key', 'jira_task_id']
+    for (const key of allowed) {
+      if (key in updates) {
+        fields.push(`${key} = ?`)
+        values.push(updates[key])
+      }
+    }
+    if (fields.length === 0) return this.db!.prepare('SELECT * FROM story_criteria WHERE id = ?').get(id)!
+    values.push(id)
+    this.db!.prepare(`UPDATE story_criteria SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+    return this.db!.prepare('SELECT * FROM story_criteria WHERE id = ?').get(id)!
+  }
+
+  deleteStoryCriterion(id: string): void {
+    this.db!.prepare('DELETE FROM story_criteria WHERE id = ?').run(id)
+  }
+
+  reorderStoryCriteria(storyId: string, criterionIds: string[]): void {
+    const stmt = this.db!.prepare('UPDATE story_criteria SET order_index = ? WHERE id = ? AND story_id = ?')
+    for (let i = 0; i < criterionIds.length; i++) {
+      stmt.run(i, criterionIds[i], storyId)
+    }
   }
 
   close(): void {

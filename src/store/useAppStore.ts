@@ -2,7 +2,8 @@ import { create } from 'zustand'
 import { api } from '../api'
 
 export type CliStatus = 'checking' | 'ready' | 'missing' | 'installing' | 'install_failed' | 'error'
-export type SettingsSection = 'project' | 'agents' | 'mcp' | 'license' | 'general'
+export type SettingsSection = 'project' | 'agents' | 'mcp' | 'integrations' | 'license' | 'general'
+export type AppView = 'chat' | (string & {})
 
 interface AppStore {
   // CLI Status
@@ -13,17 +14,19 @@ interface AppStore {
   cliInstallLog: string
 
   // UI State
+  activeView: AppView
   sidebarWidth: number
   rightPanelWidth: number
   rightPanelOpen: boolean
   settingsOpen: boolean
   activeSettingsSection: SettingsSection
-  activeRightTab: 'terminal' | 'processes'
+  activeRightTab: 'terminal' | 'session'
 
   // Global settings
   terminalFontSize: number
 
   // Actions
+  setActiveView: (view: AppView) => void
   checkCli: () => Promise<void>
   installCli: () => Promise<void>
   appendCliInstallLog: (text: string) => void
@@ -32,7 +35,7 @@ interface AppStore {
   toggleRightPanel: () => void
   setSettingsOpen: (open: boolean) => void
   setActiveSettingsSection: (section: SettingsSection) => void
-  setActiveRightTab: (tab: 'terminal' | 'processes') => void
+  setActiveRightTab: (tab: 'terminal' | 'session') => void
   setTerminalFontSize: (size: number) => void
   loadSettings: () => Promise<void>
 }
@@ -42,6 +45,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   cliNpmAvailable: false,
   cliInstallLog: '',
 
+  activeView: 'chat',
   sidebarWidth: 220,
   rightPanelWidth: 350,
   rightPanelOpen: false,
@@ -49,6 +53,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   activeSettingsSection: 'project',
   activeRightTab: 'terminal',
   terminalFontSize: 13,
+
+  setActiveView: (view) => set({ activeView: view }),
 
   checkCli: async () => {
     set({ cliStatus: 'checking' })

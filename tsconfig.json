@@ -16,9 +16,11 @@
     "paths": {
       "@/*": ["src/*"],
       "@pilos/pro": ["packages/pro"],
-      "@pilos/pro/*": ["packages/pro/*"]
+      "@pilos/pro/*": ["packages/pro/*"],
+      "@pilos/agents-pm": ["packages/pm"],
+      "@pilos/agents-pm/*": ["packages/pm/*"]
     }
   },
-  "include": ["src/**/*", "electron/**/*"],
+  "include": ["src/**/*", "electron/**/*", "packages/pm/**/*"],
   "exclude": ["node_modules", "dist", "dist-electron"]
 }

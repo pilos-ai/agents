@@ -8,6 +8,7 @@ import { useProjectStore } from './store/useProjectStore'
 import { useAppStore } from './store/useAppStore'
 import { useLicenseStore } from './store/useLicenseStore'
 import { api } from './api'
+import { loadPmModule } from './lib/pm'
 import type { ClaudeEvent } from './types'
 
 export default function App() {
@@ -26,6 +27,31 @@ export default function App() {
     loadSettings()
     loadRecentProjects()
     useLicenseStore.getState().checkLicense()
+
+    // Dynamically initialize PM module if available
+    loadPmModule().then((pm) => {
+      if (pm) {
+        pm.initPmStores({
+          api: {
+            jira: api.jira!,
+            stories: api.stories!,
+          },
+          getProjectPath: () => useProjectStore.getState().activeProjectPath || '',
+          setActiveView: (view) => useAppStore.getState().setActiveView(view),
+          subscribeProjectPath: (callback) => {
+            let lastPath: string | null = null
+            return useProjectStore.subscribe((state) => {
+              const currentPath = state.activeProjectPath
+              if (currentPath !== lastPath) {
+                lastPath = currentPath
+                callback(currentPath)
+              }
+            })
+          },
+        })
+        pm.useJiraStore.getState().checkConnection()
+      }
+    })
 
     const unsub = api.claude.onEvent((event: ClaudeEvent) => {
       routeClaudeEvent(event)

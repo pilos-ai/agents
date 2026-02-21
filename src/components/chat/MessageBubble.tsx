@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { memo, useMemo, useState, useEffect } from 'react'
 import type { ConversationMessage, ContentBlock } from '../../types'
 import { AGENT_COLORS } from '../../data/agent-templates'
 import { ToolUseBlock } from './ToolUseBlock'
@@ -6,19 +6,55 @@ import { ToolResultBlock } from './ToolResultBlock'
 import { ThinkingBlock } from './ThinkingBlock'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { OptionButtons, detectOptions } from './OptionButtons'
+import { useProjectStore } from '../../store/useProjectStore'
+
+// Lazily loaded PM story detection
+let pmStoryModule: {
+  detectStoryBlocks: (text: string) => string[]
+  parseStoryBlock: (block: string) => { title: string; description: string; priority: string; points?: number; criteria: string[] } | null
+  useStoryStore: any
+} | null = null
+let pmStoryAttempted = false
+
+function loadPmStory() {
+  if (pmStoryAttempted) return Promise.resolve()
+  pmStoryAttempted = true
+  return import('@pilos/agents-pm')
+    .then((mod) => {
+      pmStoryModule = {
+        detectStoryBlocks: mod.detectStoryBlocks,
+        parseStoryBlock: mod.parseStoryBlock,
+        useStoryStore: mod.useStoryStore,
+      }
+    })
+    .catch(() => {})
+}
 
 interface Props {
   message: ConversationMessage
   isLast?: boolean
 }
 
-export function MessageBubble({ message, isLast }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message, isLast }: Props) {
   const isUser = message.role === 'user'
+  const [, forceUpdate] = useState(0)
+
+  useEffect(() => {
+    if (!pmStoryAttempted) {
+      loadPmStory().then(() => forceUpdate((n) => n + 1))
+    }
+  }, [])
 
   const options = useMemo(() => {
     if (isUser || !isLast) return []
     return detectOptions(message.content)
   }, [message.content, isUser, isLast])
+
+  // Detect story blocks in assistant messages (only if PM module loaded)
+  const storyBlocks = useMemo(() => {
+    if (isUser || !pmStoryModule) return []
+    return pmStoryModule.detectStoryBlocks(message.content)
+  }, [message.content, isUser])
 
   // Agent-attributed message (team mode) — may also have tool blocks
   if (!isUser && message.agentName) {
@@ -90,8 +126,63 @@ export function MessageBubble({ message, isLast }: Props) {
           </div>
         )}
       </div>
+      {storyBlocks.length > 0 && storyBlocks.map((block, i) => (
+        <SaveStoryButton key={i} rawBlock={block} />
+      ))}
       {options.length > 0 && <OptionButtons options={options} />}
     </div>
+  )
+})
+
+function SaveStoryButton({ rawBlock }: { rawBlock: string }) {
+  if (!pmStoryModule) return null
+  const createStory = pmStoryModule.useStoryStore((s: any) => s.createStory)
+  const addCriterion = pmStoryModule.useStoryStore((s: any) => s.addCriterion)
+  const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
+  const [saved, setSaved] = useState(false)
+
+  const handleSave = async () => {
+    if (!pmStoryModule) return
+    const parsed = pmStoryModule.parseStoryBlock(rawBlock)
+    if (!parsed) return
+
+    const story = await createStory({
+      projectPath: activeProjectPath || '',
+      title: parsed.title,
+      description: parsed.description,
+      priority: parsed.priority,
+      storyPoints: parsed.points,
+      status: 'draft',
+    })
+
+    for (const criterion of parsed.criteria) {
+      await addCriterion(story.id, criterion)
+    }
+
+    setSaved(true)
+  }
+
+  if (saved) {
+    return (
+      <div className="mt-2 flex items-center gap-1.5 text-xs text-green-400">
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+        Saved to Stories
+      </div>
+    )
+  }
+
+  return (
+    <button
+      onClick={handleSave}
+      className="mt-2 px-3 py-1.5 text-xs bg-purple-600 hover:bg-purple-500 text-white rounded-md transition-colors flex items-center gap-1.5"
+    >
+      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+      </svg>
+      Save as Story
+    </button>
   )
 }
 

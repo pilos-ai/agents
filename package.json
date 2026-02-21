@@ -14,6 +14,10 @@
     "postinstall": "electron-builder install-app-deps && node scripts/codesign.mjs"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.13.18",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/xterm": "^6.0.0",
     "better-sqlite3": "^12.6.0",
     "diff": "^7.0.0",
     "node-pty": "^1.0.0",
@@ -23,9 +27,6 @@
     "react-syntax-highlighter": "^15.6.1",
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.0",
-    "@xterm/xterm": "^6.0.0",
-    "@xterm/addon-fit": "^0.11.0",
-    "@xterm/addon-web-links": "^0.12.0",
     "zustand": "^5.0.0"
   },
   "devDependencies": {

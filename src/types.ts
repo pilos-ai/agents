@@ -202,6 +202,112 @@ export interface McpServerTemplate {
   docsUrl?: string
 }
 
+// ── Jira Types ──
+
+export interface JiraTokens {
+  accessToken: string
+  refreshToken: string
+  expiresAt: number  // epoch ms
+  cloudId: string
+  siteUrl: string
+  siteName: string
+}
+
+export interface JiraProject {
+  id: string
+  key: string
+  name: string
+  avatarUrl?: string
+}
+
+export interface JiraBoard {
+  id: number
+  name: string
+  type: string  // 'scrum' | 'kanban'
+}
+
+export interface JiraSprint {
+  id: number
+  name: string
+  state: string  // 'active' | 'closed' | 'future'
+  startDate?: string
+  endDate?: string
+  completeDate?: string
+  goal?: string
+}
+
+export interface JiraUser {
+  accountId: string
+  displayName: string
+  avatarUrl?: string
+  emailAddress?: string
+}
+
+export interface JiraIssue {
+  id: string
+  key: string
+  summary: string
+  description?: string
+  status: { name: string; categoryKey: string }
+  priority?: { name: string; iconUrl?: string }
+  assignee?: JiraUser
+  issuetype: { name: string; subtask: boolean }
+  storyPoints?: number
+  created: string
+  updated: string
+  parentKey?: string
+}
+
+export interface JiraTransition {
+  id: string
+  name: string
+  to: { name: string }
+}
+
+// ── Story Types ──
+
+export type StoryStatus = 'draft' | 'ready' | 'in_progress' | 'in_review' | 'done'
+export type StoryPriority = 'low' | 'medium' | 'high' | 'critical'
+export type JiraSyncStatus = 'local' | 'synced' | 'out_of_sync' | 'error'
+
+export interface Story {
+  id: string
+  projectPath: string
+  title: string
+  description: string
+  status: StoryStatus
+  priority: StoryPriority
+  storyPoints?: number
+  jiraEpicKey?: string
+  jiraEpicId?: string
+  jiraProjectKey?: string
+  jiraSyncStatus: JiraSyncStatus
+  jiraLastSynced?: string
+  coverageData?: { totalCriteria: number; coveredCriteria: number; lastAnalyzed: string }
+  createdAt: string
+  updatedAt: string
+}
+
+export interface StoryCriterion {
+  id: string
+  storyId: string
+  description: string
+  orderIndex: number
+  isCovered: boolean
+  coveredFiles?: string[]
+  coveredExplanation?: string
+  jiraTaskKey?: string
+  jiraTaskId?: string
+  createdAt: string
+}
+
+export interface CoverageResult {
+  criterionIndex: number
+  isCovered: boolean
+  files: string[]
+  explanation: string
+}
+
 // ── License & Pro Types ──
 
 export type LicenseTier = 'free' | 'pro' | 'teams'
@@ -287,6 +393,42 @@ export interface ElectronAPI {
   }
   dialog: {
     openDirectory: () => Promise<string | null>
+  }
+  jira?: {
+    setActiveProject: (projectPath: string) => Promise<void>
+    authorize: (projectPath: string) => Promise<JiraTokens>
+    disconnect: (projectPath: string) => Promise<void>
+    getTokens: (projectPath: string) => Promise<JiraTokens | null>
+    getProjects: () => Promise<JiraProject[]>
+    getBoards: (projectKey: string) => Promise<JiraBoard[]>
+    getBoardIssues: (boardId: number) => Promise<JiraIssue[]>
+    getSprints: (boardId: number) => Promise<JiraSprint[]>
+    getSprintIssues: (sprintId: number) => Promise<JiraIssue[]>
+    getIssues: (jql: string) => Promise<JiraIssue[]>
+    createEpic: (projectKey: string, summary: string, description: string) => Promise<JiraIssue>
+    createSubTask: (parentKey: string, summary: string, description: string) => Promise<JiraIssue>
+    transitionIssue: (issueKey: string, transitionId: string) => Promise<void>
+    getTransitions: (issueKey: string) => Promise<JiraTransition[]>
+    getUsers: (projectKey: string) => Promise<JiraUser[]>
+    getIssue: (issueKey: string) => Promise<JiraIssue>
+    saveBoardConfig: (projectPath: string, config: { projectKey: string; boardId: number; boardName: string }) => Promise<void>
+    getBoardConfig: (projectPath: string) => Promise<{ projectKey: string; boardId: number; boardName: string } | null>
+  }
+  stories?: {
+    list: (projectPath: string) => Promise<Story[]>
+    get: (id: string) => Promise<Story | null>
+    create: (story: Partial<Story>) => Promise<Story>
+    update: (id: string, updates: Partial<Story>) => Promise<Story>
+    delete: (id: string) => Promise<void>
+    getCriteria: (storyId: string) => Promise<StoryCriterion[]>
+    addCriterion: (storyId: string, description: string) => Promise<StoryCriterion>
+    updateCriterion: (id: string, updates: Partial<StoryCriterion>) => Promise<StoryCriterion>
+    deleteCriterion: (id: string) => Promise<void>
+    reorderCriteria: (storyId: string, criterionIds: string[]) => Promise<void>
+    pushToJira: (storyId: string, projectKey: string) => Promise<void>
+    syncFromJira: (storyId: string) => Promise<void>
+    analyzeCoverage: (storyId: string) => Promise<void>
+    onCoverageProgress: (callback: (data: { storyId: string; progress: number; message: string }) => void) => () => void
   }
 }
 

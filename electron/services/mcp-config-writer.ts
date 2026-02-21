@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { app } from 'electron'
+import type { SettingsStore } from './settings-store'
 
 interface McpServerEntry {
   id: string
@@ -19,8 +20,9 @@ interface McpServerEntry {
 /**
  * Writes an MCP config JSON file for a project and returns its absolute path.
  * Only includes enabled servers. Output format matches Claude CLI expectations.
+ * When Jira is connected (tokens exist in settings), auto-injects the Jira MCP server.
  */
-export function writeMcpConfig(projectPath: string, servers: McpServerEntry[]): string {
+export function writeMcpConfig(projectPath: string, servers: McpServerEntry[], settings?: SettingsStore): string {
   const configDir = path.join(app.getPath('userData'), 'mcp-configs')
   if (!fs.existsSync(configDir)) {
     fs.mkdirSync(configDir, { recursive: true })
@@ -56,6 +58,37 @@ export function writeMcpConfig(projectPath: string, servers: McpServerEntry[]): 
         entry.headers = cfg.headers
       }
       mcpServers[server.id] = entry
+    }
+  }
+
+  // Auto-inject Jira MCP server when connected (project-scoped tokens)
+  if (settings) {
+    const tokenKey = projectPath ? `jiraTokens:${projectPath}` : 'jiraTokens'
+    const jiraTokens = settings.get(tokenKey) as { accessToken: string; cloudId: string } | null
+    if (jiraTokens) {
+      // Write tokens to temp file for the MCP server to read
+      const tokenFilePath = path.join(configDir, `jira-tokens-${encoded}.json`)
+      fs.writeFileSync(tokenFilePath, JSON.stringify({
+        accessToken: jiraTokens.accessToken,
+        cloudId: jiraTokens.cloudId,
+      }))
+
+      // Resolve jira-mcp-server.js path (in dist-electron next to main.js)
+      // In dev: dist-electron/jira-mcp-server.js
+      // In prod: resources/dist-electron/jira-mcp-server.js
+      let mcpServerScript: string
+      if (app.isPackaged) {
+        mcpServerScript = path.join(process.resourcesPath, 'dist-electron', 'jira-mcp-server.js')
+      } else {
+        mcpServerScript = path.join(app.getAppPath(), 'dist-electron', 'jira-mcp-server.js')
+      }
+
+      mcpServers['jira'] = {
+        type: 'stdio',
+        command: 'node',
+        args: [mcpServerScript, tokenFilePath],
+      }
+      console.log(`[McpConfigWriter] Injected Jira MCP server (tokens from ${tokenFilePath})`)
     }
   }
 

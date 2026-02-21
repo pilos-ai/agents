@@ -1,12 +1,16 @@
+import { useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { CodeBlock } from './CodeBlock'
+import { replaceAgentIds } from '../../utils/agent-names'
 
 interface Props {
   content: string
 }
 
 export function MarkdownRenderer({ content }: Props) {
+  const processed = useMemo(() => replaceAgentIds(content), [content])
+
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -32,7 +36,7 @@ export function MarkdownRenderer({ content }: Props) {
         },
       }}
     >
-      {content}
+      {processed}
     </ReactMarkdown>
   )
 }
