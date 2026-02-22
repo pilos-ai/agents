@@ -322,6 +322,33 @@ export interface ProFeatureFlags {
   premiumAgents: boolean   // pro/teams
 }
 
+// ── AskUserQuestion Types ──
+
+export interface AskUserQuestionOption {
+  label: string
+  description: string
+  markdown?: string
+}
+
+export interface AskUserQuestionItem {
+  question: string
+  header: string
+  options: AskUserQuestionOption[]
+  multiSelect: boolean
+}
+
+export interface AskUserQuestionData {
+  sessionId: string
+  toolUseId: string
+  questions: AskUserQuestionItem[]
+}
+
+export interface ExitPlanModeData {
+  sessionId: string
+  toolUseId: string
+  input: Record<string, unknown>
+}
+
 // ── CLI Check Types ──
 
 export interface CliCheckResult {
@@ -342,12 +369,17 @@ export interface ElectronAPI {
   cli: {
     check: () => Promise<CliCheckResult>
     install: () => Promise<boolean>
+    checkAuth: () => Promise<{ authenticated: boolean; accountName?: string }>
+    login: () => Promise<boolean>
     onInstallOutput: (callback: (data: CliInstallOutput) => void) => () => void
+    onLoginOutput: (callback: (data: string) => void) => () => void
   }
   claude: {
     startSession: (sessionId: string, options: Record<string, unknown>) => Promise<void>
     sendMessage: (sessionId: string, message: string, images?: ImageAttachment[]) => Promise<void>
     respondPermission: (sessionId: string, allowed: boolean, always?: boolean) => Promise<void>
+    respondToQuestion: (sessionId: string, answers: Record<string, string>) => Promise<void>
+    respondToPlanExit: (sessionId: string, approved: boolean) => Promise<void>
     abort: (sessionId: string) => Promise<void>
     onEvent: (callback: (data: ClaudeEvent) => void) => () => void
   }

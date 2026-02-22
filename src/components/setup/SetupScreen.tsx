@@ -3,13 +3,17 @@ import { useAppStore } from '../../store/useAppStore'
 import { api } from '../../api'
 import type { CliInstallOutput } from '../../types'
 
+const isMac = typeof navigator !== 'undefined' && /Mac|darwin/i.test(navigator.platform || navigator.userAgent)
+
 export function SetupScreen() {
   const cliStatus = useAppStore((s) => s.cliStatus)
+  const cliVersion = useAppStore((s) => s.cliVersion)
   const cliNpmAvailable = useAppStore((s) => s.cliNpmAvailable)
   const cliError = useAppStore((s) => s.cliError)
   const cliInstallLog = useAppStore((s) => s.cliInstallLog)
   const checkCli = useAppStore((s) => s.checkCli)
   const installCli = useAppStore((s) => s.installCli)
+  const loginCli = useAppStore((s) => s.loginCli)
   const appendCliInstallLog = useAppStore((s) => s.appendCliInstallLog)
   const logRef = useRef<HTMLPreElement>(null)
 
@@ -26,8 +30,12 @@ export function SetupScreen() {
     }
   }, [cliInstallLog])
 
-  const handleCopy = () => {
+  const handleCopyNpm = () => {
     navigator.clipboard.writeText('npm install -g @anthropic-ai/claude-code')
+  }
+
+  const handleCopyBrew = () => {
+    navigator.clipboard.writeText('brew install claude-code')
   }
 
   // Checking state
@@ -73,6 +81,62 @@ export function SetupScreen() {
     )
   }
 
+  // Needs login state
+  if (cliStatus === 'needs_login' || cliStatus === 'logging_in') {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-8">
+        <div className="max-w-md w-full">
+          <div className="text-center mb-6">
+            {/* Checkmark for CLI installed */}
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-emerald-500/10 mb-5">
+              {cliStatus === 'logging_in' ? (
+                <svg className="w-7 h-7 text-emerald-400 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <svg className="w-7 h-7 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+            </div>
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <h2 className="text-lg font-semibold text-neutral-200">CLI Installed</h2>
+              {cliVersion && (
+                <span className="text-xs text-neutral-500 bg-neutral-800 px-2 py-0.5 rounded">{cliVersion}</span>
+              )}
+            </div>
+            <p className="text-sm text-neutral-500 leading-relaxed">
+              {cliStatus === 'logging_in'
+                ? 'Signing in to Claude... Follow the prompts in your browser.'
+                : 'Sign in to your Anthropic account to get started.'
+              }
+            </p>
+          </div>
+
+          <button
+            onClick={loginCli}
+            disabled={cliStatus === 'logging_in'}
+            className={`w-full px-4 py-3 text-sm font-medium rounded-lg transition-colors mb-4 ${
+              cliStatus === 'logging_in'
+                ? 'bg-neutral-700 text-neutral-400 cursor-wait'
+                : 'bg-blue-600 hover:bg-blue-500 text-white'
+            }`}
+          >
+            {cliStatus === 'logging_in' ? 'Signing in...' : 'Sign in to Claude'}
+          </button>
+
+          <button
+            onClick={checkCli}
+            className="w-full px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-lg transition-colors"
+          >
+            Retry Check
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   // Missing / Error / Install Failed
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-8">
@@ -98,7 +162,7 @@ export function SetupScreen() {
             onClick={installCli}
             className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors mb-4"
           >
-            Install Claude CLI
+            Install with npm
           </button>
         )}
 
@@ -120,24 +184,51 @@ export function SetupScreen() {
           </div>
         )}
 
-        {/* Manual install command */}
-        <div className="mb-4">
-          <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">Manual install</p>
-          <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden">
-            <code className="flex-1 px-4 py-3 text-sm text-neutral-300 font-mono">
-              npm install -g @anthropic-ai/claude-code
-            </code>
-            <button
-              onClick={handleCopy}
-              className="px-3 py-3 text-neutral-500 hover:text-neutral-300 transition-colors border-l border-neutral-800"
-              title="Copy to clipboard"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-              </svg>
-            </button>
+        {/* Manual install commands */}
+        <div className="mb-4 space-y-3">
+          <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider">Manual install</p>
+
+          {/* npm command */}
+          <div>
+            <p className="text-xs text-neutral-500 mb-1">npm</p>
+            <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden">
+              <code className="flex-1 px-4 py-2.5 text-sm text-neutral-300 font-mono">
+                npm install -g @anthropic-ai/claude-code
+              </code>
+              <button
+                onClick={handleCopyNpm}
+                className="px-3 py-2.5 text-neutral-500 hover:text-neutral-300 transition-colors border-l border-neutral-800"
+                title="Copy to clipboard"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                </svg>
+              </button>
+            </div>
           </div>
+
+          {/* Homebrew command (macOS only) */}
+          {isMac && (
+            <div>
+              <p className="text-xs text-neutral-500 mb-1">Homebrew</p>
+              <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden">
+                <code className="flex-1 px-4 py-2.5 text-sm text-neutral-300 font-mono">
+                  brew install claude-code
+                </code>
+                <button
+                  onClick={handleCopyBrew}
+                  className="px-3 py-2.5 text-neutral-500 hover:text-neutral-300 transition-colors border-l border-neutral-800"
+                  title="Copy to clipboard"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Install log if failed */}

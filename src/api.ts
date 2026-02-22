@@ -8,12 +8,17 @@ const stubAPI: ElectronAPI = {
   cli: {
     check: () => Promise.resolve({ available: true, npmAvailable: true }),
     install: () => Promise.resolve(true),
+    checkAuth: () => Promise.resolve({ authenticated: true }),
+    login: () => Promise.resolve(true),
     onInstallOutput: noopUnsub,
+    onLoginOutput: noopUnsub,
   },
   claude: {
     startSession: noopAsync,
     sendMessage: noopAsync,
     respondPermission: noopAsync,
+    respondToQuestion: noopAsync,
+    respondToPlanExit: noopAsync,
     abort: noopAsync,
     onEvent: noopUnsub,
   },

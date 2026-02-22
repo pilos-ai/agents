@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { api } from '../api'
 
-export type CliStatus = 'checking' | 'ready' | 'missing' | 'installing' | 'install_failed' | 'error'
+export type CliStatus = 'checking' | 'ready' | 'missing' | 'installing' | 'install_failed' | 'error' | 'needs_login' | 'logging_in'
 export type SettingsSection = 'project' | 'agents' | 'mcp' | 'integrations' | 'license' | 'general'
 export type AppView = 'chat' | (string & {})
 
@@ -29,6 +29,7 @@ interface AppStore {
   setActiveView: (view: AppView) => void
   checkCli: () => Promise<void>
   installCli: () => Promise<void>
+  loginCli: () => Promise<void>
   appendCliInstallLog: (text: string) => void
   setSidebarWidth: (w: number) => void
   setRightPanelWidth: (w: number) => void
@@ -61,7 +62,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
     try {
       const result = await api.cli.check()
       if (result.available) {
-        set({ cliStatus: 'ready', cliVersion: result.version, cliNpmAvailable: result.npmAvailable })
+        // CLI is installed — now check authentication
+        try {
+          const auth = await api.cli.checkAuth()
+          if (auth.authenticated) {
+            set({ cliStatus: 'ready', cliVersion: result.version, cliNpmAvailable: result.npmAvailable })
+          } else {
+            set({ cliStatus: 'needs_login', cliVersion: result.version, cliNpmAvailable: result.npmAvailable })
+          }
+        } catch {
+          // If auth check fails, still allow through (older CLI versions may not support it)
+          set({ cliStatus: 'ready', cliVersion: result.version, cliNpmAvailable: result.npmAvailable })
+        }
       } else {
         set({ cliStatus: 'missing', cliError: result.error, cliNpmAvailable: result.npmAvailable })
       }
@@ -81,6 +93,20 @@ export const useAppStore = create<AppStore>((set, get) => ({
       }
     } catch {
       set({ cliStatus: 'install_failed' })
+    }
+  },
+
+  loginCli: async () => {
+    set({ cliStatus: 'logging_in' })
+    try {
+      const success = await api.cli.login()
+      if (success) {
+        set({ cliStatus: 'ready' })
+      } else {
+        set({ cliStatus: 'needs_login' })
+      }
+    } catch {
+      set({ cliStatus: 'needs_login' })
     }
   },
 

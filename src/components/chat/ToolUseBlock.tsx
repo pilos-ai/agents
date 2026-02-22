@@ -2,6 +2,8 @@ import { useState } from 'react'
 import type { ToolUseBlock as ToolUseBlockType } from '../../types'
 import { api } from '../../api'
 import { CodeBlock } from './CodeBlock'
+import { AskUserQuestionBlock } from './AskUserQuestionBlock'
+import { ExitPlanModeBlock } from './ExitPlanModeBlock'
 
 interface Props {
   block: ToolUseBlockType
@@ -25,6 +27,14 @@ const EXPANDED_TOOLS = new Set(['Edit', 'Write', 'Bash'])
 export function ToolUseBlock({ block }: Props) {
   const isExpanded = EXPANDED_TOOLS.has(block.name)
   const [showRaw, setShowRaw] = useState(false)
+
+  // Interactive tools get their own dedicated components
+  if (block.name === 'AskUserQuestion') {
+    return <div className="my-1"><AskUserQuestionBlock block={block} /></div>
+  }
+  if (block.name === 'ExitPlanMode') {
+    return <div className="my-1"><ExitPlanModeBlock block={block} /></div>
+  }
 
   return (
     <div className="my-1">

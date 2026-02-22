@@ -5,10 +5,17 @@ contextBridge.exposeInMainWorld('api', {
   cli: {
     check: () => ipcRenderer.invoke('cli:check'),
     install: () => ipcRenderer.invoke('cli:install'),
+    checkAuth: () => ipcRenderer.invoke('cli:checkAuth'),
+    login: () => ipcRenderer.invoke('cli:login'),
     onInstallOutput: (callback: (data: unknown) => void) => {
       const handler = (_event: unknown, data: unknown) => callback(data)
       ipcRenderer.on('cli:installOutput', handler)
       return () => ipcRenderer.removeListener('cli:installOutput', handler)
+    },
+    onLoginOutput: (callback: (data: string) => void) => {
+      const handler = (_event: unknown, data: string) => callback(data)
+      ipcRenderer.on('cli:loginOutput', handler)
+      return () => ipcRenderer.removeListener('cli:loginOutput', handler)
     },
   },
 
@@ -20,6 +27,10 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('claude:sendMessage', sessionId, message, images),
     respondPermission: (sessionId: string, allowed: boolean, always?: boolean) =>
       ipcRenderer.invoke('claude:respondPermission', sessionId, allowed, always),
+    respondToQuestion: (sessionId: string, answers: Record<string, string>) =>
+      ipcRenderer.invoke('claude:respondToQuestion', sessionId, answers),
+    respondToPlanExit: (sessionId: string, approved: boolean) =>
+      ipcRenderer.invoke('claude:respondToPlanExit', sessionId, approved),
     abort: (sessionId: string) =>
       ipcRenderer.invoke('claude:abort', sessionId),
     onEvent: (callback: (data: unknown) => void) => {

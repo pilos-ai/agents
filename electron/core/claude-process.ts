@@ -22,6 +22,9 @@ interface ToolUse {
   input: Record<string, unknown>
 }
 
+// Tool names that are handled interactively by the app UI, not by the CLI
+const INTERACTIVE_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode'])
+
 interface ClaudeSession {
   process: ChildProcess
   buffer: string
@@ -33,6 +36,8 @@ interface ClaudeSession {
   deniedTool: ToolUse | null
   // Tools the user has chosen to "always allow" for this session
   alwaysAllowed: Set<string>
+  // Track interactive tool_use IDs whose error tool_results should be suppressed
+  interactiveToolUseIds: Set<string>
 }
 
 export class ClaudeProcess {
@@ -121,6 +126,7 @@ export class ClaudeProcess {
       pendingToolUses: new Map(),
       deniedTool: null,
       alwaysAllowed: new Set(),
+      interactiveToolUseIds: new Set(),
     }
 
     this.sessions.set(sessionId, session)
@@ -242,6 +248,23 @@ export class ClaudeProcess {
     }
   }
 
+  /** User answered an AskUserQuestion — send answers back to Claude as a user message */
+  respondToQuestion(sessionId: string, answers: Record<string, string>): void {
+    const lines = Object.entries(answers)
+      .map(([question, answer]) => `Q: ${question}\nA: ${answer}`)
+      .join('\n\n')
+    this.sendMessage(sessionId, `Here are my answers to your questions:\n\n${lines}`)
+  }
+
+  /** User approved or rejected a plan from ExitPlanMode */
+  respondToPlanExit(sessionId: string, approved: boolean): void {
+    if (approved) {
+      this.sendMessage(sessionId, 'Plan approved. Please proceed with the implementation.')
+    } else {
+      this.sendMessage(sessionId, 'Plan not approved. Please revise the plan based on the feedback above.')
+    }
+  }
+
   abort(sessionId: string): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
@@ -270,6 +293,25 @@ export class ClaudeProcess {
               name: block.name,
               input: block.input || {},
             })
+
+            // Emit special events for interactive tools
+            if (block.name === 'AskUserQuestion') {
+              session.interactiveToolUseIds.add(block.id)
+              this.emit(sessionId, {
+                type: 'ask_user_question',
+                sessionId,
+                toolUseId: block.id,
+                questions: (block.input as Record<string, unknown>)?.questions || [],
+              })
+            } else if (block.name === 'ExitPlanMode') {
+              session.interactiveToolUseIds.add(block.id)
+              this.emit(sessionId, {
+                type: 'exit_plan_mode',
+                sessionId,
+                toolUseId: block.id,
+                input: block.input || {},
+              })
+            }
           }
         }
       }
@@ -279,6 +321,26 @@ export class ClaudeProcess {
     if (event.type === 'user' && session) {
       const msg = event.message as { content?: Array<{ type: string; tool_use_id?: string; content?: string; is_error?: boolean }> }
       if (msg?.content) {
+        // Filter out error tool_results for interactive tools (AskUserQuestion, ExitPlanMode)
+        // These produce bogus error responses that should not be shown in the UI
+        const filteredContent = msg.content.filter((block) => {
+          if (block.type === 'tool_result' && block.is_error && block.tool_use_id &&
+              session.interactiveToolUseIds.has(block.tool_use_id)) {
+            session.interactiveToolUseIds.delete(block.tool_use_id)
+            return false
+          }
+          return true
+        })
+
+        // If all blocks were filtered out, skip emitting this event entirely
+        if (filteredContent.length === 0) {
+          return  // Don't emit the event or process further
+        }
+
+        // Replace content with filtered version for downstream processing
+        ;(event.message as Record<string, unknown>).content = filteredContent
+        msg.content = filteredContent as typeof msg.content
+
         for (const block of msg.content) {
           const isPermissionDenial =
             block.type === 'tool_result' &&

@@ -44,6 +44,14 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
     return cliChecker.install()
   })
 
+  ipcMain.handle('cli:checkAuth', async () => {
+    return cliChecker.checkAuth()
+  })
+
+  ipcMain.handle('cli:login', async () => {
+    return cliChecker.login()
+  })
+
   // ── Claude CLI ──
   ipcMain.handle('claude:startSession', async (_event, sessionId: string, options) => {
     // Look up stored CLI session ID for resume
@@ -68,6 +76,14 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
 
   ipcMain.handle('claude:respondPermission', async (_event, sessionId: string, allowed: boolean, always?: boolean) => {
     return claudeProcess.respondPermission(sessionId, allowed, always || false)
+  })
+
+  ipcMain.handle('claude:respondToQuestion', async (_event, sessionId: string, answers: Record<string, string>) => {
+    return claudeProcess.respondToQuestion(sessionId, answers)
+  })
+
+  ipcMain.handle('claude:respondToPlanExit', async (_event, sessionId: string, approved: boolean) => {
+    return claudeProcess.respondToPlanExit(sessionId, approved)
   })
 
   ipcMain.handle('claude:abort', async (_event, sessionId: string) => {

@@ -43,6 +43,52 @@ export class CliChecker {
     return { available, version, npmAvailable, error }
   }
 
+  async checkAuth(): Promise<{ authenticated: boolean; accountName?: string }> {
+    const env = getExpandedEnv()
+    try {
+      const output = await this.execWithTimeout('claude', ['auth', 'status'], env)
+      // If the command succeeds and doesn't indicate "not logged in", we're authenticated
+      const text = output.toLowerCase()
+      if (text.includes('not logged in') || text.includes('no active account') || text.includes('unauthenticated')) {
+        return { authenticated: false }
+      }
+      // Try to extract account name from output
+      const nameMatch = output.match(/(?:logged in as|account[:\s]+)(.+)/i)
+      return { authenticated: true, accountName: nameMatch?.[1]?.trim() }
+    } catch {
+      // Command failed — likely not authenticated or auth command not supported
+      return { authenticated: false }
+    }
+  }
+
+  async login(): Promise<boolean> {
+    const env = getExpandedEnv()
+
+    return new Promise((resolve) => {
+      const proc = spawn('claude', ['login'], {
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      proc.stdout?.on('data', (chunk: Buffer) => {
+        this.send('cli:loginOutput', chunk.toString())
+      })
+
+      proc.stderr?.on('data', (chunk: Buffer) => {
+        this.send('cli:loginOutput', chunk.toString())
+      })
+
+      proc.on('close', (code) => {
+        resolve(code === 0)
+      })
+
+      proc.on('error', (err) => {
+        this.send('cli:loginOutput', `Error: ${err.message}\n`)
+        resolve(false)
+      })
+    })
+  }
+
   async install(): Promise<boolean> {
     const env = getExpandedEnv()
 

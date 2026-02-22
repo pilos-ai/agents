@@ -4,7 +4,7 @@ import { useProjectStore, getActiveProjectTab } from './useProjectStore'
 import { buildTeamSystemPrompt } from '../utils/team-prompt-builder'
 import { restoreAgentIds } from '../utils/agent-names'
 import { AGENT_COLORS } from '../data/agent-templates'
-import type { Conversation, ConversationMessage, ContentBlock, ClaudeEvent, ImageAttachment, AgentDefinition, ToolUseBlock, ToolResultBlock } from '../types'
+import type { Conversation, ConversationMessage, ContentBlock, ClaudeEvent, ImageAttachment, AgentDefinition, ToolUseBlock, ToolResultBlock, AskUserQuestionData, ExitPlanModeData } from '../types'
 
 export interface ProcessLogEntry {
   timestamp: number
@@ -35,6 +35,9 @@ interface ConversationStore {
   isWaitingForResponse: boolean
   hasActiveSession: boolean
   permissionRequest: { sessionId: string; toolName: string; toolInput: Record<string, unknown> } | null
+  askUserQuestion: AskUserQuestionData | null
+  answeredQuestionIds: Set<string>
+  exitPlanMode: ExitPlanModeData | null
 
   // Actions
   loadConversations: (projectPath?: string) => Promise<void>
@@ -44,6 +47,8 @@ interface ConversationStore {
   sendMessage: (text: string, images?: ImageAttachment[]) => Promise<void>
   abortSession: () => void
   respondPermission: (allowed: boolean, always?: boolean) => void
+  respondToQuestion: (answers: Record<string, string>) => void
+  respondToPlanExit: (approved: boolean) => void
   handleClaudeEvent: (event: ClaudeEvent) => void
   addMessage: (message: ConversationMessage) => void
   resetStreaming: () => void
@@ -115,6 +120,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   isWaitingForResponse: false,
   hasActiveSession: false,
   permissionRequest: null,
+  askUserQuestion: null,
+  answeredQuestionIds: new Set(),
+  exitPlanMode: null,
 
   loadConversations: async (projectPath?: string) => {
     const conversations = await api.conversations.list(projectPath)
@@ -213,11 +221,24 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       // Register this conversation for event routing
       useProjectStore.getState().registerConversation(conversationId, projectPath)
 
-      // Build team system prompt if in team mode
-      let appendSystemPrompt: string | undefined
+      // Build system prompt additions
+      const systemPromptParts: string[] = []
+
+      // Team mode agent instructions
       if (tab?.mode === 'team' && tab.agents.length > 0) {
-        appendSystemPrompt = buildTeamSystemPrompt(tab.agents)
+        systemPromptParts.push(buildTeamSystemPrompt(tab.agents))
       }
+
+      // Interactive tools guidance: the CLI returns errors for AskUserQuestion/ExitPlanMode
+      // in stream-json mode, but the app UI handles them. Tell Claude to use them once and wait.
+      systemPromptParts.push(
+        'IMPORTANT: The AskUserQuestion and ExitPlanMode tools are handled by the application UI. ' +
+        'When you use these tools, you will receive an error tool_result — this is EXPECTED and normal. ' +
+        'Do NOT retry the tool. After using AskUserQuestion or ExitPlanMode, immediately end your turn. ' +
+        'The user\'s answers will be provided in the next message.'
+      )
+
+      const appendSystemPrompt = systemPromptParts.join('\n\n')
 
       // Generate MCP config (always write — Jira MCP server is auto-injected server-side)
       const mcpConfigPath = await api.mcp.writeConfig(projectPath, tab?.mcpServers || [])
@@ -268,6 +289,35 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     if (perm) {
       api.claude.respondPermission(perm.sessionId, allowed, always)
       set({ permissionRequest: null })
+    }
+  },
+
+  respondToQuestion: (answers) => {
+    const q = get().askUserQuestion
+    if (q) {
+      api.claude.respondToQuestion(q.sessionId, answers)
+      set((s) => {
+        const ids = new Set(s.answeredQuestionIds)
+        ids.add(q.toolUseId)
+        return {
+          askUserQuestion: null,
+          answeredQuestionIds: ids,
+          isWaitingForResponse: true,
+          streaming: { ...emptyStreaming, isStreaming: true },
+        }
+      })
+    }
+  },
+
+  respondToPlanExit: (approved) => {
+    const p = get().exitPlanMode
+    if (p) {
+      api.claude.respondToPlanExit(p.sessionId, approved)
+      set({
+        exitPlanMode: null,
+        isWaitingForResponse: true,
+        streaming: { ...emptyStreaming, isStreaming: true },
+      })
     }
   },
 
@@ -432,6 +482,29 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
             sessionId: event.sessionId as string,
             toolName: (tool?.name as string) || (event.tool_name as string) || 'unknown tool',
             toolInput: (tool?.input || event.tool_input || event.command || '') as Record<string, unknown>,
+          },
+        })
+        break
+      }
+
+      case 'ask_user_question': {
+        const questions = event.questions as AskUserQuestionData['questions']
+        set({
+          askUserQuestion: {
+            sessionId: event.sessionId as string,
+            toolUseId: event.toolUseId as string,
+            questions,
+          },
+        })
+        break
+      }
+
+      case 'exit_plan_mode': {
+        set({
+          exitPlanMode: {
+            sessionId: event.sessionId as string,
+            toolUseId: event.toolUseId as string,
+            input: (event.input as Record<string, unknown>) || {},
           },
         })
         break
