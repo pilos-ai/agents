@@ -1,7 +1,0 @@
-{
-  "name": "@pilos/agents-pm",
-  "version": "1.0.0",
-  "private": true,
-  "license": "BUSL-1.1",
-  "type": "module"
-}
