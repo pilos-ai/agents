@@ -2,3 +2,11 @@
 	path = packages/pro
 	url = git@github.com:pilos-ai/agents-pro.git
 	branch = main
+[submodule "packages/pm"]
+	path = packages/pm
+	url = git@github.com:pilos-ai/agents-pm.git
+	branch = main
+[submodule "landing"]
+	path = landing
+	url = git@github.com:pilos-ai/agents-landing.git
+	branch = main
