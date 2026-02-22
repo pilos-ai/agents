@@ -165,7 +165,7 @@ function rebuildMenu() {
       },
       {
         label: 'Report Issue',
-        click: () => shell.openExternal('https://github.com/nicepkg/pilos/issues'),
+        click: () => shell.openExternal('https://github.com/pilos-ai/agents/issues'),
       },
     ],
   })
