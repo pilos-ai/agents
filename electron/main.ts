@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url'
 import { registerIpcHandlers } from './ipc-handlers'
 import { SettingsStore } from './services/settings-store'
 import { setupMenu } from './menu'
+import { ensureGlobalClaudeConfig } from './services/claude-config'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -59,7 +60,10 @@ async function createWindow() {
   })
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  ensureGlobalClaudeConfig()
+  createWindow()
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
