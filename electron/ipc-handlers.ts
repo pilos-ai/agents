@@ -16,8 +16,8 @@ let cliChecker: CliChecker
 let jiraOAuth: any  // Dynamically loaded from @pilos/agents-pm
 let jiraClient: any // Dynamically loaded from @pilos/agents-pm
 
-export async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
-  settings = new SettingsStore()
+export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsStore: SettingsStore): Promise<void> {
+  settings = settingsStore
   database = new Database()
   claudeProcess = new ClaudeProcess(mainWindow, settings)
   terminalManager = new TerminalManager(mainWindow)

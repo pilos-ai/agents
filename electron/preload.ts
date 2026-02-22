@@ -109,6 +109,34 @@ contextBridge.exposeInMainWorld('api', {
     openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
   },
 
+  // Menu
+  menu: {
+    setActiveProject: (project: { path: string; name: string } | null) =>
+      ipcRenderer.send('menu:setActiveProject', project),
+    rebuildMenu: () => ipcRenderer.send('menu:rebuildMenu'),
+    onMenuAction: (callback: (action: string, ...args: unknown[]) => void) => {
+      const channels = [
+        'menu:openSettings',
+        'menu:openProject',
+        'menu:newConversation',
+        'menu:openRecentProject',
+        'menu:closeProject',
+        'menu:openProjectSettings',
+        'menu:toggleRightPanel',
+      ]
+      const handlers = channels.map((ch) => {
+        const handler = (_event: unknown, ...args: unknown[]) => callback(ch, ...args)
+        ipcRenderer.on(ch, handler)
+        return { channel: ch, handler }
+      })
+      return () => {
+        for (const { channel, handler } of handlers) {
+          ipcRenderer.removeListener(channel, handler)
+        }
+      }
+    },
+  },
+
   // Jira
   jira: {
     setActiveProject: (projectPath: string) => ipcRenderer.invoke('jira:setActiveProject', projectPath),

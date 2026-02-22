@@ -2,6 +2,8 @@ import { app, BrowserWindow } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { registerIpcHandlers } from './ipc-handlers'
+import { SettingsStore } from './services/settings-store'
+import { setupMenu } from './menu'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -41,9 +43,13 @@ async function createWindow() {
     mainWindow!.show()
   })
 
+  // Create shared settings instance and set up application menu
+  const settings = new SettingsStore()
+  setupMenu(mainWindow, settings)
+
   // Register IPC after loadURL so a failure doesn't block the window
   try {
-    await registerIpcHandlers(mainWindow)
+    await registerIpcHandlers(mainWindow, settings)
   } catch (err) {
     console.error('Failed to register IPC handlers:', err)
   }

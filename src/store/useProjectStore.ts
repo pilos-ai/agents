@@ -151,6 +151,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     // Add to recent projects
     await api.projects.addRecent(dirPath)
     await get().loadRecentProjects()
+
+    // Sync menu
+    api.menu.rebuildMenu()
   },
 
   closeProject: (dirPath: string) => {
@@ -187,6 +190,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
 
     set({ openProjects, activeProjectPath })
+
+    // Sync menu
+    api.menu.rebuildMenu()
   },
 
   setActiveProject: async (dirPath: string) => {
@@ -397,6 +403,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   removeRecentProject: async (dirPath: string) => {
     await api.projects.removeRecent(dirPath)
     await get().loadRecentProjects()
+    api.menu.rebuildMenu()
   },
 
   registerConversation: (conversationId: string, projectPath: string) => {

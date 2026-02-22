@@ -60,6 +60,11 @@ const stubAPI: ElectronAPI = {
   dialog: {
     openDirectory: () => Promise.resolve(null),
   },
+  menu: {
+    setActiveProject: noop,
+    rebuildMenu: noop,
+    onMenuAction: noopUnsub,
+  },
   jira: {
     setActiveProject: noopAsync,
     authorize: noopAsync as any,

@@ -394,6 +394,11 @@ export interface ElectronAPI {
   dialog: {
     openDirectory: () => Promise<string | null>
   }
+  menu: {
+    setActiveProject: (project: { path: string; name: string } | null) => void
+    rebuildMenu: () => void
+    onMenuAction: (callback: (action: string, ...args: unknown[]) => void) => () => void
+  }
   jira?: {
     setActiveProject: (projectPath: string) => Promise<void>
     authorize: (projectPath: string) => Promise<JiraTokens>
