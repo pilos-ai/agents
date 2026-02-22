@@ -74,6 +74,7 @@ npm run dev          # Start dev server with hot reload
 npm run build        # Production build
 npm run dist:mac     # Package for macOS (.dmg)
 npm run dist:win     # Package for Windows (.exe)
+npm run dist:linux   # Package for Linux (.AppImage)
 ```
 
 ## Pro Features

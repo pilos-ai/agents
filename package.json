@@ -10,6 +10,7 @@
     "build": "vite build",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:win": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux",
     "postinstall": "electron-builder install-app-deps && node scripts/codesign.mjs"
   },
   "dependencies": {
