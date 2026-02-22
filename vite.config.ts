@@ -5,18 +5,41 @@ import renderer from 'vite-plugin-electron-renderer'
 import path from 'path'
 import fs from 'fs'
 
-// Conditionally include PM MCP server entry if the package exists
+// Detect which optional packages are present (submodules may not be checked out)
 const pmMcpServerPath = 'packages/pm/electron/jira-mcp-server.ts'
 const hasPmPackage = fs.existsSync(path.resolve(__dirname, pmMcpServerPath))
+const hasProPackage = fs.existsSync(path.resolve(__dirname, 'packages/pro/package.json'))
+
+// Vite plugin: resolve imports of missing optional packages to empty stubs
+// so the dynamic import() try/catch in src/lib/pm.ts and src/lib/pro.ts
+// triggers the catch branch instead of a build error.
+const optionalPackages = ['@pilos/agents-pm', '@pilos/pro']
+  .filter((_, i) => ![hasPmPackage, hasProPackage][i])
+
+function optionalPackageStubs(): import('vite').Plugin {
+  return {
+    name: 'optional-package-stubs',
+    resolveId(id) {
+      if (optionalPackages.some(pkg => id === pkg || id.startsWith(pkg + '/'))) {
+        return '\0stub:' + id
+      }
+    },
+    load(id) {
+      if (id.startsWith('\0stub:')) {
+        return 'throw new Error("optional package not available")'
+      }
+    },
+  }
+}
 
 const electronEntries: Parameters<typeof electron>[0] = [
   {
     entry: 'electron/main.ts',
     vite: {
       resolve: {
-        alias: {
-          '@pilos/agents-pm': path.resolve(__dirname, 'packages/pm'),
-        },
+        alias: hasPmPackage
+          ? { '@pilos/agents-pm': path.resolve(__dirname, 'packages/pm') }
+          : {},
       },
       build: {
         outDir: 'dist-electron',
@@ -71,18 +94,21 @@ if (hasPmPackage) {
   })
 }
 
+const rendererAliases: Record<string, string> = {
+  '@': path.resolve(__dirname, 'src'),
+}
+if (hasPmPackage) rendererAliases['@pilos/agents-pm'] = path.resolve(__dirname, 'packages/pm')
+if (hasProPackage) rendererAliases['@pilos/pro'] = path.resolve(__dirname, 'packages/pro')
+
 export default defineConfig({
   plugins: [
     react(),
     electron(electronEntries),
     renderer(),
+    optionalPackageStubs(),
   ],
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, 'src'),
-      '@pilos/pro': path.resolve(__dirname, 'packages/pro'),
-      '@pilos/agents-pm': path.resolve(__dirname, 'packages/pm'),
-    },
+    alias: rendererAliases,
   },
   define: {
     'window.__PILOS_LICENSE_SERVER__': JSON.stringify(
