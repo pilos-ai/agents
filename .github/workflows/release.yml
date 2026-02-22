@@ -26,7 +26,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: false
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_PAT }}
 
       - uses: actions/setup-python@v5
         with:
