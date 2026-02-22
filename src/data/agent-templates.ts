@@ -45,26 +45,8 @@ export const AGENT_TEMPLATES: AgentDefinition[] = [
     personality: 'You are a detail-oriented designer who cares about user experience, accessibility, and visual consistency. You suggest layout improvements and design system patterns.',
     expertise: ['UI/UX', 'accessibility', 'visual design', 'user flows'],
   },
-  {
-    id: 'qa',
-    name: 'QA',
-    emoji: '🔍',
-    color: 'orange',
-    role: 'QA Engineer',
-    personality: 'You are a thorough QA engineer who thinks about edge cases, error handling, and test coverage. You review code for bugs and suggest test strategies.',
-    expertise: ['testing', 'edge cases', 'code review', 'quality'],
-  },
-  {
-    id: 'devops',
-    name: 'DevOps',
-    emoji: '🚀',
-    color: 'cyan',
-    role: 'DevOps Engineer',
-    personality: 'You are a DevOps engineer focused on CI/CD, deployment, infrastructure, and operational concerns. You think about reliability, monitoring, and automation.',
-    expertise: ['CI/CD', 'deployment', 'infrastructure', 'automation'],
-  },
 
-  // Business & Operations
+  // Management
   {
     id: 'product',
     name: 'Product',
@@ -74,44 +56,6 @@ export const AGENT_TEMPLATES: AgentDefinition[] = [
     personality: 'You are a product-minded thinker who prioritizes features based on user value and business impact. You define roadmaps, write user stories, and balance competing stakeholder needs.',
     expertise: ['product strategy', 'user stories', 'prioritization', 'roadmapping'],
   },
-  {
-    id: 'hr',
-    name: 'HR',
-    emoji: '🤝',
-    color: 'pink',
-    role: 'HR Manager',
-    personality: 'You are a people-focused HR manager who thinks about team dynamics, hiring, culture, and employee experience. You advise on organizational structure and people strategy.',
-    expertise: ['hiring', 'culture', 'team building', 'people ops'],
-  },
-  {
-    id: 'analyst',
-    name: 'Analyst',
-    emoji: '📈',
-    color: 'indigo',
-    role: 'Business Analyst',
-    personality: 'You are a data-driven analyst who gathers requirements, analyzes metrics, and translates business needs into actionable insights. You create reports and identify trends.',
-    expertise: ['data analysis', 'requirements', 'metrics', 'reporting'],
-  },
-
-  // Creative
-  {
-    id: 'writer',
-    name: 'Writer',
-    emoji: '✍️',
-    color: 'purple',
-    role: 'Content Writer',
-    personality: 'You are a skilled writer who creates clear, engaging content. You adapt tone for different audiences, structure information effectively, and edit for conciseness and impact.',
-    expertise: ['writing', 'editing', 'content creation', 'storytelling'],
-  },
-  {
-    id: 'researcher',
-    name: 'Researcher',
-    emoji: '🔬',
-    color: 'cyan',
-    role: 'Researcher',
-    personality: 'You are a thorough researcher who investigates topics deeply, evaluates sources critically, and synthesizes findings into actionable recommendations. You ask the right questions.',
-    expertise: ['research', 'analysis', 'synthesis', 'fact-checking'],
-  },
 ]
 
 // ── Categories for Template Picker ──
@@ -120,19 +64,13 @@ export const AGENT_TEMPLATE_CATEGORIES: AgentTemplateCategory[] = [
   {
     name: 'Engineering',
     templates: AGENT_TEMPLATES.filter((t) =>
-      ['pm', 'architect', 'developer', 'designer', 'qa', 'devops'].includes(t.id)
+      ['architect', 'developer', 'designer'].includes(t.id)
     ),
   },
   {
-    name: 'Business',
+    name: 'Management',
     templates: AGENT_TEMPLATES.filter((t) =>
-      ['product', 'hr', 'analyst'].includes(t.id)
-    ),
-  },
-  {
-    name: 'Creative',
-    templates: AGENT_TEMPLATES.filter((t) =>
-      ['writer', 'researcher'].includes(t.id)
+      ['pm', 'product'].includes(t.id)
     ),
   },
 ]
@@ -154,10 +92,8 @@ export const AGENT_COLORS: Record<string, { text: string; bgLight: string; borde
 // ── Team Presets ──
 
 export const TEAM_PRESETS: Record<string, string[]> = {
-  'Full Team':      ['pm', 'architect', 'developer', 'designer', 'qa'],
-  'Dev Team':       ['architect', 'developer', 'qa'],
+  'Full Team':      ['pm', 'architect', 'developer', 'designer', 'product'],
+  'Dev Team':       ['architect', 'developer', 'designer'],
   'Design Sprint':  ['pm', 'designer', 'developer'],
-  'Startup':        ['pm', 'developer', 'designer', 'analyst'],
-  'Business':       ['product', 'hr', 'analyst', 'researcher'],
-  'Product':        ['product', 'designer', 'developer', 'analyst'],
+  'Product':        ['product', 'designer', 'developer', 'pm'],
 }

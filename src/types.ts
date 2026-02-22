@@ -316,6 +316,7 @@ export interface ProFeatureFlags {
   tier: LicenseTier
   maxAgents: number        // free=3, pro/teams=Infinity
   maxMcpServers: number    // free=3, pro/teams=Infinity
+  maxProjects: number      // free=3, pro/teams=Infinity
   teamMode: boolean        // free=false
   teamSync: boolean        // teams only
   premiumAgents: boolean   // pro/teams

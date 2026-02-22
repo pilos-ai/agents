@@ -129,6 +129,7 @@ export function AgentManager({ agents, onSetAgents, onAddAgent, onRemoveAgent, o
     const presetAgents = ids
       .map((id) => AGENT_TEMPLATES.find((t) => t.id === id))
       .filter((t): t is AgentDefinition => !!t)
+      .slice(0, flags.maxAgents)
     onSetAgents(presetAgents)
   }
 

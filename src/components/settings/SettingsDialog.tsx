@@ -228,19 +228,19 @@ function ProjectSection({ activeTab, flags, setProjectModel, setProjectPermissio
           {[
             {
               value: 'bypass',
-              label: 'Full access',
+              label: 'Auto-approve all',
               desc: 'Pilos can do everything without asking',
               color: 'text-green-400',
             },
             {
               value: 'supervised',
-              label: 'Ask before changes',
+              label: 'Ask',
               desc: 'Approve/deny each write or command (like the terminal)',
               color: 'text-yellow-400',
             },
             {
               value: 'plan',
-              label: 'Read only',
+              label: 'Auto-approve reads',
               desc: 'Pilos can only read files — no edits, no commands',
               color: 'text-red-400',
             },
@@ -384,10 +384,14 @@ function LicenseSettingsSection() {
 
 function IntegrationsSection() {
   const [, forceUpdate] = useState(0)
+  const { flags } = useLicenseStore()
+  const isPro = flags.tier === 'pro' || flags.tier === 'teams'
 
   useEffect(() => {
-    loadPmIntegration().then(() => forceUpdate((n) => n + 1))
-  }, [])
+    if (isPro) {
+      loadPmIntegration().then(() => forceUpdate((n) => n + 1))
+    }
+  }, [isPro])
 
   return (
     <div className="space-y-6">
@@ -396,7 +400,40 @@ function IntegrationsSection() {
         <p className="text-sm text-neutral-400 mt-1">Connect project management and collaboration tools</p>
       </div>
 
-      {PmJiraIntegrationCard && <PmJiraIntegrationCard />}
+      {isPro && PmJiraIntegrationCard && <PmJiraIntegrationCard />}
+
+      {!isPro && (
+        <div className="rounded-xl border border-neutral-700/50 bg-neutral-800/50 p-5">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-8 h-8 rounded bg-[#1868DB]/20 flex items-center justify-center">
+              <svg className="w-[18px] h-[18px]" viewBox="0 0 256 256" fill="none">
+                <defs>
+                  <linearGradient id="jira-lock-grad-1" x1="98.03%" y1="0.16%" x2="58.89%" y2="40.77%">
+                    <stop stopColor="#0052CC" offset="18%" />
+                    <stop stopColor="#2684FF" offset="100%" />
+                  </linearGradient>
+                  <linearGradient id="jira-lock-grad-2" x1="100.67%" y1="0.46%" x2="55.40%" y2="44.73%">
+                    <stop stopColor="#0052CC" offset="18%" />
+                    <stop stopColor="#2684FF" offset="100%" />
+                  </linearGradient>
+                </defs>
+                <path d="M244.658 0H121.707c0 14.72 5.847 28.837 16.256 39.246 10.409 10.409 24.526 16.256 39.246 16.256h22.649v21.867c.02 30.625 24.841 55.447 55.467 55.467V10.667C255.324 4.776 250.549 0 244.658 0z" fill="#2684FF" />
+                <path d="M183.822 61.262H60.871c.02 30.625 24.841 55.447 55.467 55.467h22.649v21.938c.039 30.625 24.877 55.431 55.502 55.431V71.929c0-5.891-4.776-10.667-10.667-10.667z" fill="url(#jira-lock-grad-1)" />
+                <path d="M122.951 122.489H0c0 30.653 24.849 55.502 55.502 55.502h22.72v21.867c.02 30.596 24.798 55.406 55.396 55.467V133.156c0-5.892-4.776-10.667-10.667-10.667z" fill="url(#jira-lock-grad-2)" />
+              </svg>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-white">Jira</span>
+                <ProBadge />
+              </div>
+              <p className="text-xs text-neutral-400">Atlassian issue tracking</p>
+            </div>
+          </div>
+          <p className="text-xs text-neutral-500 mb-3">Push stories as epics, view boards, and track progress.</p>
+          <span className="text-xs text-neutral-500 italic">Upgrade to Pro to connect Jira</span>
+        </div>
+      )}
 
       {/* Future integrations */}
       {[

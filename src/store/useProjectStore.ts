@@ -117,6 +117,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       return
     }
 
+    // Enforce project limit for free tier
+    const flags = useLicenseStore.getState().flags
+    if (state.openProjects.length >= flags.maxProjects) return
+
     // Get per-project settings
     const settings = await api.projects.getSettings(dirPath)
 
@@ -269,12 +273,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const state = get()
     if (!state.activeProjectPath) return
     const dirPath = state.activeProjectPath
+    const flags = useLicenseStore.getState().flags
+    const clamped = agents.slice(0, flags.maxAgents)
     set({
       openProjects: state.openProjects.map((p) =>
-        p.projectPath === dirPath ? { ...p, agents } : p
+        p.projectPath === dirPath ? { ...p, agents: clamped } : p
       ),
     })
-    api.projects.setSettings(dirPath, { agents })
+    api.projects.setSettings(dirPath, { agents: clamped })
   },
 
   addProjectAgent: (agent: AgentDefinition) => {

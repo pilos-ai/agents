@@ -577,6 +577,20 @@
   margin-bottom: 4px;
 }
 
+.mcp-pro {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  color: #a78bfa;
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 4px;
+  vertical-align: middle;
+  letter-spacing: 0.03em;
+}
+
 .mcp-desc {
   font-size: 11px;
   color: var(--text-3);

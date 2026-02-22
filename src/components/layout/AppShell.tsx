@@ -5,6 +5,7 @@ import { ChatPanel } from '../chat/ChatPanel'
 import { TerminalPanel } from '../terminal/TerminalPanel'
 import { SessionInfoPanel } from '../session/SessionInfoPanel'
 import { useAppStore } from '../../store/useAppStore'
+import { useLicenseStore } from '../../store/useLicenseStore'
 
 // Lazily loaded PM components
 let PmStoriesPanel: ComponentType | null = null
@@ -35,14 +36,16 @@ export function AppShell() {
   const activeRightTab = useAppStore((s) => s.activeRightTab)
   const setActiveRightTab = useAppStore((s) => s.setActiveRightTab)
   const activeView = useAppStore((s) => s.activeView)
+  const tier = useLicenseStore((s) => s.flags.tier)
+  const isPro = tier === 'pro' || tier === 'teams'
 
   const [, forceUpdate] = useState(0)
 
   useEffect(() => {
-    if (activeView !== 'chat' && !pmLoaded) {
+    if (isPro && activeView !== 'chat' && !pmLoaded) {
       loadPmComponents().then(() => forceUpdate((n) => n + 1))
     }
-  }, [activeView])
+  }, [activeView, isPro])
 
   const renderMainPanel = () => {
     switch (activeView) {

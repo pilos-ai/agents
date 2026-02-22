@@ -31,7 +31,7 @@
       <div class="docs-nav-group">
         <div class="docs-nav-title">Getting Started</div>
         <a href="#installation" class="docs-nav-link active">Installation</a>
-        <a href="#api-key-setup" class="docs-nav-link">API Key Setup</a>
+        <a href="#claude-code-cli" class="docs-nav-link">Claude Code CLI</a>
         <a href="#first-project" class="docs-nav-link">First Project</a>
       </div>
       <div class="docs-nav-group">
@@ -39,7 +39,6 @@
         <a href="#multi-agent" class="docs-nav-link">Multi-Agent Mode</a>
         <a href="#terminal" class="docs-nav-link">Terminal</a>
         <a href="#mcp-integrations" class="docs-nav-link">MCP Integrations</a>
-        <a href="#jira" class="docs-nav-link">Jira Integration</a>
         <a href="#project-memory" class="docs-nav-link">Project Memory</a>
         <a href="#permissions" class="docs-nav-link">Permission Modes</a>
       </div>
@@ -47,6 +46,7 @@
         <div class="docs-nav-title">Pro Features</div>
         <a href="#license-activation" class="docs-nav-link">License Activation</a>
         <a href="#agent-templates" class="docs-nav-link">Agent Templates</a>
+        <a href="#jira" class="docs-nav-link">Jira Integration</a>
         <a href="#team-sync" class="docs-nav-link">Team Sync</a>
       </div>
     </aside>
@@ -64,39 +64,45 @@
         <li>Run the installer and open Pilos Agents</li>
       </ol>
       <div class="docs-callout">
-        <p><strong>Prerequisite:</strong> You need the <a href="https://www.npmjs.com/package/@anthropic-ai/claude-code" target="_blank">Claude Code CLI</a> installed. Run <code>npm install -g @anthropic-ai/claude-code</code> to install it.</p>
+        <p><strong>Prerequisite:</strong> You need the <a href="https://www.npmjs.com/package/@anthropic-ai/claude-code" target="_blank">Claude Code CLI</a> installed. Run <code>npm install -g @anthropic-ai/claude-code</code> to install it. Pilos Agents will check for it on launch and guide you through installation if needed.</p>
       </div>
 
-      <h2 id="api-key-setup">API Key Setup <a href="#api-key-setup" class="heading-anchor">#</a></h2>
-      <p>Pilos Agents uses your own Anthropic API key. We never see, store, or charge for your AI usage.</p>
+      <h2 id="claude-code-cli">Claude Code CLI <a href="#claude-code-cli" class="heading-anchor">#</a></h2>
+      <p>Pilos Agents is a visual frontend for the Claude Code CLI. Your Anthropic API key is managed by the CLI itself — we never see, store, or charge for your AI usage.</p>
       <ol>
-        <li>Get an API key from <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a></li>
-        <li>Open Pilos Agents and go to <strong>Settings &rarr; API Key</strong></li>
-        <li>Paste your key and click <strong>Save</strong></li>
+        <li>Install the CLI: <code>npm install -g @anthropic-ai/claude-code</code></li>
+        <li>Run <code>claude</code> in your terminal once to authenticate with your Anthropic account</li>
+        <li>Open Pilos Agents — it will detect the CLI and use your existing authentication</li>
       </ol>
-      <p>The key is stored locally on your machine and is never transmitted to our servers.</p>
+      <p>All credentials are managed by the Claude Code CLI and stored securely on your machine.</p>
 
       <h2 id="first-project">First Project <a href="#first-project" class="heading-anchor">#</a></h2>
-      <p>Once your API key is set up, create your first project:</p>
+      <p>Once the CLI is set up, open your first project:</p>
       <ol>
-        <li>Click <strong>+ New Project</strong> in the sidebar</li>
-        <li>Select a folder on your machine — Pilos Agents will detect your codebase automatically</li>
+        <li>Click the <strong>+</strong> button in the project tab bar</li>
+        <li>Select <strong>Browse...</strong> and choose a folder on your machine</li>
+        <li>Pilos Agents detects your codebase and sets up the project automatically</li>
         <li>Start a new conversation and ask your AI team anything about the project</li>
       </ol>
-      <p>Your conversation history, project context, and agent memory are all stored locally in SQLite. Switch between projects anytime without losing context.</p>
+      <p>Your conversation history, project settings, and agent configurations are all stored locally in SQLite. Switch between projects anytime using the tab bar — each project preserves its own context.</p>
+      <div class="docs-callout">
+        <p><strong>Free tier limit:</strong> Up to 3 projects open at once. Upgrade to Pro for unlimited projects.</p>
+      </div>
 
       <!-- FEATURES -->
       <h2 id="multi-agent">Multi-Agent Mode <a href="#multi-agent" class="heading-anchor">#</a></h2>
       <p>Multi-Agent Mode lets you assign specialized AI agents to every conversation. Each agent has a unique role, personality, and area of expertise.</p>
       <h3>How it works</h3>
       <ul>
-        <li>Choose from 22 pre-built personas: CEO, CTO, Product Manager, Developer, Designer, QA, DevOps, Security, and more</li>
+        <li>5 agent templates included free: PM, Architect, Developer, Designer, and Product Manager</li>
         <li>Each agent has a distinct system prompt that shapes its responses</li>
         <li>Messages are color-coded and attributed by agent</li>
         <li>Agents can disagree, build on each other's ideas, and provide diverse perspectives</li>
       </ul>
       <h3>Solo vs Team mode</h3>
       <p>Toggle between <strong>Solo mode</strong> (single agent, included in Free) and <strong>Team mode</strong> (multiple agents, Pro feature) per project. Solo mode is great for focused tasks; Team mode excels at planning, code review, and complex problem-solving.</p>
+      <h3>Team presets</h3>
+      <p>Quick-start with pre-configured team compositions: Full Team, Dev Team, Design Sprint, or Product. You can also build your own custom team from any combination of agents.</p>
 
       <h2 id="terminal">Terminal <a href="#terminal" class="heading-anchor">#</a></h2>
       <p>The integrated terminal is powered by xterm.js and runs directly inside Pilos Agents. No need to switch windows.</p>
@@ -109,37 +115,35 @@
 
       <h2 id="mcp-integrations">MCP Integrations <a href="#mcp-integrations" class="heading-anchor">#</a></h2>
       <p>Pilos Agents supports the <strong>Model Context Protocol (MCP)</strong> for connecting Claude to external tools and services.</p>
-      <h3>Built-in templates</h3>
-      <p>14+ one-click setup templates are included:</p>
+      <h3>Free templates</h3>
+      <p>3 MCP integrations are included with the free tier:</p>
       <ul>
-        <li><strong>GitHub</strong> — Issues, PRs, code search</li>
-        <li><strong>Slack</strong> — Send messages, search channels</li>
-        <li><strong>Databases</strong> — PostgreSQL, SQLite, Supabase</li>
-        <li><strong>Kubernetes</strong> — Clusters, deployments, Helm</li>
-        <li><strong>Terraform</strong> — Plan, validate infrastructure</li>
-        <li><strong>Security</strong> — SAST, dependency audit, secrets scanning</li>
-        <li><strong>Figma</strong> — Inspect designs and tokens</li>
-        <li><strong>Monitoring</strong> — Grafana metrics, logs, traces</li>
-        <li>And more: Linear, Analytics, i18n, Custom servers</li>
+        <li><strong>GitHub</strong> — Issues, PRs, repos, and code search</li>
+        <li><strong>Supabase</strong> — Database queries, auth, and storage</li>
+        <li><strong>Filesystem</strong> — Read, write, and search files</li>
+      </ul>
+      <h3>Pro templates</h3>
+      <p>Pro unlocks 19 additional MCP integrations (22 total including the 3 free):</p>
+      <ul>
+        <li><strong>Project Management</strong> — Jira, Linear</li>
+        <li><strong>Communication</strong> — Slack</li>
+        <li><strong>Design</strong> — Figma, Storybook</li>
+        <li><strong>Development</strong> — Playwright, Profiler, OpenAPI</li>
+        <li><strong>Infrastructure</strong> — Kubernetes, Terraform, Monitoring</li>
+        <li><strong>Database</strong> — Database Tools (PostgreSQL, MySQL, SQLite)</li>
+        <li><strong>Security</strong> — SAST analysis, dependency audit, secret detection</li>
+        <li><strong>Productivity</strong> — Google Calendar, Google Sheets</li>
+        <li><strong>Data</strong> — Data Pipeline, Analytics</li>
+        <li><strong>Quality</strong> — Accessibility Checker, i18n Manager</li>
       </ul>
       <h3>Custom MCP servers</h3>
       <p>You can connect any MCP-compliant server via stdio, HTTP, or SSE transport. Add custom servers in <strong>Settings &rarr; MCP Servers</strong>.</p>
 
-      <h2 id="jira">Jira Integration <a href="#jira" class="heading-anchor">#</a></h2>
-      <p>Connect your Jira instance with OAuth for full project management integration:</p>
-      <ul>
-        <li>Sync epics, sprints, and stories</li>
-        <li>Create and manage stories with acceptance criteria</li>
-        <li>Track story coverage and push updates to Jira</li>
-        <li>View sprint boards directly in the app</li>
-      </ul>
-      <p>Set up in <strong>Settings &rarr; Integrations &rarr; Jira</strong>.</p>
-
       <h2 id="project-memory">Project Memory <a href="#project-memory" class="heading-anchor">#</a></h2>
       <p>Every conversation is stored locally in SQLite. Pilos Agents maintains persistent project memory so your AI team never forgets context.</p>
       <ul>
-        <li>Full conversation history with search</li>
-        <li>Per-project agent configurations</li>
+        <li>Full conversation history per project</li>
+        <li>Per-project agent configurations and MCP server settings</li>
         <li>Automatically loads relevant context when you return to a project</li>
         <li>All data stays on your machine — no cloud sync required</li>
       </ul>
@@ -147,11 +151,11 @@
       <h2 id="permissions">Permission Modes <a href="#permissions" class="heading-anchor">#</a></h2>
       <p>Control what Claude can do in your project with granular permission modes:</p>
       <ul>
-        <li><strong>Ask</strong> — Claude asks before every action (safest)</li>
-        <li><strong>Auto-approve reads</strong> — Claude can read files freely, asks before writing</li>
-        <li><strong>Auto-approve all</strong> — Claude acts autonomously (fastest)</li>
+        <li><strong>Auto-approve all</strong> — Claude acts autonomously without asking (fastest)</li>
+        <li><strong>Ask</strong> — Claude asks before every write or command (recommended)</li>
+        <li><strong>Auto-approve reads</strong> — Claude can only read files, no edits or commands (safest)</li>
       </ul>
-      <p>Permission modes are set per-project in project settings.</p>
+      <p>Permission modes are set per-project in <strong>Settings &rarr; Project</strong>.</p>
 
       <!-- PRO FEATURES -->
       <h2 id="license-activation">License Activation <a href="#license-activation" class="heading-anchor">#</a></h2>
@@ -164,16 +168,31 @@
       <p>Your license is validated against our license server and cached locally. The app works offline after initial activation.</p>
 
       <h2 id="agent-templates">Agent Templates <a href="#agent-templates" class="heading-anchor">#</a></h2>
-      <p>Pro unlocks all 22 agent templates across categories:</p>
+      <p>The free tier includes 5 core agent templates: PM, Architect, Developer, Designer, and Product Manager. Pro unlocks 26 more specialized agents (31 total):</p>
       <ul>
-        <li><strong>C-Suite:</strong> CEO, CTO, CPO, CMO</li>
-        <li><strong>Engineering:</strong> Senior Dev, Junior Dev, DevOps, SRE, Backend, Frontend</li>
-        <li><strong>Design:</strong> UI/UX Designer, Brand Designer</li>
-        <li><strong>Security:</strong> Security Engineer, Penetration Tester</li>
-        <li><strong>Data:</strong> Data Scientist, ML Engineer, Business Analyst</li>
-        <li><strong>Product:</strong> Product Manager, Scrum Master, QA Engineer</li>
+        <li><strong>C-Suite:</strong> CEO, CTO, COO, CFO, CMO</li>
+        <li><strong>Business:</strong> Accountant, Legal, Marketing, Sales</li>
+        <li><strong>Engineering:</strong> Performance Engineer, API Designer, Database Specialist, Migration Expert, QA Engineer, DevOps Engineer</li>
+        <li><strong>Product:</strong> Growth Engineer, i18n Specialist, HR Manager, Business Analyst, Content Writer, Researcher</li>
+        <li><strong>Design:</strong> Accessibility Auditor, Design System Lead</li>
+        <li><strong>Data:</strong> Data Engineer, ML Engineer (Teams)</li>
+        <li><strong>DevOps:</strong> Kubernetes Specialist, SRE (Teams)</li>
+        <li><strong>Security:</strong> Security Auditor, Compliance Officer (Teams)</li>
       </ul>
       <p>You can also create fully custom agents with your own name, emoji, color, and system prompt.</p>
+
+      <h2 id="jira">Jira Integration <a href="#jira" class="heading-anchor">#</a></h2>
+      <p>Pro includes full Jira integration via OAuth for project management:</p>
+      <ul>
+        <li>Connect your Atlassian instance in <strong>Settings &rarr; Integrations</strong></li>
+        <li>Sync epics, sprints, and stories</li>
+        <li>Create and manage stories with acceptance criteria</li>
+        <li>Track story coverage and push updates to Jira</li>
+        <li>View sprint boards directly in the app</li>
+      </ul>
+      <div class="docs-callout">
+        <p><strong>Pro feature:</strong> Jira integration requires a Pro or Teams license.</p>
+      </div>
 
       <h2 id="team-sync">Team Sync <a href="#team-sync" class="heading-anchor">#</a></h2>
       <p>Teams plan includes real-time collaboration features:</p>

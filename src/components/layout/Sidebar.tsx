@@ -3,6 +3,7 @@ import { useConversationStore } from '../../store/useConversationStore'
 import { useAppStore } from '../../store/useAppStore'
 import type { AppView } from '../../store/useAppStore'
 import { useProjectStore } from '../../store/useProjectStore'
+import { useLicenseStore } from '../../store/useLicenseStore'
 import { api } from '../../api'
 
 interface ViewTab {
@@ -87,14 +88,17 @@ export function Sidebar() {
   const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
   const openProjects = useProjectStore((s) => s.openProjects)
   const activeTab = openProjects.find((p) => p.projectPath === activeProjectPath)
+  const tier = useLicenseStore((s) => s.flags.tier)
+  const isPro = tier === 'pro' || tier === 'teams'
 
-  // PM state — loaded lazily
+  // PM state — loaded lazily, only for Pro/Teams
   const [hasPm, setHasPm] = useState(false)
   const [jiraConnected, setJiraConnected] = useState(false)
   const [storyCount, setStoryCount] = useState(0)
   const [, forceUpdate] = useState(0)
 
   useEffect(() => {
+    if (!isPro) return
     loadPmSidebar().then(() => {
       if (pmStoreModule) {
         setHasPm(true)
@@ -108,7 +112,7 @@ export function Sidebar() {
         return () => { unsubJira(); unsubStory() }
       }
     })
-  }, [])
+  }, [isPro])
 
   const allTabs = hasPm ? [CHAT_TAB, ...PM_TABS] : [CHAT_TAB]
   const visibleTabs = allTabs.filter((t) => !t.requiresJira || jiraConnected)
