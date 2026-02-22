@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="228" fill="#0c0f1a"/>
+  <!-- Outer diamond (filled blue) -->
+  <polygon points="512,148 876,512 512,876 148,512" fill="#3b82f6"/>
+  <!-- Inner cutout (background color to create outline effect) -->
+  <polygon points="512,210 814,512 512,814 210,512" fill="#0c0f1a"/>
+  <!-- Center diamond (solid bright blue) -->
+  <polygon points="512,375 649,512 512,649 375,512" fill="#6aa8f8"/>
+</svg>
