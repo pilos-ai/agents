@@ -2,7 +2,7 @@
   "name": "pilos-agents",
   "version": "1.0.0",
   "description": "Pilos Agents — AI-powered multi-agent desktop app",
-  "author": "Pilos <hello@pilos.ai>",
+  "author": "Vahe Saroyan <vahe.saroyan.web@gmail.com>",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
