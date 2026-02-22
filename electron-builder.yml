@@ -21,7 +21,7 @@ asarUnpack:
 
 mac:
   category: public.app-category.developer-tools
-  identity: null
+  notarize: true
   target:
     - target: dmg
       arch:

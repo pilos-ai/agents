@@ -53,6 +53,13 @@ function sign(filePath, label) {
 module.exports = async function afterPack(context) {
   if (process.platform !== 'darwin') return
 
+  // Skip ad-hoc signing when a real Developer ID certificate is available —
+  // electron-builder handles proper signing + notarization in that case.
+  if (process.env.CSC_LINK || process.env.CSC_NAME) {
+    console.log('[afterPack] Skipping ad-hoc signing (real certificate detected)')
+    return
+  }
+
   const appPath = join(
     context.appOutDir,
     `${context.packager.appInfo.productFilename}.app`

@@ -41,7 +41,14 @@ jobs:
 
       - run: npm ci
 
-      - run: npm run build && npx electron-builder ${{ matrix.platform }} -p never
+      - name: Build and package
+        run: npm run build && npx electron-builder ${{ matrix.platform }} -p never
+        env:
+          CSC_LINK: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
 
       - uses: actions/upload-artifact@v4
         with:
