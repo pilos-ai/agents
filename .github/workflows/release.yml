@@ -29,7 +29,9 @@ jobs:
           token: ${{ secrets.SUBMODULE_PAT }}
 
       - name: Checkout required submodules
-        run: git submodule update --init packages/pro packages/pm
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.SUBMODULE_PAT }}@github.com/".insteadOf "git@github.com:"
+          git submodule update --init packages/pro packages/pm
 
       - uses: actions/setup-python@v5
         with:
