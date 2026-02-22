@@ -10,9 +10,15 @@ getDb()
 const app = new Hono()
 
 app.use('*', cors({
-  origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:3000',
+    'https://pilosagents.com',
+    'https://www.pilosagents.com',
+  ],
   allowMethods: ['GET', 'POST', 'OPTIONS'],
-  allowHeaders: ['Content-Type'],
+  allowHeaders: ['Content-Type', 'Stripe-Signature'],
 }))
 
 app.route('/v1/licenses', licensesRoutes)

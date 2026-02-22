@@ -1,8 +1,12 @@
 import { Hono } from 'hono'
 import crypto from 'crypto'
+import Stripe from 'stripe'
 import { getDb, type LicenseRow } from '../db.js'
 
 const app = new Hono()
+
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || ''
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '')
 
 // POST /v1/licenses/validate
 app.post('/validate', (c) => {
@@ -111,6 +115,53 @@ app.post('/', (c) => {
     const row = db.prepare('SELECT * FROM licenses WHERE id = ?').get(id) as LicenseRow
     return c.json(row, 201)
   })
+})
+
+// POST /v1/licenses/stripe-webhook — Stripe checkout webhook
+app.post('/stripe-webhook', async (c) => {
+  const signature = c.req.header('stripe-signature')
+  if (!signature || !STRIPE_WEBHOOK_SECRET) {
+    return c.json({ error: 'Missing webhook configuration' }, 400)
+  }
+
+  const rawBody = await c.req.text()
+
+  let event: Stripe.Event
+  try {
+    event = stripe.webhooks.constructEvent(rawBody, signature, STRIPE_WEBHOOK_SECRET)
+  } catch (err) {
+    return c.json({ error: 'Invalid signature' }, 400)
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object as Stripe.Checkout.Session
+    const email = session.customer_email || session.customer_details?.email || ''
+    const plan = (session.metadata?.plan as 'pro' | 'teams') || 'pro'
+    const seats = plan === 'teams' ? Number(session.metadata?.seats || 1) : null
+
+    if (!email) {
+      return c.json({ error: 'No customer email in session' }, 400)
+    }
+
+    // Calculate expiry: 1 year for annual, 1 month for monthly
+    const isAnnual = session.metadata?.billing === 'annual'
+    const now = new Date()
+    const expiresAt = isAnnual
+      ? new Date(now.setFullYear(now.getFullYear() + 1)).toISOString()
+      : new Date(now.setMonth(now.getMonth() + 1)).toISOString()
+
+    const db = getDb()
+    const id = crypto.randomUUID()
+    const prefix = plan === 'teams' ? 'PILOS-TEAMS' : 'PILOS-PRO'
+    const suffix = crypto.randomBytes(4).toString('hex').toUpperCase()
+    const key = `${prefix}-${suffix.slice(0, 4)}-${suffix.slice(4)}`
+
+    db.prepare(
+      'INSERT INTO licenses (id, key, email, plan, seats, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(id, key, email, plan, seats, expiresAt)
+  }
+
+  return c.json({ received: true })
 })
 
 export default app

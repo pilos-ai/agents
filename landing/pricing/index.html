@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pricing — Pilos Agents</title>
+  <meta name="description" content="Start free, upgrade when you're ready. All plans include the core app. Bring your own Claude API key — we never charge for AI usage." />
+  <meta property="og:title" content="Pricing — Pilos Agents" />
+  <meta property="og:description" content="Free, Pro, and Teams plans for Pilos Agents. Multi-agent AI collaboration for your desktop." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://pilosagents.com/og-image.png" />
+  <meta property="og:url" content="https://pilosagents.com/pricing" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Pricing — Pilos Agents" />
+  <meta name="twitter:description" content="Free, Pro, and Teams plans for Pilos Agents." />
+  <meta name="twitter:image" content="https://pilosagents.com/og-image.png" />
+  <link rel="canonical" href="https://pilosagents.com/pricing" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/pricing.css" />
+</head>
+<body>
+
+  <div id="nav-mount"></div>
+
+  <section class="pricing-section" id="pricing">
+    <div class="section-inner">
+      <div class="section-label">Pricing</div>
+      <h2 class="section-title">Start free. Upgrade when you're ready.</h2>
+      <p class="section-subtitle">All plans include the core app. Bring your own Claude API key — we never charge for AI usage.</p>
+
+      <div class="billing-toggle">
+        <span class="billing-label" id="label-monthly">Monthly</span>
+        <button class="toggle-btn" id="billing-toggle" aria-pressed="false" aria-label="Toggle annual billing">
+          <span class="toggle-thumb"></span>
+        </button>
+        <span class="billing-label" id="label-annual">
+          Annual
+          <span class="billing-badge">Save 30%</span>
+        </span>
+      </div>
+
+      <div class="pricing-grid">
+        <!-- FREE -->
+        <div class="pricing-card">
+          <div class="pricing-header">
+            <div class="pricing-tier">Free</div>
+            <div class="pricing-price">
+              <span class="price-amount">$0</span>
+              <span class="price-period">forever</span>
+            </div>
+            <p class="pricing-tagline">Perfect for solo developers exploring AI-assisted workflows.</p>
+          </div>
+          <a href="https://github.com/nicepkg/pilos-agents/releases/latest" class="pricing-cta pricing-cta-secondary">Download Free</a>
+          <div class="pricing-divider"></div>
+          <ul class="pricing-features">
+            <li class="feat-yes">Solo mode (1 active agent)</li>
+            <li class="feat-yes">Up to 3 projects</li>
+            <li class="feat-yes">5 agent templates</li>
+            <li class="feat-yes">3 MCP integrations</li>
+            <li class="feat-yes">Integrated terminal</li>
+            <li class="feat-yes">Conversation history</li>
+            <li class="feat-yes">Open source core (MIT)</li>
+            <li class="feat-no">Multi-agent team mode</li>
+            <li class="feat-no">Jira integration &amp; stories</li>
+            <li class="feat-no">Priority support</li>
+          </ul>
+        </div>
+
+        <!-- PRO -->
+        <div class="pricing-card pricing-card-pro">
+          <div class="pricing-badge-popular">Most Popular</div>
+          <div class="pricing-header">
+            <div class="pricing-tier">Pro</div>
+            <div class="pricing-price">
+              <span class="price-amount" data-monthly="$12" data-annual="$8">$12</span>
+              <span class="price-period" data-monthly="/ month" data-annual="/ month">/&nbsp;month</span>
+            </div>
+            <p class="pricing-billed" id="pro-billed">&nbsp;</p>
+            <p class="pricing-tagline">For power users who want the full AI team experience.</p>
+          </div>
+          <a href="#" id="pro-cta" class="pricing-cta pricing-cta-primary">Get Pro</a>
+          <div class="pricing-divider"></div>
+          <ul class="pricing-features">
+            <li class="feat-yes">Everything in Free</li>
+            <li class="feat-yes"><strong>Multi-agent team mode</strong></li>
+            <li class="feat-yes">All 22 agent templates</li>
+            <li class="feat-yes"><strong>Unlimited projects</strong></li>
+            <li class="feat-yes">All 14+ MCP integrations</li>
+            <li class="feat-yes">Jira integration &amp; story sync</li>
+            <li class="feat-yes">Custom agent creation</li>
+            <li class="feat-yes">Early access to new features</li>
+            <li class="feat-yes">Priority email support</li>
+            <li class="feat-no">Team workspace sharing</li>
+          </ul>
+        </div>
+
+        <!-- TEAMS -->
+        <div class="pricing-card">
+          <div class="pricing-header">
+            <div class="pricing-tier">Teams</div>
+            <div class="pricing-price">
+              <span class="price-amount" data-monthly="$19" data-annual="$13">$19</span>
+              <span class="price-period" data-monthly="/ seat / mo" data-annual="/ seat / mo">/&nbsp;seat&nbsp;/&nbsp;mo</span>
+            </div>
+            <p class="pricing-billed" id="teams-billed">&nbsp;</p>
+            <p class="pricing-tagline">For small teams building together with a shared AI workforce.</p>
+          </div>
+          <a href="mailto:sales@pilosagents.com" id="teams-cta" class="pricing-cta pricing-cta-secondary">Contact Sales</a>
+          <div class="pricing-divider"></div>
+          <ul class="pricing-features">
+            <li class="feat-yes">Everything in Pro</li>
+            <li class="feat-yes"><strong>Shared agent library</strong></li>
+            <li class="feat-yes">Real-time team sync</li>
+            <li class="feat-yes">Centralized MCP management</li>
+            <li class="feat-yes">Admin dashboard &amp; roles</li>
+            <li class="feat-yes">SSO / SAML (coming soon)</li>
+            <li class="feat-yes">Dedicated Slack support</li>
+            <li class="feat-yes">Custom onboarding</li>
+            <li class="feat-yes">SLA guarantee</li>
+            <li class="feat-yes">Invoice billing</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="pricing-faq">
+        <div class="faq-item">
+          <div class="faq-q">Do I need a Claude API key?</div>
+          <div class="faq-a">Yes. Pilos Agents is a desktop interface — you bring your own Claude Code CLI and Anthropic API key. We never see or charge for your AI usage.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">Is the app truly free?</div>
+          <div class="faq-a">The Free plan is free forever with no trial period. The core is MIT licensed — you can even self-host and modify it. Upgrade to Pro for the full team experience.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">Can I cancel anytime?</div>
+          <div class="faq-a">Yes. Cancel your Pro or Teams subscription at any time. You'll keep access until the end of your billing period, then revert to the Free plan.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">Is there a student or OSS discount?</div>
+          <div class="faq-a">Yes — reach out for a 50% discount for students, open source maintainers, and non-profits.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">What payment methods do you accept?</div>
+          <div class="faq-a">We accept all major credit cards through Stripe. Teams plans can also pay via invoice with net-30 terms.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">How does the license key work?</div>
+          <div class="faq-a">After purchase, you'll receive a license key via email. Enter it in the app's Settings &rarr; License panel to unlock Pro features instantly.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div id="footer-mount"></div>
+
+  <script type="module">
+    import { renderNav, renderFooter } from '/js/components.js';
+    import { initPricing } from '/js/pricing.js';
+    renderNav('pricing');
+    renderFooter();
+    initPricing();
+  </script>
+</body>
+</html>

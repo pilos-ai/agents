@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Documentation — Pilos Agents</title>
+  <meta name="description" content="Learn how to install, configure, and use Pilos Agents. Multi-agent mode, MCP integrations, Jira, terminal, and more." />
+  <meta property="og:title" content="Documentation — Pilos Agents" />
+  <meta property="og:description" content="Getting started guides, feature docs, and Pro reference for Pilos Agents." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://pilosagents.com/og-image.png" />
+  <meta property="og:url" content="https://pilosagents.com/docs" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Documentation — Pilos Agents" />
+  <meta name="twitter:description" content="Getting started guides, feature docs, and Pro reference for Pilos Agents." />
+  <meta name="twitter:image" content="https://pilosagents.com/og-image.png" />
+  <link rel="canonical" href="https://pilosagents.com/docs" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+</head>
+<body>
+
+  <div id="nav-mount"></div>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <div class="docs-nav-group">
+        <div class="docs-nav-title">Getting Started</div>
+        <a href="#installation" class="docs-nav-link active">Installation</a>
+        <a href="#api-key-setup" class="docs-nav-link">API Key Setup</a>
+        <a href="#first-project" class="docs-nav-link">First Project</a>
+      </div>
+      <div class="docs-nav-group">
+        <div class="docs-nav-title">Features</div>
+        <a href="#multi-agent" class="docs-nav-link">Multi-Agent Mode</a>
+        <a href="#terminal" class="docs-nav-link">Terminal</a>
+        <a href="#mcp-integrations" class="docs-nav-link">MCP Integrations</a>
+        <a href="#jira" class="docs-nav-link">Jira Integration</a>
+        <a href="#project-memory" class="docs-nav-link">Project Memory</a>
+        <a href="#permissions" class="docs-nav-link">Permission Modes</a>
+      </div>
+      <div class="docs-nav-group">
+        <div class="docs-nav-title">Pro Features</div>
+        <a href="#license-activation" class="docs-nav-link">License Activation</a>
+        <a href="#agent-templates" class="docs-nav-link">Agent Templates</a>
+        <a href="#team-sync" class="docs-nav-link">Team Sync</a>
+      </div>
+    </aside>
+
+    <main class="docs-content">
+      <h1>Documentation</h1>
+      <p class="docs-subtitle">Everything you need to get started with Pilos Agents and make the most of your AI development team.</p>
+
+      <!-- GETTING STARTED -->
+      <h2 id="installation">Installation <a href="#installation" class="heading-anchor">#</a></h2>
+      <p>Pilos Agents is a native desktop app available for macOS, Windows, and Linux. Download the latest release from GitHub:</p>
+      <ol>
+        <li>Go to <a href="https://github.com/nicepkg/pilos-agents/releases/latest" target="_blank">github.com/nicepkg/pilos-agents/releases</a></li>
+        <li>Download the installer for your platform (<code>.dmg</code> for macOS, <code>.exe</code> for Windows, <code>.AppImage</code> for Linux)</li>
+        <li>Run the installer and open Pilos Agents</li>
+      </ol>
+      <div class="docs-callout">
+        <p><strong>Prerequisite:</strong> You need the <a href="https://www.npmjs.com/package/@anthropic-ai/claude-code" target="_blank">Claude Code CLI</a> installed. Run <code>npm install -g @anthropic-ai/claude-code</code> to install it.</p>
+      </div>
+
+      <h2 id="api-key-setup">API Key Setup <a href="#api-key-setup" class="heading-anchor">#</a></h2>
+      <p>Pilos Agents uses your own Anthropic API key. We never see, store, or charge for your AI usage.</p>
+      <ol>
+        <li>Get an API key from <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a></li>
+        <li>Open Pilos Agents and go to <strong>Settings &rarr; API Key</strong></li>
+        <li>Paste your key and click <strong>Save</strong></li>
+      </ol>
+      <p>The key is stored locally on your machine and is never transmitted to our servers.</p>
+
+      <h2 id="first-project">First Project <a href="#first-project" class="heading-anchor">#</a></h2>
+      <p>Once your API key is set up, create your first project:</p>
+      <ol>
+        <li>Click <strong>+ New Project</strong> in the sidebar</li>
+        <li>Select a folder on your machine — Pilos Agents will detect your codebase automatically</li>
+        <li>Start a new conversation and ask your AI team anything about the project</li>
+      </ol>
+      <p>Your conversation history, project context, and agent memory are all stored locally in SQLite. Switch between projects anytime without losing context.</p>
+
+      <!-- FEATURES -->
+      <h2 id="multi-agent">Multi-Agent Mode <a href="#multi-agent" class="heading-anchor">#</a></h2>
+      <p>Multi-Agent Mode lets you assign specialized AI agents to every conversation. Each agent has a unique role, personality, and area of expertise.</p>
+      <h3>How it works</h3>
+      <ul>
+        <li>Choose from 22 pre-built personas: CEO, CTO, Product Manager, Developer, Designer, QA, DevOps, Security, and more</li>
+        <li>Each agent has a distinct system prompt that shapes its responses</li>
+        <li>Messages are color-coded and attributed by agent</li>
+        <li>Agents can disagree, build on each other's ideas, and provide diverse perspectives</li>
+      </ul>
+      <h3>Solo vs Team mode</h3>
+      <p>Toggle between <strong>Solo mode</strong> (single agent, included in Free) and <strong>Team mode</strong> (multiple agents, Pro feature) per project. Solo mode is great for focused tasks; Team mode excels at planning, code review, and complex problem-solving.</p>
+
+      <h2 id="terminal">Terminal <a href="#terminal" class="heading-anchor">#</a></h2>
+      <p>The integrated terminal is powered by xterm.js and runs directly inside Pilos Agents. No need to switch windows.</p>
+      <ul>
+        <li>Full terminal emulation with color support</li>
+        <li>Multiple terminal tabs with per-tab working directory</li>
+        <li>Claude can execute commands and display output inline</li>
+        <li>Working directory is synced with your project folder</li>
+      </ul>
+
+      <h2 id="mcp-integrations">MCP Integrations <a href="#mcp-integrations" class="heading-anchor">#</a></h2>
+      <p>Pilos Agents supports the <strong>Model Context Protocol (MCP)</strong> for connecting Claude to external tools and services.</p>
+      <h3>Built-in templates</h3>
+      <p>14+ one-click setup templates are included:</p>
+      <ul>
+        <li><strong>GitHub</strong> — Issues, PRs, code search</li>
+        <li><strong>Slack</strong> — Send messages, search channels</li>
+        <li><strong>Databases</strong> — PostgreSQL, SQLite, Supabase</li>
+        <li><strong>Kubernetes</strong> — Clusters, deployments, Helm</li>
+        <li><strong>Terraform</strong> — Plan, validate infrastructure</li>
+        <li><strong>Security</strong> — SAST, dependency audit, secrets scanning</li>
+        <li><strong>Figma</strong> — Inspect designs and tokens</li>
+        <li><strong>Monitoring</strong> — Grafana metrics, logs, traces</li>
+        <li>And more: Linear, Analytics, i18n, Custom servers</li>
+      </ul>
+      <h3>Custom MCP servers</h3>
+      <p>You can connect any MCP-compliant server via stdio, HTTP, or SSE transport. Add custom servers in <strong>Settings &rarr; MCP Servers</strong>.</p>
+
+      <h2 id="jira">Jira Integration <a href="#jira" class="heading-anchor">#</a></h2>
+      <p>Connect your Jira instance with OAuth for full project management integration:</p>
+      <ul>
+        <li>Sync epics, sprints, and stories</li>
+        <li>Create and manage stories with acceptance criteria</li>
+        <li>Track story coverage and push updates to Jira</li>
+        <li>View sprint boards directly in the app</li>
+      </ul>
+      <p>Set up in <strong>Settings &rarr; Integrations &rarr; Jira</strong>.</p>
+
+      <h2 id="project-memory">Project Memory <a href="#project-memory" class="heading-anchor">#</a></h2>
+      <p>Every conversation is stored locally in SQLite. Pilos Agents maintains persistent project memory so your AI team never forgets context.</p>
+      <ul>
+        <li>Full conversation history with search</li>
+        <li>Per-project agent configurations</li>
+        <li>Automatically loads relevant context when you return to a project</li>
+        <li>All data stays on your machine — no cloud sync required</li>
+      </ul>
+
+      <h2 id="permissions">Permission Modes <a href="#permissions" class="heading-anchor">#</a></h2>
+      <p>Control what Claude can do in your project with granular permission modes:</p>
+      <ul>
+        <li><strong>Ask</strong> — Claude asks before every action (safest)</li>
+        <li><strong>Auto-approve reads</strong> — Claude can read files freely, asks before writing</li>
+        <li><strong>Auto-approve all</strong> — Claude acts autonomously (fastest)</li>
+      </ul>
+      <p>Permission modes are set per-project in project settings.</p>
+
+      <!-- PRO FEATURES -->
+      <h2 id="license-activation">License Activation <a href="#license-activation" class="heading-anchor">#</a></h2>
+      <p>After purchasing a Pro or Teams plan, you'll receive a license key via email (format: <code>PILOS-PRO-XXXX-XXXX</code>).</p>
+      <ol>
+        <li>Open Pilos Agents and go to <strong>Settings &rarr; License</strong></li>
+        <li>Paste your license key</li>
+        <li>Click <strong>Activate</strong> — Pro features unlock instantly</li>
+      </ol>
+      <p>Your license is validated against our license server and cached locally. The app works offline after initial activation.</p>
+
+      <h2 id="agent-templates">Agent Templates <a href="#agent-templates" class="heading-anchor">#</a></h2>
+      <p>Pro unlocks all 22 agent templates across categories:</p>
+      <ul>
+        <li><strong>C-Suite:</strong> CEO, CTO, CPO, CMO</li>
+        <li><strong>Engineering:</strong> Senior Dev, Junior Dev, DevOps, SRE, Backend, Frontend</li>
+        <li><strong>Design:</strong> UI/UX Designer, Brand Designer</li>
+        <li><strong>Security:</strong> Security Engineer, Penetration Tester</li>
+        <li><strong>Data:</strong> Data Scientist, ML Engineer, Business Analyst</li>
+        <li><strong>Product:</strong> Product Manager, Scrum Master, QA Engineer</li>
+      </ul>
+      <p>You can also create fully custom agents with your own name, emoji, color, and system prompt.</p>
+
+      <h2 id="team-sync">Team Sync <a href="#team-sync" class="heading-anchor">#</a></h2>
+      <p>Teams plan includes real-time collaboration features:</p>
+      <ul>
+        <li>Shared agent library across your team</li>
+        <li>Centralized MCP server management</li>
+        <li>Admin dashboard with role-based access</li>
+        <li>SSO / SAML integration (coming soon)</li>
+      </ul>
+      <p>Contact <a href="mailto:sales@pilosagents.com">sales@pilosagents.com</a> for Teams setup and onboarding.</p>
+    </main>
+  </div>
+
+  <div id="footer-mount"></div>
+
+  <script type="module">
+    import { renderNav, renderFooter } from '/js/components.js';
+    import { initDocs } from '/js/docs.js';
+    renderNav('docs');
+    renderFooter();
+    initDocs();
+  </script>
+</body>
+</html>

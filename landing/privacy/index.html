@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — Pilos Agents</title>
+  <meta name="description" content="Pilos Agents privacy policy. Learn how we handle your data — spoiler: the app is local-first and we collect almost nothing." />
+  <meta property="og:title" content="Privacy Policy — Pilos Agents" />
+  <meta property="og:description" content="How Pilos Agents handles your data. Local-first, minimal collection." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://pilosagents.com/og-image.png" />
+  <meta property="og:url" content="https://pilosagents.com/privacy" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Privacy Policy — Pilos Agents" />
+  <meta name="twitter:description" content="How Pilos Agents handles your data." />
+  <meta name="twitter:image" content="https://pilosagents.com/og-image.png" />
+  <link rel="canonical" href="https://pilosagents.com/privacy" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/legal.css" />
+</head>
+<body>
+
+  <div id="nav-mount"></div>
+
+  <div class="legal-page">
+    <h1>Privacy Policy</h1>
+    <p class="legal-updated">Last updated: February 22, 2026</p>
+
+    <h2>Overview</h2>
+    <p>Pilos Agents is a <strong>local-first desktop application</strong>. Your conversations, project files, and AI interactions stay on your machine. We do not operate cloud servers that process or store your development data.</p>
+    <p>This policy covers what limited data we do collect through the website, license server, and optional services.</p>
+
+    <h2>Data We Collect</h2>
+
+    <h3>Desktop Application</h3>
+    <p>The Pilos Agents desktop app:</p>
+    <ul>
+      <li><strong>Does not</strong> send your conversations, code, or project data to our servers</li>
+      <li><strong>Does not</strong> include telemetry, analytics, or crash reporting by default</li>
+      <li><strong>Does</strong> communicate with Anthropic's API using <em>your</em> API key — refer to <a href="https://www.anthropic.com/privacy" target="_blank">Anthropic's privacy policy</a> for how they handle API requests</li>
+      <li><strong>Does</strong> validate license keys against our license server (sends only the key string, no other data)</li>
+    </ul>
+
+    <h3>License Server</h3>
+    <p>When you purchase a Pro or Teams plan, we store:</p>
+    <ul>
+      <li>Email address (provided during checkout)</li>
+      <li>License key</li>
+      <li>Plan type and seat count</li>
+      <li>Subscription status and expiry date</li>
+    </ul>
+    <p>This data is used solely for license validation and billing. We do not sell or share it with third parties.</p>
+
+    <h3>Website</h3>
+    <p>The pilosagents.com website may use privacy-respecting analytics (e.g., Plausible or Vercel Analytics) to understand page views and referral sources. No cookies are used for tracking. No personal data is collected from website visitors.</p>
+
+    <h2>Third-Party Services</h2>
+    <ul>
+      <li><strong>Stripe</strong> — Processes payments for Pro and Teams plans. Stripe collects payment information directly; we never see your full card number. See <a href="https://stripe.com/privacy" target="_blank">Stripe's privacy policy</a>.</li>
+      <li><strong>Anthropic</strong> — Processes AI requests via the Claude API using your API key. See <a href="https://www.anthropic.com/privacy" target="_blank">Anthropic's privacy policy</a>.</li>
+      <li><strong>GitHub</strong> — Hosts the open source repository. Interaction with GitHub is governed by <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" target="_blank">GitHub's privacy policy</a>.</li>
+      <li><strong>Vercel</strong> — Hosts this website. See <a href="https://vercel.com/legal/privacy-policy" target="_blank">Vercel's privacy policy</a>.</li>
+    </ul>
+
+    <h2>MCP Server Connections</h2>
+    <p>When you configure MCP integrations (GitHub, Slack, Jira, etc.), the desktop app connects directly to those services using credentials you provide. We do not proxy, log, or store any data from these connections.</p>
+
+    <h2>Data Retention</h2>
+    <ul>
+      <li><strong>App data:</strong> Stored locally on your machine. Delete it anytime by removing the app data folder.</li>
+      <li><strong>License data:</strong> Retained for the duration of your subscription plus 30 days after cancellation.</li>
+      <li><strong>Website analytics:</strong> Aggregated, non-personal data retained for up to 24 months.</li>
+    </ul>
+
+    <h2>Your Rights</h2>
+    <p>You may request to:</p>
+    <ul>
+      <li>Access any personal data we hold about you</li>
+      <li>Delete your license server account and associated data</li>
+      <li>Export your data in a portable format</li>
+    </ul>
+    <p>Contact <a href="mailto:privacy@pilosagents.com">privacy@pilosagents.com</a> for any data requests.</p>
+
+    <h2>Changes to This Policy</h2>
+    <p>We may update this policy from time to time. Significant changes will be announced on our GitHub repository and website. Continued use of Pilos Agents after changes constitutes acceptance.</p>
+
+    <h2>Contact</h2>
+    <p>Questions about privacy? Email <a href="mailto:privacy@pilosagents.com">privacy@pilosagents.com</a>.</p>
+  </div>
+
+  <div id="footer-mount"></div>
+
+  <script type="module">
+    import { renderNav, renderFooter } from '/js/components.js';
+    renderNav('privacy');
+    renderFooter();
+  </script>
+</body>
+</html>
