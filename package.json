@@ -3,6 +3,7 @@
   "version": "1.0.2",
   "description": "Pilos Agents — AI-powered multi-agent desktop app",
   "author": "Vahe Saroyan <vahe.saroyan.web@gmail.com>",
+  "license": "MIT",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
