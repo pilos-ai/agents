@@ -12,13 +12,13 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            script: dist:mac
+            platform: --mac
             artifact: release/*.dmg
           - os: windows-latest
-            script: dist:win
+            platform: --win
             artifact: release/*.exe
           - os: ubuntu-latest
-            script: dist:linux
+            platform: --linux
             artifact: release/*.AppImage
 
     runs-on: ${{ matrix.os }}
@@ -41,7 +41,7 @@ jobs:
 
       - run: npm ci
 
-      - run: npm run ${{ matrix.script }}
+      - run: npm run build && npx electron-builder ${{ matrix.platform }} -p never
 
       - uses: actions/upload-artifact@v4
         with:
