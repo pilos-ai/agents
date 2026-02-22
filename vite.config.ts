@@ -34,6 +34,7 @@ const electronEntries: Parameters<typeof electron>[0] = [
             'child_process',
             'crypto',
             'url',
+            '@pilos/agents-pm/electron',
           ],
         },
       },
