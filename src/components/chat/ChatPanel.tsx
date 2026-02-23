@@ -26,9 +26,8 @@ export function ChatPanel() {
   const virtualizer = useVirtualizer({
     count: messages.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 80,
+    estimateSize: () => 92,
     overscan: 8,
-    gap: 12,
   })
 
   // Re-measure all items when messages change content (tool results arriving, images loading, etc.)
@@ -121,7 +120,7 @@ export function ChatPanel() {
                 virtualRow.index === messages.length - 1
               return (
                 <div
-                  key={msg.id || `msg-${virtualRow.index}-${msg.timestamp}`}
+                  key={`msg-${virtualRow.index}-${msg.timestamp}`}
                   data-index={virtualRow.index}
                   ref={virtualizer.measureElement}
                   style={{
@@ -132,7 +131,7 @@ export function ChatPanel() {
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
                 >
-                  <div className={`rounded-lg transition-colors duration-700 ${
+                  <div className={`pb-3 rounded-lg transition-colors duration-700 ${
                     highlightedIndex === virtualRow.index ? 'bg-blue-500/10' : ''
                   }`}>
                     <MessageBubble message={msg} messages={messages} isLast={isLastAssistant} />
