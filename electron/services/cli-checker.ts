@@ -12,8 +12,10 @@ function getExpandedEnv(): Record<string, string> {
   for (const [k, v] of Object.entries(process.env)) {
     if (v !== undefined) env[k] = v
   }
-  const home = process.env.HOME || ''
-  env.PATH = `/usr/local/bin:/opt/homebrew/bin:${home}/.local/bin:${env.PATH || ''}`
+  if (process.platform !== 'win32') {
+    const home = process.env.HOME || ''
+    env.PATH = `/usr/local/bin:/opt/homebrew/bin:${home}/.local/bin:${env.PATH || ''}`
+  }
   return env
 }
 
@@ -88,7 +90,8 @@ export class CliChecker {
       let proc: ChildProcess
 
       if (process.platform === 'win32') {
-        proc = spawn('powershell', ['-NoProfile', '-Command',
+        const psPath = `${process.env.SYSTEMROOT || 'C:\\Windows'}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`
+        proc = spawn(psPath, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
           'irm https://claude.ai/install.ps1 | iex'], { env, stdio: ['ignore', 'pipe', 'pipe'] })
       } else {
         proc = spawn('bash', ['-c',
