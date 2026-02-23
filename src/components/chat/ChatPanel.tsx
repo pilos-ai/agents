@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useVirtualizer } from '@tanstack/react-virtual'
 import { useConversationStore } from '../../store/useConversationStore'
 import { useProjectStore } from '../../store/useProjectStore'
 import { AGENT_COLORS } from '../../data/agent-templates'
@@ -8,6 +7,8 @@ import { StreamingText } from './StreamingText'
 import { InputBar } from './InputBar'
 import { PermissionBanner } from './PermissionBanner'
 import { ThinkingBackground } from './ThinkingBackground'
+
+const PAGE_SIZE = 100
 
 export function ChatPanel() {
   const messages = useConversationStore((s) => s.messages)
@@ -20,35 +21,36 @@ export function ChatPanel() {
   const activeTab = openProjects.find((p) => p.projectPath === activeProjectPath)
   const scrollRef = useRef<HTMLDivElement>(null)
   const isAtBottom = useRef(true)
-  const prevMessageCount = useRef(0)
-  const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null)
+  const [highlightedId, setHighlightedId] = useState<number | null>(null)
+  const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+  const pendingScrollId = useRef<number | null>(null)
 
-  const virtualizer = useVirtualizer({
-    count: messages.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => 92,
-    overscan: 8,
-  })
+  // Windowed rendering: show last N messages, expand on demand
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
-  // Re-measure all items when messages change content (tool results arriving, images loading, etc.)
+  // Reset visible window when switching conversations
   useEffect(() => {
-    if (messages.length > 0) {
-      // When a new message arrives, measure from that index onward
-      if (messages.length !== prevMessageCount.current) {
-        prevMessageCount.current = messages.length
-        virtualizer.measure()
+    setVisibleCount(PAGE_SIZE)
+    messageRefs.current.clear()
+    pendingScrollId.current = null
+  }, [activeConversationId])
+
+  const hiddenCount = Math.max(0, messages.length - visibleCount)
+  const visibleMessages = hiddenCount > 0 ? messages.slice(hiddenCount) : messages
+
+  const loadMore = useCallback(() => {
+    if (!scrollRef.current) return
+    // Remember scroll position relative to bottom so content stays in place
+    const el = scrollRef.current
+    const distFromBottom = el.scrollHeight - el.scrollTop
+    setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, messages.length))
+    // Restore scroll position after new messages render
+    requestAnimationFrame(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight - distFromBottom
       }
-    }
-  }, [messages, virtualizer])
-
-  // Re-measure periodically during streaming to account for growing content
-  useEffect(() => {
-    if (!streaming.isStreaming) return
-    const interval = setInterval(() => {
-      virtualizer.measure()
-    }, 500)
-    return () => clearInterval(interval)
-  }, [streaming.isStreaming, virtualizer])
+    })
+  }, [messages.length])
 
   const handleScroll = useCallback(() => {
     if (!scrollRef.current) return
@@ -57,19 +59,12 @@ export function ChatPanel() {
   }, [])
 
   const scrollToBottom = useCallback(() => {
-    if (messages.length > 0) {
-      // Use virtualizer API for reliable scroll positioning
-      virtualizer.scrollToIndex(messages.length - 1, { align: 'end' })
-      // Double rAF to ensure DOM has updated with streaming content below the virtual list
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-          }
-        })
-      })
-    }
-  }, [messages.length, virtualizer])
+    requestAnimationFrame(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      }
+    })
+  }, [])
 
   // Auto-scroll when new messages arrive or streaming updates (only if at bottom)
   useEffect(() => {
@@ -78,17 +73,46 @@ export function ChatPanel() {
     }
   }, [messages.length, streaming.isStreaming, streaming.text, streaming.thinking, streaming.contentBlocks, scrollToBottom])
 
-  // Scroll to a specific message (for reply references and search results)
+  // Phase 1: When scrollToMessageId is set, expand the window if needed and queue the scroll
   useEffect(() => {
     if (scrollToMessageId === null) return
-    const index = messages.findIndex((m) => m.id === scrollToMessageId)
-    if (index >= 0) {
-      virtualizer.scrollToIndex(index, { align: 'center' })
-      setHighlightedIndex(index)
-      setTimeout(() => setHighlightedIndex(null), 1500)
-    }
+    pendingScrollId.current = scrollToMessageId
     setScrollToMessageId(null)
-  }, [scrollToMessageId, messages, virtualizer, setScrollToMessageId])
+
+    // Expand visible window if the target message is currently hidden
+    const targetIndex = messages.findIndex((m) => m.id === scrollToMessageId)
+    if (targetIndex >= 0 && targetIndex < hiddenCount) {
+      setVisibleCount(messages.length - targetIndex)
+      // The re-render from setVisibleCount will trigger Phase 2 via visibleMessages change
+    } else {
+      // Already visible — scroll immediately
+      requestAnimationFrame(() => {
+        const el = messageRefs.current.get(scrollToMessageId)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          setHighlightedId(scrollToMessageId)
+          setTimeout(() => setHighlightedId(null), 1500)
+        }
+        pendingScrollId.current = null
+      })
+    }
+  }, [scrollToMessageId, setScrollToMessageId, messages, hiddenCount])
+
+  // Phase 2: After window expansion renders, scroll to the pending target
+  useEffect(() => {
+    if (pendingScrollId.current === null) return
+    const targetId = pendingScrollId.current
+    // Check if the element is now in the DOM
+    requestAnimationFrame(() => {
+      const el = messageRefs.current.get(targetId)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        setHighlightedId(targetId)
+        setTimeout(() => setHighlightedId(null), 1500)
+        pendingScrollId.current = null
+      }
+    })
+  }, [visibleCount])
 
   if (!activeConversationId) {
     return (
@@ -111,31 +135,34 @@ export function ChatPanel() {
       <div className="relative flex-1 min-h-0">
         <ThinkingBackground />
         <div ref={scrollRef} onScroll={handleScroll} className="relative z-[1] h-full overflow-y-auto px-4 py-3">
-          <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
-            {virtualizer.getVirtualItems().map((virtualRow) => {
-              const msg = messages[virtualRow.index]
+          {/* Load earlier messages button */}
+          {hiddenCount > 0 && (
+            <button
+              onClick={loadMore}
+              className="w-full py-2 mb-3 text-xs text-neutral-400 hover:text-blue-400 transition-colors rounded-lg bg-neutral-800/40 hover:bg-neutral-800/60 cursor-pointer"
+            >
+              Load {Math.min(PAGE_SIZE, hiddenCount)} earlier messages ({hiddenCount} hidden)
+            </button>
+          )}
+
+          <div className="space-y-3">
+            {visibleMessages.map((msg, i) => {
+              const globalIndex = hiddenCount + i
               const isLastAssistant =
                 msg.role === 'assistant' &&
                 !streaming.isStreaming &&
-                virtualRow.index === messages.length - 1
+                globalIndex === messages.length - 1
               return (
                 <div
-                  key={`msg-${virtualRow.index}-${msg.timestamp}`}
-                  data-index={virtualRow.index}
-                  ref={virtualizer.measureElement}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    transform: `translateY(${virtualRow.start}px)`,
+                  key={msg.id || `msg-${globalIndex}-${msg.timestamp}`}
+                  ref={(el) => {
+                    if (el && msg.id) messageRefs.current.set(msg.id, el)
                   }}
+                  className={`rounded-lg transition-colors duration-700 ${
+                    highlightedId !== null && msg.id === highlightedId ? 'bg-blue-500/10' : ''
+                  }`}
                 >
-                  <div className={`pb-3 rounded-lg transition-colors duration-700 ${
-                    highlightedIndex === virtualRow.index ? 'bg-blue-500/10' : ''
-                  }`}>
-                    <MessageBubble message={msg} messages={messages} isLast={isLastAssistant} />
-                  </div>
+                  <MessageBubble message={msg} messages={messages} isLast={isLastAssistant} />
                 </div>
               )
             })}
@@ -153,7 +180,7 @@ export function ChatPanel() {
             if (!streaming.text && !streaming.thinking && hasToolActivity) return null
 
             return (
-              <div className="flex flex-col items-start space-y-1">
+              <div className="flex flex-col items-start space-y-1 mt-3">
                 {streamingAgent && (
                   <div className="flex items-center gap-1.5 mb-1 ml-1">
                     <span className="text-base">{streamingAgent.emoji}</span>
