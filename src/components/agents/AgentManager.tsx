@@ -163,7 +163,7 @@ export function AgentManager({ agents, onSetAgents, onAddAgent, onRemoveAgent, o
 
       {/* Current agents */}
       {agents.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
           {agents.map((agent) => {
             const colors = AGENT_COLORS[agent.color] || AGENT_COLORS.blue
             return (
