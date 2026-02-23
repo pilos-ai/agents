@@ -4,6 +4,7 @@ import { useAppStore } from '../../store/useAppStore'
 import type { AppView } from '../../store/useAppStore'
 import { useProjectStore } from '../../store/useProjectStore'
 import { useLicenseStore } from '../../store/useLicenseStore'
+import { useSearchStore } from '../../store/useSearchStore'
 import { api } from '../../api'
 
 interface ViewTab {
@@ -169,12 +170,23 @@ export function Sidebar() {
       {/* Header */}
       <div className="p-3 flex items-center gap-2">
         {activeView === 'chat' ? (
+          <>
           <button
             onClick={() => createConversation()}
             className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors"
           >
             + New Chat
           </button>
+          <button
+            onClick={() => useSearchStore.getState().open()}
+            className="p-1.5 rounded-md text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+            title="Search messages (Cmd+Shift+F)"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </button>
+          </>
         ) : activeView === 'stories' ? (
           <>
             <span className="flex-1 text-xs font-medium text-neutral-300">Stories ({storyCount})</span>

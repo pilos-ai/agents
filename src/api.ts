@@ -30,6 +30,8 @@ const stubAPI: ElectronAPI = {
     delete: noopAsync,
     getMessages: () => Promise.resolve([]),
     saveMessage: noopAsync,
+    getMessage: () => Promise.resolve(null),
+    searchMessages: () => Promise.resolve({ total: 0, messages: [] }),
   },
   projects: {
     getRecent: () => Promise.resolve([]),

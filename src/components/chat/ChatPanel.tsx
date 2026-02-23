@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useConversationStore } from '../../store/useConversationStore'
 import { useProjectStore } from '../../store/useProjectStore'
@@ -13,18 +13,22 @@ export function ChatPanel() {
   const messages = useConversationStore((s) => s.messages)
   const streaming = useConversationStore((s) => s.streaming)
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
+  const scrollToMessageId = useConversationStore((s) => s.scrollToMessageId)
+  const setScrollToMessageId = useConversationStore((s) => s.setScrollToMessageId)
   const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
   const openProjects = useProjectStore((s) => s.openProjects)
   const activeTab = openProjects.find((p) => p.projectPath === activeProjectPath)
   const scrollRef = useRef<HTMLDivElement>(null)
   const isAtBottom = useRef(true)
   const prevMessageCount = useRef(0)
+  const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null)
 
   const virtualizer = useVirtualizer({
     count: messages.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 150,
+    estimateSize: () => 80,
     overscan: 8,
+    gap: 12,
   })
 
   // Re-measure all items when messages change content (tool results arriving, images loading, etc.)
@@ -50,18 +54,20 @@ export function ChatPanel() {
   const handleScroll = useCallback(() => {
     if (!scrollRef.current) return
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
-    isAtBottom.current = scrollHeight - scrollTop - clientHeight < 80
+    isAtBottom.current = scrollHeight - scrollTop - clientHeight < 150
   }, [])
 
   const scrollToBottom = useCallback(() => {
     if (messages.length > 0) {
       // Use virtualizer API for reliable scroll positioning
       virtualizer.scrollToIndex(messages.length - 1, { align: 'end' })
-      // Follow up with a raw scroll to truly hit the bottom (for streaming content below the virtual list)
+      // Double rAF to ensure DOM has updated with streaming content below the virtual list
       requestAnimationFrame(() => {
-        if (scrollRef.current) {
-          scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-        }
+        requestAnimationFrame(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+          }
+        })
       })
     }
   }, [messages.length, virtualizer])
@@ -71,7 +77,19 @@ export function ChatPanel() {
     if (isAtBottom.current) {
       scrollToBottom()
     }
-  }, [messages.length, streaming.text, streaming.thinking, streaming.contentBlocks, scrollToBottom])
+  }, [messages.length, streaming.isStreaming, streaming.text, streaming.thinking, streaming.contentBlocks, scrollToBottom])
+
+  // Scroll to a specific message (for reply references and search results)
+  useEffect(() => {
+    if (scrollToMessageId === null) return
+    const index = messages.findIndex((m) => m.id === scrollToMessageId)
+    if (index >= 0) {
+      virtualizer.scrollToIndex(index, { align: 'center' })
+      setHighlightedIndex(index)
+      setTimeout(() => setHighlightedIndex(null), 1500)
+    }
+    setScrollToMessageId(null)
+  }, [scrollToMessageId, messages, virtualizer, setScrollToMessageId])
 
   if (!activeConversationId) {
     return (
@@ -114,8 +132,10 @@ export function ChatPanel() {
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
                 >
-                  <div className="pb-3">
-                    <MessageBubble message={msg} isLast={isLastAssistant} />
+                  <div className={`rounded-lg transition-colors duration-700 ${
+                    highlightedIndex === virtualRow.index ? 'bg-blue-500/10' : ''
+                  }`}>
+                    <MessageBubble message={msg} messages={messages} isLast={isLastAssistant} />
                   </div>
                 </div>
               )

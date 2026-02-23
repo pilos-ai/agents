@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { useConversationStore } from '../../store/useConversationStore'
 import { useProjectStore } from '../../store/useProjectStore'
+import { ReplyPreview } from './ReplyPreview'
 import type { ImageAttachment } from '../../types'
 
 const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
@@ -129,6 +130,9 @@ export function InputBar() {
       onDrop={handleDrop}
       onDragOver={handleDragOver}
     >
+      {/* Reply preview */}
+      <ReplyPreview />
+
       {/* Image previews */}
       {images.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-2">

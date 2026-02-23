@@ -132,6 +132,7 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
       agentEmoji: r.agent_emoji,
       agentColor: r.agent_color,
       contentBlocks: r.content_blocks ? JSON.parse(r.content_blocks) : undefined,
+      replyToId: r.reply_to_id ?? undefined,
       timestamp: new Date(r.created_at).getTime(),
     }))
   })
@@ -149,7 +150,45 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
       agent_emoji: message.agentEmoji,
       agent_color: message.agentColor,
       content_blocks: message.contentBlocks ? JSON.stringify(message.contentBlocks) : null,
+      reply_to_id: message.replyToId ?? null,
     })
+  })
+
+  ipcMain.handle('conversations:getMessage', async (_event, messageId: number) => {
+    const r = database.getMessage(messageId)
+    if (!r) return null
+    return {
+      id: r.id,
+      role: r.role,
+      type: r.type,
+      content: r.content,
+      toolName: r.tool_name,
+      toolInput: r.tool_input,
+      toolResult: r.tool_result,
+      agentName: r.agent_name,
+      agentEmoji: r.agent_emoji,
+      agentColor: r.agent_color,
+      contentBlocks: r.content_blocks ? JSON.parse(r.content_blocks) : undefined,
+      replyToId: r.reply_to_id ?? undefined,
+      timestamp: new Date(r.created_at).getTime(),
+    }
+  })
+
+  ipcMain.handle('conversations:searchMessages', async (_event, query: string, options: { conversationId?: string; projectPath?: string; limit?: number; offset?: number }) => {
+    const result = database.searchMessages(query, options)
+    return {
+      total: result.total,
+      messages: result.messages.map((r) => ({
+        id: r.id as number,
+        conversationId: r.conversation_id as string,
+        conversationTitle: r.conversation_title as string,
+        role: r.role as string,
+        type: r.type as string,
+        content: r.content as string,
+        snippet: r.snippet as string,
+        timestamp: new Date(r.created_at as string).getTime(),
+      })),
+    }
   })
 
   // ── Terminal ──

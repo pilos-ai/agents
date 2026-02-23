@@ -2,10 +2,12 @@ import { useState, useEffect, type ComponentType } from 'react'
 import { Sidebar } from './Sidebar'
 import { ResizablePanel } from './ResizablePanel'
 import { ChatPanel } from '../chat/ChatPanel'
+import { SearchPanel } from '../chat/SearchPanel'
 import { TerminalPanel } from '../terminal/TerminalPanel'
 import { SessionInfoPanel } from '../session/SessionInfoPanel'
 import { useAppStore } from '../../store/useAppStore'
 import { useLicenseStore } from '../../store/useLicenseStore'
+import { useSearchStore } from '../../store/useSearchStore'
 
 // Lazily loaded PM components
 let PmStoriesPanel: ComponentType | null = null
@@ -47,6 +49,23 @@ export function AppShell() {
     }
   }, [activeView, isPro])
 
+  // Cmd+Shift+F to open search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'f') {
+        e.preventDefault()
+        const store = useSearchStore.getState()
+        if (store.isOpen) {
+          store.close()
+        } else {
+          store.open()
+        }
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
   const renderMainPanel = () => {
     switch (activeView) {
       case 'stories': return PmStoriesPanel ? <PmStoriesPanel /> : null
@@ -58,6 +77,9 @@ export function AppShell() {
 
   return (
     <div className="flex flex-1 overflow-hidden">
+      {/* Search overlay */}
+      <SearchPanel />
+
       {/* Sidebar */}
       <div style={{ width: sidebarWidth, minWidth: 180, maxWidth: 360 }} className="flex-shrink-0">
         <Sidebar />

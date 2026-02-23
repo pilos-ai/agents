@@ -121,7 +121,24 @@ export interface ConversationMessage {
   agentName?: string
   agentEmoji?: string
   agentColor?: string
+  replyToId?: number
   timestamp: number
+}
+
+export interface MessageSearchResult {
+  id: number
+  conversationId: string
+  conversationTitle: string
+  role: string
+  type: string
+  content: string
+  snippet: string
+  timestamp: number
+}
+
+export interface SearchResults {
+  total: number
+  messages: MessageSearchResult[]
 }
 
 export interface Conversation {
@@ -411,6 +428,8 @@ export interface ElectronAPI {
     delete: (id: string) => Promise<void>
     getMessages: (conversationId: string) => Promise<ConversationMessage[]>
     saveMessage: (conversationId: string, message: Partial<ConversationMessage>) => Promise<ConversationMessage>
+    getMessage: (messageId: number) => Promise<ConversationMessage | null>
+    searchMessages: (query: string, options: { conversationId?: string; projectPath?: string; limit?: number; offset?: number }) => Promise<SearchResults>
   }
   projects: {
     getRecent: () => Promise<Project[]>

@@ -6,7 +6,9 @@ import { ToolResultBlock } from './ToolResultBlock'
 import { ThinkingBlock } from './ThinkingBlock'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { OptionButtons, detectOptions } from './OptionButtons'
+import { MessageReference } from './MessageReference'
 import { useProjectStore } from '../../store/useProjectStore'
+import { useConversationStore } from '../../store/useConversationStore'
 
 // Lazily loaded PM story detection
 let pmStoryModule: {
@@ -32,10 +34,27 @@ function loadPmStory() {
 
 interface Props {
   message: ConversationMessage
+  messages: ConversationMessage[]
   isLast?: boolean
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, isLast }: Props) {
+function ReplyButton({ message }: { message: ConversationMessage }) {
+  const setReplyTo = useConversationStore((s) => s.setReplyTo)
+  if (message.type !== 'text' || !message.content) return null
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); setReplyTo(message) }}
+      className="absolute top-1.5 right-1.5 opacity-0 group-hover/bubble:opacity-100 p-1 rounded bg-neutral-600/80 hover:bg-neutral-500/80 text-neutral-300 transition-opacity cursor-pointer"
+      title="Reply"
+    >
+      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+      </svg>
+    </button>
+  )
+}
+
+export const MessageBubble = memo(function MessageBubble({ message, messages, isLast }: Props) {
   const isUser = message.role === 'user'
   const [, forceUpdate] = useState(0)
 
@@ -64,15 +83,17 @@ export const MessageBubble = memo(function MessageBubble({ message, isLast }: Pr
 
     return (
       <div className="flex flex-col items-start">
+        {message.replyToId && <MessageReference replyToId={message.replyToId} messages={messages} />}
         <div className="flex items-center gap-1.5 mb-1 ml-1">
           <span className="text-base">{message.agentEmoji}</span>
           <span className={`text-xs font-semibold ${colors.text}`}>{message.agentName}</span>
         </div>
         {message.content && (
-          <div className={`max-w-[85%] rounded-lg px-4 py-2.5 ${colors.bgLight} border-l-2 ${colors.border} text-neutral-100`}>
+          <div className={`group/bubble relative max-w-[85%] rounded-lg px-4 py-2.5 ${colors.bgLight} border-l-2 ${colors.border} text-neutral-100`}>
             <div className="markdown-content text-sm">
               <MarkdownRenderer content={message.content} />
             </div>
+            <ReplyButton message={message} />
           </div>
         )}
         {/* Render tool blocks (Edit, Write, Bash, etc.) after agent text */}
@@ -90,6 +111,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isLast }: Pr
   if (message.contentBlocks && message.contentBlocks.length > 0) {
     return (
       <div className="space-y-2">
+        {message.replyToId && <MessageReference replyToId={message.replyToId} messages={messages} />}
         {message.contentBlocks.map((block, i) => renderContentBlock(block, i, isLast && i === message.contentBlocks!.length - 1))}
       </div>
     )
@@ -98,8 +120,9 @@ export const MessageBubble = memo(function MessageBubble({ message, isLast }: Pr
   // Simple text message
   return (
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+      {message.replyToId && <MessageReference replyToId={message.replyToId} messages={messages} />}
       <div
-        className={`max-w-[85%] rounded-lg px-4 py-2.5 ${
+        className={`group/bubble relative max-w-[85%] rounded-lg px-4 py-2.5 ${
           isUser
             ? 'bg-blue-600 text-white'
             : 'bg-neutral-800/60 text-neutral-100'
@@ -125,6 +148,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isLast }: Pr
             <MarkdownRenderer content={message.content} />
           </div>
         )}
+        <ReplyButton message={message} />
       </div>
       {storyBlocks.length > 0 && storyBlocks.map((block, i) => (
         <SaveStoryButton key={i} rawBlock={block} />

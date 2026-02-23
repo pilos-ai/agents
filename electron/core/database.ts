@@ -37,6 +37,7 @@ export interface Message {
   agent_emoji?: string | null
   agent_color?: string | null
   content_blocks?: string | null  // JSON-encoded ContentBlock[]
+  reply_to_id?: number | null
   created_at: string
 }
 
@@ -177,6 +178,38 @@ export class Database {
     if (!msgColNames.has('content_blocks')) {
       this.db!.exec("ALTER TABLE messages ADD COLUMN content_blocks TEXT")
     }
+    if (!msgColNames.has('reply_to_id')) {
+      this.db!.exec("ALTER TABLE messages ADD COLUMN reply_to_id INTEGER REFERENCES messages(id) ON DELETE SET NULL")
+    }
+
+    // FTS5 virtual table for full-text message search (external content mode)
+    this.db!.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+        content, content='messages', content_rowid='id', tokenize='unicode61'
+      );
+
+      CREATE TRIGGER IF NOT EXISTS messages_fts_insert AFTER INSERT ON messages BEGIN
+        INSERT INTO messages_fts(rowid, content) VALUES (new.id, new.content);
+      END;
+      CREATE TRIGGER IF NOT EXISTS messages_fts_delete AFTER DELETE ON messages BEGIN
+        INSERT INTO messages_fts(messages_fts, rowid, content) VALUES ('delete', old.id, old.content);
+      END;
+      CREATE TRIGGER IF NOT EXISTS messages_fts_update AFTER UPDATE OF content ON messages BEGIN
+        INSERT INTO messages_fts(messages_fts, rowid, content) VALUES ('delete', old.id, old.content);
+        INSERT INTO messages_fts(rowid, content) VALUES (new.id, new.content);
+      END;
+    `)
+
+    // One-time FTS rebuild if FTS is empty but messages exist
+    try {
+      const ftsCount = (this.db!.prepare('SELECT COUNT(*) as count FROM messages_fts').get() as { count: number }).count
+      const msgCount = (this.db!.prepare('SELECT COUNT(*) as count FROM messages').get() as { count: number }).count
+      if (ftsCount === 0 && msgCount > 0) {
+        this.db!.exec("INSERT INTO messages_fts(messages_fts) VALUES('rebuild')")
+      }
+    } catch (err) {
+      console.warn('FTS rebuild skipped:', err)
+    }
   }
 
   listConversations(projectPath?: string): Conversation[] {
@@ -235,8 +268,8 @@ export class Database {
 
   saveMessage(conversationId: string, message: Partial<Message>): Message {
     const result = this.db!.prepare(`
-      INSERT INTO messages (conversation_id, role, type, content, tool_name, tool_input, tool_result, agent_name, agent_emoji, agent_color, content_blocks)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO messages (conversation_id, role, type, content, tool_name, tool_input, tool_result, agent_name, agent_emoji, agent_color, content_blocks, reply_to_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       conversationId,
       message.role || 'assistant',
@@ -248,7 +281,8 @@ export class Database {
       message.agent_name || null,
       message.agent_emoji || null,
       message.agent_color || null,
-      message.content_blocks || null
+      message.content_blocks || null,
+      message.reply_to_id ?? null
     )
 
     // Touch conversation updated_at
@@ -257,6 +291,123 @@ export class Database {
     ).run(conversationId)
 
     return this.db!.prepare('SELECT * FROM messages WHERE id = ?').get(result.lastInsertRowid) as unknown as Message
+  }
+
+  getMessage(id: number): Message | undefined {
+    return this.db!.prepare(
+      'SELECT * FROM messages WHERE id = ?'
+    ).get(id) as unknown as Message | undefined
+  }
+
+  searchMessages(query: string, options: { conversationId?: string; projectPath?: string; limit?: number; offset?: number } = {}): { total: number; messages: Array<Record<string, unknown>> } {
+    const limit = options.limit || 50
+    const offset = options.offset || 0
+
+    // Try FTS5 first, fall back to LIKE if FTS is empty or errors
+    try {
+      const result = this._searchFts(query, options, limit, offset)
+      if (result.total > 0) return result
+    } catch {
+      // FTS5 not available or query error — fall through to LIKE
+    }
+
+    return this._searchLike(query, options, limit, offset)
+  }
+
+  private _searchFts(query: string, options: { conversationId?: string; projectPath?: string }, limit: number, offset: number): { total: number; messages: Array<Record<string, unknown>> } {
+    // Escape query for FTS5: wrap each term in double quotes, add * for prefix matching
+    const escaped = query.trim().split(/\s+/).map(w => `"${w.replace(/"/g, '""')}"*`).join(' ')
+
+    let whereClause = ''
+    const params: unknown[] = [escaped]
+
+    if (options.conversationId) {
+      whereClause = 'AND m.conversation_id = ?'
+      params.push(options.conversationId)
+    } else if (options.projectPath) {
+      whereClause = 'AND c.project_path = ?'
+      params.push(options.projectPath)
+    }
+
+    const countRow = this.db!.prepare(`
+      SELECT COUNT(*) as count
+      FROM messages_fts f
+      JOIN messages m ON m.id = f.rowid
+      JOIN conversations c ON c.id = m.conversation_id
+      WHERE messages_fts MATCH ? ${whereClause}
+    `).get(...params) as { count: number }
+
+    const rows = this.db!.prepare(`
+      SELECT m.id, m.conversation_id, m.role, m.type, m.content, m.created_at,
+             c.title as conversation_title,
+             snippet(messages_fts, 0, '<mark>', '</mark>', '...', 40) as snippet
+      FROM messages_fts f
+      JOIN messages m ON m.id = f.rowid
+      JOIN conversations c ON c.id = m.conversation_id
+      WHERE messages_fts MATCH ? ${whereClause}
+      ORDER BY f.rank
+      LIMIT ? OFFSET ?
+    `).all(...params, limit, offset) as Array<Record<string, unknown>>
+
+    return { total: countRow.count, messages: rows }
+  }
+
+  private _searchLike(query: string, options: { conversationId?: string; projectPath?: string }, limit: number, offset: number): { total: number; messages: Array<Record<string, unknown>> } {
+    const likePattern = `%${query.trim()}%`
+
+    let whereClause = ''
+    const params: unknown[] = [likePattern]
+
+    if (options.conversationId) {
+      whereClause = 'AND m.conversation_id = ?'
+      params.push(options.conversationId)
+    } else if (options.projectPath) {
+      whereClause = 'AND c.project_path = ?'
+      params.push(options.projectPath)
+    }
+
+    const countRow = this.db!.prepare(`
+      SELECT COUNT(*) as count
+      FROM messages m
+      JOIN conversations c ON c.id = m.conversation_id
+      WHERE m.content LIKE ? ${whereClause}
+    `).get(...params) as { count: number }
+
+    const rows = this.db!.prepare(`
+      SELECT m.id, m.conversation_id, m.role, m.type, m.content, m.created_at,
+             c.title as conversation_title,
+             m.content as snippet
+      FROM messages m
+      JOIN conversations c ON c.id = m.conversation_id
+      WHERE m.content LIKE ? ${whereClause}
+      ORDER BY m.created_at DESC
+      LIMIT ? OFFSET ?
+    `).all(...params, limit, offset) as Array<Record<string, unknown>>
+
+    // Add <mark> highlights client-side for LIKE results
+    const lowerQuery = query.trim().toLowerCase()
+    for (const row of rows) {
+      const content = String(row.snippet || '')
+      // Find the match position and extract a snippet around it
+      const lowerContent = content.toLowerCase()
+      const matchIdx = lowerContent.indexOf(lowerQuery)
+      if (matchIdx >= 0) {
+        const start = Math.max(0, matchIdx - 60)
+        const end = Math.min(content.length, matchIdx + lowerQuery.length + 60)
+        const before = (start > 0 ? '...' : '') + this._escapeHtml(content.slice(start, matchIdx))
+        const match = '<mark>' + this._escapeHtml(content.slice(matchIdx, matchIdx + lowerQuery.length)) + '</mark>'
+        const after = this._escapeHtml(content.slice(matchIdx + lowerQuery.length, end)) + (end < content.length ? '...' : '')
+        row.snippet = before + match + after
+      } else {
+        row.snippet = this._escapeHtml(content.slice(0, 120)) + (content.length > 120 ? '...' : '')
+      }
+    }
+
+    return { total: countRow.count, messages: rows }
+  }
+
+  private _escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   }
 
   // ── Stories ──

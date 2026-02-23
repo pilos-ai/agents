@@ -38,6 +38,8 @@ interface ConversationStore {
   askUserQuestion: AskUserQuestionData | null
   answeredQuestionIds: Set<string>
   exitPlanMode: ExitPlanModeData | null
+  replyToMessage: ConversationMessage | null
+  scrollToMessageId: number | null
 
   // Actions
   loadConversations: (projectPath?: string) => Promise<void>
@@ -52,6 +54,8 @@ interface ConversationStore {
   handleClaudeEvent: (event: ClaudeEvent) => void
   addMessage: (message: ConversationMessage) => void
   resetStreaming: () => void
+  setReplyTo: (msg: ConversationMessage | null) => void
+  setScrollToMessageId: (id: number | null) => void
 }
 
 const emptyStreaming: StreamingState = {
@@ -123,6 +127,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   askUserQuestion: null,
   answeredQuestionIds: new Set(),
   exitPlanMode: null,
+  replyToMessage: null,
+  scrollToMessageId: null,
 
   loadConversations: async (projectPath?: string) => {
     const conversations = await api.conversations.list(projectPath)
@@ -130,7 +136,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   },
 
   setActiveConversation: async (id) => {
-    set({ activeConversationId: id, messages: [], streaming: { ...emptyStreaming }, hasActiveSession: false })
+    set({ activeConversationId: id, messages: [], streaming: { ...emptyStreaming }, hasActiveSession: false, replyToMessage: null, scrollToMessageId: null })
     if (id) {
       const loaded = await api.conversations.getMessages(id)
 
@@ -189,25 +195,33 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       conversationId = await get().createConversation(text.slice(0, 50))
     }
 
+    // Capture and clear reply-to state
+    const replyTo = get().replyToMessage
+    const replyToId = replyTo?.id
+    set({ replyToMessage: null })
+
     // Restore any friendly agent names back to hex IDs for Claude CLI
     const cliText = restoreAgentIds(text)
 
-    // Add user message (with image thumbnails for display — keep friendly names)
+    // Save user message to DB first to get the assigned ID
+    const saved = await api.conversations.saveMessage(conversationId, {
+      role: 'user',
+      type: 'text',
+      content: text,
+      replyToId: replyToId,
+    })
+
+    // Add user message with DB-assigned ID
     const userMsg: ConversationMessage = {
+      id: saved.id,
       role: 'user',
       type: 'text',
       content: text,
       images: images,
+      replyToId: replyToId,
       timestamp: Date.now(),
     }
     set((s) => ({ messages: [...s.messages, userMsg] }))
-
-    // Save to DB
-    await api.conversations.saveMessage(conversationId, {
-      role: 'user',
-      type: 'text',
-      content: text,
-    })
 
     // Start or send to Claude
     set({ isWaitingForResponse: true, streaming: { ...emptyStreaming, isStreaming: true } })
@@ -453,18 +467,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
           }
 
           get().addMessage(toolMsg)
-
-          if (convId) {
-            api.conversations.saveMessage(convId, {
-              role: toolMsg.role,
-              type: toolMsg.type,
-              content: toolMsg.content,
-              contentBlocks: toolMsg.contentBlocks,
-              agentName: toolMsg.agentName,
-              agentEmoji: toolMsg.agentEmoji,
-              agentColor: toolMsg.agentColor,
-            })
-          }
         }
 
         // Also mark streaming as active
@@ -615,19 +617,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
           }
 
           get().addMessage(msg)
-
-          // Save to DB immediately
-          if (convId) {
-            api.conversations.saveMessage(convId, {
-              role: msg.role,
-              type: msg.type,
-              content: msg.content,
-              contentBlocks: msg.contentBlocks,
-              agentName: msg.agentName,
-              agentEmoji: msg.agentEmoji,
-              agentColor: msg.agentColor,
-            })
-          }
         }
         break
       }
@@ -673,18 +662,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
           }
 
           get().addMessage(resultMsg)
-
-          if (convId) {
-            api.conversations.saveMessage(convId, {
-              role: resultMsg.role,
-              type: resultMsg.type,
-              content: resultMsg.content,
-              contentBlocks: resultMsg.contentBlocks,
-              agentName: resultMsg.agentName,
-              agentEmoji: resultMsg.agentEmoji,
-              agentColor: resultMsg.agentColor,
-            })
-          }
         }
         break
       }
@@ -717,17 +694,18 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
           if (tab?.mode === 'team' && tab.agents.length > 0) {
             // In team mode, parse agent segments and create per-agent text messages
             const segments = parseAgentSegments(finalText, tab.agents)
-            const agentMessages: ConversationMessage[] = segments.map((seg) => ({
-              role: 'assistant' as const,
-              type: 'text' as const,
-              content: seg.text,
-              agentId: seg.agentId,
-              agentName: seg.agentName || undefined,
-              agentEmoji: seg.agentEmoji,
-              agentColor: seg.agentColor,
-              timestamp: Date.now(),
-            }))
-            set((s) => ({ messages: [...s.messages, ...agentMessages] }))
+            for (const seg of segments) {
+              get().addMessage({
+                role: 'assistant',
+                type: 'text',
+                content: seg.text,
+                agentId: seg.agentId,
+                agentName: seg.agentName || undefined,
+                agentEmoji: seg.agentEmoji,
+                agentColor: seg.agentColor,
+                timestamp: Date.now(),
+              })
+            }
           } else {
             // Solo mode — add text as a message
             get().addMessage({
@@ -736,29 +714,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
               content: finalText,
               timestamp: Date.now(),
             })
-          }
-
-          // Save text messages to DB (tool blocks already saved by content_block_stop)
-          if (activeConversationId) {
-            const msgs = get().messages
-            const toSave: ConversationMessage[] = []
-            for (let i = msgs.length - 1; i >= 0; i--) {
-              if (msgs[i].role === 'assistant' && msgs[i].type === 'text') {
-                toSave.unshift(msgs[i])
-              } else {
-                break
-              }
-            }
-            for (const m of toSave) {
-              api.conversations.saveMessage(activeConversationId, {
-                role: m.role,
-                type: m.type,
-                content: m.content,
-                agentName: m.agentName,
-                agentEmoji: m.agentEmoji,
-                agentColor: m.agentColor,
-              })
-            }
           }
         }
 
@@ -837,9 +792,38 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
   addMessage: (message) => {
     set((s) => ({ messages: [...s.messages, message] }))
+
+    // Save to DB in background and update in-memory message with the assigned ID
+    const convId = get().activeConversationId
+    if (convId) {
+      api.conversations.saveMessage(convId, {
+        role: message.role,
+        type: message.type,
+        content: message.content,
+        contentBlocks: message.contentBlocks,
+        agentName: message.agentName,
+        agentEmoji: message.agentEmoji,
+        agentColor: message.agentColor,
+        replyToId: message.replyToId,
+      }).then((saved) => {
+        if (saved?.id) {
+          set((s) => ({
+            messages: s.messages.map((m) => m === message ? { ...m, id: saved.id } : m),
+          }))
+        }
+      })
+    }
   },
 
   resetStreaming: () => {
     set({ streaming: { ...emptyStreaming } })
+  },
+
+  setReplyTo: (msg) => {
+    set({ replyToMessage: msg })
+  },
+
+  setScrollToMessageId: (id) => {
+    set({ scrollToMessageId: id })
   },
 }))

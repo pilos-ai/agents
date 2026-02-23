@@ -52,6 +52,10 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('conversations:getMessages', conversationId),
     saveMessage: (conversationId: string, message: Record<string, unknown>) =>
       ipcRenderer.invoke('conversations:saveMessage', conversationId, message),
+    getMessage: (messageId: number) =>
+      ipcRenderer.invoke('conversations:getMessage', messageId),
+    searchMessages: (query: string, options: Record<string, unknown>) =>
+      ipcRenderer.invoke('conversations:searchMessages', query, options),
   },
 
   // Projects
