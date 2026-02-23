@@ -1,9 +1,12 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron'
 import renderer from 'vite-plugin-electron-renderer'
 import path from 'path'
 import fs from 'fs'
+
+// Load .env values (including non-VITE_ prefixed) for use in electron builds
+const env = loadEnv('production', __dirname, '')
 
 // Detect which optional packages are present (submodules may not be checked out)
 const pmMcpServerPath = 'packages/pm/electron/jira-mcp-server.ts'
@@ -37,6 +40,10 @@ const electronEntries: Parameters<typeof electron>[0] = [
     entry: 'electron/main.ts',
     vite: {
       plugins: [optionalPackageStubs()],
+      define: {
+        'process.env.ATLASSIAN_CLIENT_ID': JSON.stringify(env.ATLASSIAN_CLIENT_ID || ''),
+        'process.env.ATLASSIAN_CLIENT_SECRET': JSON.stringify(env.ATLASSIAN_CLIENT_SECRET || ''),
+      },
       resolve: {
         alias: hasPmPackage
           ? { '@pilos/agents-pm': path.resolve(__dirname, 'packages/pm') }
