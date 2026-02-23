@@ -36,6 +36,7 @@ const electronEntries: Parameters<typeof electron>[0] = [
   {
     entry: 'electron/main.ts',
     vite: {
+      plugins: [optionalPackageStubs()],
       resolve: {
         alias: hasPmPackage
           ? { '@pilos/agents-pm': path.resolve(__dirname, 'packages/pm') }
@@ -57,7 +58,6 @@ const electronEntries: Parameters<typeof electron>[0] = [
             'child_process',
             'crypto',
             'url',
-            '@pilos/agents-pm/electron',
             'electron-updater',
           ],
         },
