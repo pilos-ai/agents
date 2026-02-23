@@ -39,7 +39,7 @@ export function AgentManager({ agents, onSetAgents, onAddAgent, onRemoveAgent, o
 
   const flags = useLicenseStore((s) => s.flags)
   const tier = useLicenseStore((s) => s.tier)
-  const atLimit = agents.length >= flags.maxAgents
+  const atLimit = Number.isFinite(flags.maxAgents) && agents.length >= flags.maxAgents
 
   const usedIds = new Set(agents.map((a) => a.id))
 
