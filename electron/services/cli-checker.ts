@@ -140,7 +140,6 @@ export class CliChecker {
       proc.stderr?.on('data', (chunk: Buffer) => {
         const text = stripAnsi(chunk.toString())
         this.send('cli:loginOutput', text)
-        this.tryOpenUrl(text)
       })
 
       proc.on('close', (code) => {
