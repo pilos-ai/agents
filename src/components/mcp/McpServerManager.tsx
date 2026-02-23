@@ -1,9 +1,10 @@
-import { useState } from 'react'
-import type { McpServer } from '../../types'
+import { useState, useEffect } from 'react'
+import type { McpServer, McpServerTemplate } from '../../types'
 import { MCP_SERVER_TEMPLATES, MCP_CATEGORIES } from '../../data/mcp-server-templates'
 import { McpServerEditModal } from './McpServerEditModal'
 import { useLicenseStore } from '../../store/useLicenseStore'
 import { ProBadge } from '../common/ProBadge'
+import { loadProModule } from '../../lib/pro'
 
 interface Props {
   servers: McpServer[]
@@ -17,15 +18,31 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
   const [showTemplatePicker, setShowTemplatePicker] = useState(false)
   const [editingServer, setEditingServer] = useState<McpServer | null>(null)
   const [showNewModal, setShowNewModal] = useState(false)
+  const [premiumTemplates, setPremiumTemplates] = useState<McpServerTemplate[]>([])
 
   const flags = useLicenseStore((s) => s.flags)
   const atLimit = servers.length >= flags.maxMcpServers
 
+  // Load premium templates for pro/teams users
+  useEffect(() => {
+    if (flags.tier !== 'pro' && flags.tier !== 'teams') {
+      setPremiumTemplates([])
+      return
+    }
+    loadProModule().then((pro) => {
+      if (!pro) return
+      const templates = pro.getPremiumMcpTemplates() as McpServerTemplate[]
+      setPremiumTemplates(templates)
+    })
+  }, [flags.tier])
+
+  const allTemplates = [...MCP_SERVER_TEMPLATES, ...premiumTemplates]
   const existingIds = new Set(servers.map((s) => s.id))
-  const availableTemplates = MCP_SERVER_TEMPLATES.filter((t) => !existingIds.has(t.id))
+  const availableTemplates = allTemplates.filter((t) => !existingIds.has(t.id))
+  const allCategories = Array.from(new Set([...MCP_CATEGORIES, ...premiumTemplates.map((t) => t.category)]))
 
   const handleTemplateAdd = (templateId: string) => {
-    const template = MCP_SERVER_TEMPLATES.find((t) => t.id === templateId)
+    const template = allTemplates.find((t) => t.id === templateId)
     if (!template) return
 
     // Templates with no required env vars — add directly
@@ -129,7 +146,7 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
       {/* Template picker */}
       {showTemplatePicker && (
         <div className="border border-neutral-700 rounded-lg p-3 space-y-3 bg-neutral-800/30">
-          {MCP_CATEGORIES.map((category) => {
+          {allCategories.map((category) => {
             const templates = availableTemplates.filter((t) => t.category === category)
             if (templates.length === 0) return null
             return (
