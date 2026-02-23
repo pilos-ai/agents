@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto'
 import { writeFile, readFile } from 'fs/promises'
 import { BrowserWindow } from 'electron'
 import { SettingsStore } from '../services/settings-store'
+import { getExpandedEnv, findClaudeBinary } from '../services/cli-checker'
 
 export interface ClaudeSessionOptions {
   prompt?: string
@@ -97,22 +98,19 @@ export class ClaudeProcess {
       args.push('--mcp-config', options.mcpConfigPath)
     }
 
-    // Strip all Claude Code env vars to allow nested sessions,
-    // and ensure PATH includes common CLI install locations
-    const env: Record<string, string> = {}
-    for (const [k, v] of Object.entries(process.env)) {
-      if (!k.startsWith('CLAUDE') && v !== undefined) {
-        env[k] = v
-      }
+    // Use expanded env with known CLI install dirs, strip Claude env vars
+    const env = getExpandedEnv()
+    for (const k of Object.keys(env)) {
+      if (k.startsWith('CLAUDE')) delete env[k]
     }
-    const home = process.env.HOME || ''
-    env.PATH = `/usr/local/bin:/opt/homebrew/bin:${home}/.local/bin:${env.PATH || ''}`
+
+    const claudeBin = findClaudeBinary()
 
     console.log(`[ClaudeProcess] Starting session ${sessionId} (permissionMode=${permissionMode})`)
-    console.log(`[ClaudeProcess] Args: claude ${args.join(' ')}`)
+    console.log(`[ClaudeProcess] Args: ${claudeBin} ${args.join(' ')}`)
     console.log(`[ClaudeProcess] CWD: ${cwd}`)
 
-    const proc = spawn('claude', args, {
+    const proc = spawn(claudeBin, args, {
       cwd,
       env,
       stdio: ['pipe', 'pipe', 'pipe'],

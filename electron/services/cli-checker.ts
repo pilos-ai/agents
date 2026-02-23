@@ -13,7 +13,7 @@ function stripAnsi(text: string): string {
   return text.replace(/\x1b\[[0-9;]*[A-Za-z]|\x1b\].*?(?:\x07|\x1b\\)/g, '')
 }
 
-function getExpandedEnv(): Record<string, string> {
+export function getExpandedEnv(): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(process.env)) {
     if (v !== undefined) env[k] = v
@@ -39,7 +39,7 @@ function getExpandedEnv(): Record<string, string> {
  * Find the claude binary by checking known install locations.
  * Returns the full path if found, otherwise just 'claude' to rely on PATH.
  */
-function findClaudeBinary(): string {
+export function findClaudeBinary(): string {
   const candidates: string[] = []
 
   if (process.platform === 'win32') {
@@ -75,6 +75,7 @@ function findClaudeBinary(): string {
 export class CliChecker {
   private mainWindow: BrowserWindow
   private claudePath: string = 'claude'
+  private openedUrls = new Set<string>()
 
   constructor(mainWindow: BrowserWindow) {
     this.mainWindow = mainWindow
@@ -198,7 +199,8 @@ export class CliChecker {
 
   private tryOpenUrl(text: string): void {
     const match = text.match(/https?:\/\/[^\s]+/)
-    if (match) {
+    if (match && !this.openedUrls.has(match[0])) {
+      this.openedUrls.add(match[0])
       shell.openExternal(match[0]).catch(() => {})
     }
   }
