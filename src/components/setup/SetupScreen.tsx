@@ -6,7 +6,7 @@ import type { CliInstallOutput } from '../../types'
 const isWindows = typeof navigator !== 'undefined' && /Win/i.test(navigator.platform || navigator.userAgent)
 
 const installCommand = isWindows
-  ? 'irm https://claude.ai/install.ps1 | iex'
+  ? 'curl -fsSL https://claude.ai/install.ps1 -o install.ps1 && powershell -File install.ps1 && del install.ps1'
   : 'curl -fsSL https://claude.ai/install.sh | bash'
 
 export function SetupScreen() {
