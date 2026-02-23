@@ -1,10 +1,11 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { registerIpcHandlers } from './ipc-handlers'
 import { SettingsStore } from './services/settings-store'
 import { setupMenu } from './menu'
 import { ensureGlobalClaudeConfig } from './services/claude-config'
+import { setupAutoUpdater, installUpdate } from './services/auto-updater'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -54,6 +55,10 @@ async function createWindow() {
   } catch (err) {
     console.error('Failed to register IPC handlers:', err)
   }
+
+  // Set up auto-updater
+  setupAutoUpdater(mainWindow)
+  ipcMain.handle('update:install', () => installUpdate())
 
   mainWindow.on('closed', () => {
     mainWindow = null

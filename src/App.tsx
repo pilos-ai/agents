@@ -8,6 +8,7 @@ import { useProjectStore } from './store/useProjectStore'
 import { useConversationStore } from './store/useConversationStore'
 import { useAppStore } from './store/useAppStore'
 import { useLicenseStore } from './store/useLicenseStore'
+import { UpdateNotification } from './components/UpdateNotification'
 import { api } from './api'
 import { loadPmModule } from './lib/pm'
 import type { ClaudeEvent } from './types'
@@ -124,6 +125,7 @@ export default function App() {
       ) : (
         <WelcomeScreen />
       )}
+      <UpdateNotification />
     </div>
   )
 }

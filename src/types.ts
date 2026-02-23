@@ -362,6 +362,17 @@ export interface CliInstallOutput {
   data: string
 }
 
+// ── Update Types ──
+
+export type UpdateStatus = 'checking' | 'available' | 'downloading' | 'ready' | 'up-to-date' | 'error'
+
+export interface UpdateStatusEvent {
+  status: UpdateStatus
+  version?: string
+  percent?: number
+  error?: string
+}
+
 // ── API Types (exposed via preload) ──
 
 export interface ElectronAPI {
@@ -430,6 +441,10 @@ export interface ElectronAPI {
     setActiveProject: (project: { path: string; name: string } | null) => void
     rebuildMenu: () => void
     onMenuAction: (callback: (action: string, ...args: unknown[]) => void) => () => void
+  }
+  updater: {
+    install: () => Promise<void>
+    onStatus: (callback: (data: UpdateStatusEvent) => void) => () => void
   }
   jira?: {
     setActiveProject: (projectPath: string) => Promise<void>

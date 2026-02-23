@@ -1,0 +1,63 @@
+import { autoUpdater, UpdateInfo } from 'electron-updater'
+import { BrowserWindow } from 'electron'
+
+export function setupAutoUpdater(mainWindow: BrowserWindow): void {
+  // Don't check for updates in dev mode
+  if (process.env.VITE_DEV_SERVER_URL) return
+
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = true
+
+  autoUpdater.on('checking-for-update', () => {
+    send(mainWindow, 'update:status', { status: 'checking' })
+  })
+
+  autoUpdater.on('update-available', (info: UpdateInfo) => {
+    send(mainWindow, 'update:status', {
+      status: 'available',
+      version: info.version,
+    })
+  })
+
+  autoUpdater.on('update-not-available', () => {
+    send(mainWindow, 'update:status', { status: 'up-to-date' })
+  })
+
+  autoUpdater.on('download-progress', (progress) => {
+    send(mainWindow, 'update:status', {
+      status: 'downloading',
+      percent: Math.round(progress.percent),
+    })
+  })
+
+  autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
+    send(mainWindow, 'update:status', {
+      status: 'ready',
+      version: info.version,
+    })
+  })
+
+  autoUpdater.on('error', (err) => {
+    console.error('[AutoUpdater] Error:', err.message)
+    send(mainWindow, 'update:status', {
+      status: 'error',
+      error: err.message,
+    })
+  })
+
+  // Check for updates after a short delay to not block startup
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.error('[AutoUpdater] Check failed:', err.message)
+    })
+  }, 5000)
+}
+
+export function installUpdate(): void {
+  autoUpdater.quitAndInstall(false, true)
+}
+
+function send(win: BrowserWindow, channel: string, data: unknown): void {
+  if (win?.isDestroyed()) return
+  win.webContents.send(channel, data)
+}

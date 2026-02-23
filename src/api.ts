@@ -70,6 +70,10 @@ const stubAPI: ElectronAPI = {
     rebuildMenu: noop,
     onMenuAction: noopUnsub,
   },
+  updater: {
+    install: noopAsync,
+    onStatus: noopUnsub,
+  },
   jira: {
     setActiveProject: noopAsync,
     authorize: noopAsync as any,

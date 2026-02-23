@@ -4,6 +4,11 @@ copyright: Copyright © 2026
 
 afterPack: scripts/afterPack.cjs
 
+publish:
+  provider: github
+  owner: pilos-ai
+  repo: agents
+
 directories:
   buildResources: resources
   output: release
@@ -26,6 +31,9 @@ mac:
     - target: dmg
       arch:
         - arm64
+    - target: zip
+      arch:
+        - arm64
   darkModeSupport: true
 
 win:
@@ -33,6 +41,10 @@ win:
     - target: nsis
       arch:
         - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
 
 linux:
   target:

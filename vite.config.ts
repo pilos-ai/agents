@@ -58,6 +58,7 @@ const electronEntries: Parameters<typeof electron>[0] = [
             'crypto',
             'url',
             '@pilos/agents-pm/electron',
+            'electron-updater',
           ],
         },
       },

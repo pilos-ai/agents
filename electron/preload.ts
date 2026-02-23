@@ -174,6 +174,16 @@ contextBridge.exposeInMainWorld('api', {
     getBoardConfig: (projectPath: string) => ipcRenderer.invoke('jira:getBoardConfig', projectPath),
   },
 
+  // Updates
+  updater: {
+    install: () => ipcRenderer.invoke('update:install'),
+    onStatus: (callback: (data: unknown) => void) => {
+      const handler = (_event: unknown, data: unknown) => callback(data)
+      ipcRenderer.on('update:status', handler)
+      return () => ipcRenderer.removeListener('update:status', handler)
+    },
+  },
+
   // Stories
   stories: {
     list: (projectPath: string) => ipcRenderer.invoke('stories:list', projectPath),
