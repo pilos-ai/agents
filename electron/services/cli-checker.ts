@@ -161,10 +161,13 @@ export class CliChecker {
       let proc: ChildProcess
 
       if (process.platform === 'win32') {
-        const tmp = process.env.TEMP || process.env.TMP || 'C:\\Windows\\Temp'
-        const script = `${tmp}\\claude-install.ps1`
-        proc = spawn('cmd.exe', ['/c',
-          `curl -fsSL https://claude.ai/install.ps1 -o "${script}" && powershell -NoProfile -ExecutionPolicy Bypass -File "${script}" && del "${script}"`
+        const psPath = path.join(
+          process.env.SYSTEMROOT || 'C:\\Windows',
+          'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'
+        )
+        proc = spawn(psPath, [
+          '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+          'irm https://claude.ai/install.ps1 | iex'
         ], { env, stdio: ['ignore', 'pipe', 'pipe'] })
       } else {
         proc = spawn('bash', ['-c',
