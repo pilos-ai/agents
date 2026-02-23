@@ -125,7 +125,7 @@ export class CliChecker {
     const env = getExpandedEnv()
 
     return new Promise((resolve) => {
-      const proc = spawn(this.claudePath, ['login'], {
+      const proc = spawn(this.claudePath, ['auth', 'login'], {
         env,
         stdio: ['ignore', 'pipe', 'pipe'],
       })
