@@ -443,6 +443,9 @@ export interface ElectronAPI {
     rebuildMenu: () => void
     onMenuAction: (callback: (action: string, ...args: unknown[]) => void) => () => void
   }
+  metrics: {
+    setLicenseKey: (key: string) => Promise<void>
+  }
   updater: {
     install: () => Promise<void>
     onStatus: (callback: (data: UpdateStatusEvent) => void) => () => void

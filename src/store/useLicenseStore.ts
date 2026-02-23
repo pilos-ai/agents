@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { LicenseTier, ProFeatureFlags } from '../types'
 import { FREE_LIMITS, getFlagsForTier, loadProModule } from '../lib/pro'
+import { api } from '../api'
 
 interface LicenseStore {
   tier: LicenseTier
@@ -44,6 +45,7 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
           flags: getFlagsForTier(tier),
           isValidating: false,
         })
+        api.metrics.setLicenseKey(result.license.key).catch(() => {})
       } else {
         set({ tier: 'free', flags: getFlagsForTier('free'), isValidating: false })
       }
@@ -74,6 +76,7 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
           error: null,
           isValidating: false,
         })
+        api.metrics.setLicenseKey(result.license.key).catch(() => {})
         return { valid: true }
       } else {
         set({ isValidating: false, error: result.error || 'Activation failed' })

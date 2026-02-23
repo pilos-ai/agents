@@ -3,6 +3,8 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { registerIpcHandlers } from './ipc-handlers'
 import { SettingsStore } from './services/settings-store'
+import { MetricsCollector } from './services/metrics-collector'
+import { Database } from './core/database'
 import { setupMenu } from './menu'
 import { ensureGlobalClaudeConfig } from './services/claude-config'
 import { setupAutoUpdater, installUpdate } from './services/auto-updater'
@@ -16,6 +18,7 @@ app.setName('Pilos Agents')
 app.disableHardwareAcceleration()
 
 let mainWindow: BrowserWindow | null = null
+let metricsCollector: MetricsCollector | null = null
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -47,14 +50,24 @@ async function createWindow() {
 
   // Create shared settings instance and set up application menu
   const settings = new SettingsStore()
+  const database = new Database()
   setupMenu(mainWindow, settings)
+
+  // Metrics collector
+  metricsCollector = new MetricsCollector(database, settings)
+  metricsCollector.init()
 
   // Register IPC after loadURL so a failure doesn't block the window
   try {
-    await registerIpcHandlers(mainWindow, settings)
+    await registerIpcHandlers(mainWindow, settings, database, metricsCollector)
   } catch (err) {
     console.error('Failed to register IPC handlers:', err)
   }
+
+  // IPC: forward license key to metrics collector
+  ipcMain.handle('metrics:setLicenseKey', (_event, key: string) => {
+    metricsCollector?.setLicenseKey(key)
+  })
 
   // Set up auto-updater
   setupAutoUpdater(mainWindow)
@@ -64,6 +77,12 @@ async function createWindow() {
     mainWindow = null
   })
 }
+
+app.on('before-quit', async () => {
+  if (metricsCollector) {
+    await metricsCollector.shutdown()
+  }
+})
 
 app.whenReady().then(() => {
   ensureGlobalClaudeConfig()

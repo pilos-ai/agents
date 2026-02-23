@@ -71,6 +71,9 @@ const stubAPI: ElectronAPI = {
     rebuildMenu: noop,
     onMenuAction: noopUnsub,
   },
+  metrics: {
+    setLicenseKey: noopAsync,
+  },
   updater: {
     install: noopAsync,
     onStatus: noopUnsub,

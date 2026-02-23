@@ -175,6 +175,11 @@ contextBridge.exposeInMainWorld('api', {
     getBoardConfig: (projectPath: string) => ipcRenderer.invoke('jira:getBoardConfig', projectPath),
   },
 
+  // Metrics
+  metrics: {
+    setLicenseKey: (key: string) => ipcRenderer.invoke('metrics:setLicenseKey', key),
+  },
+
   // Updates
   updater: {
     install: () => ipcRenderer.invoke('update:install'),

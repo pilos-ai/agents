@@ -6,6 +6,7 @@ import { Database } from './core/database'
 import { SettingsStore } from './services/settings-store'
 import { CliChecker } from './services/cli-checker'
 import { writeMcpConfig } from './services/mcp-config-writer'
+import type { MetricsCollector } from './services/metrics-collector'
 
 let claudeProcess: ClaudeProcess
 let terminalManager: TerminalManager
@@ -13,12 +14,14 @@ let processTracker: ProcessTracker
 let database: Database
 let settings: SettingsStore
 let cliChecker: CliChecker
+let metricsCollector: MetricsCollector | null = null
 let jiraOAuth: any  // Dynamically loaded from @pilos/agents-pm
 let jiraClient: any // Dynamically loaded from @pilos/agents-pm
 
-export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsStore: SettingsStore): Promise<void> {
+export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsStore: SettingsStore, db?: Database, metrics?: MetricsCollector): Promise<void> {
   settings = settingsStore
-  database = new Database()
+  database = db || new Database()
+  metricsCollector = metrics || null
   claudeProcess = new ClaudeProcess(mainWindow, settings)
   terminalManager = new TerminalManager(mainWindow)
   processTracker = new ProcessTracker(mainWindow)
@@ -54,6 +57,8 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
 
   // ── Claude CLI ──
   ipcMain.handle('claude:startSession', async (_event, sessionId: string, options) => {
+    metricsCollector?.trackSessionStarted()
+
     // Look up stored CLI session ID for resume
     if (options.resume) {
       const storedCliId = database.getConversationCliSessionId(sessionId)
@@ -71,6 +76,7 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
   })
 
   ipcMain.handle('claude:sendMessage', async (_event, sessionId: string, message: string, images?: Array<{ data: string; mediaType: string }>) => {
+    metricsCollector?.trackMessageSent()
     return claudeProcess.sendMessage(sessionId, message, images)
   })
 

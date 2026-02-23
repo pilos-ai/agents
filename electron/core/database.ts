@@ -124,6 +124,25 @@ export class Database {
       );
 
       CREATE INDEX IF NOT EXISTS idx_story_criteria_story ON story_criteria(story_id, order_index);
+
+      CREATE TABLE IF NOT EXISTS metrics_buffer (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL UNIQUE,
+        app_launches INTEGER DEFAULT 0,
+        usage_minutes INTEGER DEFAULT 0,
+        sessions_started INTEGER DEFAULT 0,
+        messages_sent INTEGER DEFAULT 0,
+        agents_configured INTEGER DEFAULT 0,
+        mcp_servers_configured INTEGER DEFAULT 0,
+        browser_mcp_enabled INTEGER DEFAULT 0,
+        computer_use_enabled INTEGER DEFAULT 0,
+        app_version TEXT NOT NULL,
+        os_platform TEXT NOT NULL,
+        electron_version TEXT NOT NULL,
+        sent INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
     `)
 
     // Migration: add project_path column if missing (existing DBs)
@@ -343,6 +362,64 @@ export class Database {
     for (let i = 0; i < criterionIds.length; i++) {
       stmt.run(i, criterionIds[i], storyId)
     }
+  }
+
+  // ── Metrics ──
+
+  upsertDailyMetrics(metrics: {
+    date: string
+    appLaunches: number
+    usageMinutes: number
+    sessionsStarted: number
+    messagesSent: number
+    agentsConfigured: number
+    mcpServersConfigured: number
+    browserMcpEnabled: boolean
+    computerUseEnabled: boolean
+    appVersion: string
+    osPlatform: string
+    electronVersion: string
+  }): void {
+    this.db!.prepare(`
+      INSERT INTO metrics_buffer (date, app_launches, usage_minutes, sessions_started, messages_sent, agents_configured, mcp_servers_configured, browser_mcp_enabled, computer_use_enabled, app_version, os_platform, electron_version)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(date) DO UPDATE SET
+        app_launches = app_launches + excluded.app_launches,
+        usage_minutes = usage_minutes + excluded.usage_minutes,
+        sessions_started = sessions_started + excluded.sessions_started,
+        messages_sent = messages_sent + excluded.messages_sent,
+        agents_configured = excluded.agents_configured,
+        mcp_servers_configured = excluded.mcp_servers_configured,
+        browser_mcp_enabled = excluded.browser_mcp_enabled,
+        computer_use_enabled = excluded.computer_use_enabled,
+        app_version = excluded.app_version,
+        os_platform = excluded.os_platform,
+        electron_version = excluded.electron_version,
+        updated_at = datetime('now')
+    `).run(
+      metrics.date,
+      metrics.appLaunches,
+      metrics.usageMinutes,
+      metrics.sessionsStarted,
+      metrics.messagesSent,
+      metrics.agentsConfigured,
+      metrics.mcpServersConfigured,
+      metrics.browserMcpEnabled ? 1 : 0,
+      metrics.computerUseEnabled ? 1 : 0,
+      metrics.appVersion,
+      metrics.osPlatform,
+      metrics.electronVersion
+    )
+  }
+
+  getUnsentMetrics(): Record<string, unknown>[] {
+    return this.db!.prepare('SELECT * FROM metrics_buffer WHERE sent = 0 ORDER BY date ASC').all()
+  }
+
+  markMetricsSent(ids: number[]): void {
+    if (ids.length === 0) return
+    const placeholders = ids.map(() => '?').join(',')
+    this.db!.prepare(`UPDATE metrics_buffer SET sent = 1, updated_at = datetime('now') WHERE id IN (${placeholders})`).run(...ids)
   }
 
   close(): void {
