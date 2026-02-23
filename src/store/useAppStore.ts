@@ -11,6 +11,7 @@ interface AppStore {
   cliVersion?: string
   cliError?: string
   cliInstallLog: string
+  cliLoginLog: string
 
   // UI State
   activeView: AppView
@@ -30,6 +31,7 @@ interface AppStore {
   installCli: () => Promise<void>
   loginCli: () => Promise<void>
   appendCliInstallLog: (text: string) => void
+  appendCliLoginLog: (text: string) => void
   setSidebarWidth: (w: number) => void
   setRightPanelWidth: (w: number) => void
   toggleRightPanel: () => void
@@ -43,6 +45,7 @@ interface AppStore {
 export const useAppStore = create<AppStore>((set, get) => ({
   cliStatus: 'checking',
   cliInstallLog: '',
+  cliLoginLog: '',
 
   activeView: 'chat',
   sidebarWidth: 220,
@@ -95,7 +98,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   loginCli: async () => {
-    set({ cliStatus: 'logging_in' })
+    set({ cliStatus: 'logging_in', cliLoginLog: '' })
     try {
       const success = await api.cli.login()
       if (success) {
@@ -110,6 +113,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   appendCliInstallLog: (text) => {
     set((s) => ({ cliInstallLog: s.cliInstallLog + text }))
+  },
+
+  appendCliLoginLog: (text) => {
+    set((s) => ({ cliLoginLog: s.cliLoginLog + text }))
   },
 
   setSidebarWidth: (w) => {

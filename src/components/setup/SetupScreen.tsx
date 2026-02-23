@@ -14,11 +14,14 @@ export function SetupScreen() {
   const cliVersion = useAppStore((s) => s.cliVersion)
   const cliError = useAppStore((s) => s.cliError)
   const cliInstallLog = useAppStore((s) => s.cliInstallLog)
+  const cliLoginLog = useAppStore((s) => s.cliLoginLog)
   const checkCli = useAppStore((s) => s.checkCli)
   const installCli = useAppStore((s) => s.installCli)
   const loginCli = useAppStore((s) => s.loginCli)
   const appendCliInstallLog = useAppStore((s) => s.appendCliInstallLog)
+  const appendCliLoginLog = useAppStore((s) => s.appendCliLoginLog)
   const logRef = useRef<HTMLPreElement>(null)
+  const loginLogRef = useRef<HTMLPreElement>(null)
 
   useEffect(() => {
     const unsub = api.cli.onInstallOutput((data: CliInstallOutput) => {
@@ -28,10 +31,23 @@ export function SetupScreen() {
   }, [appendCliInstallLog])
 
   useEffect(() => {
+    const unsub = api.cli.onLoginOutput((data: string) => {
+      appendCliLoginLog(data)
+    })
+    return unsub
+  }, [appendCliLoginLog])
+
+  useEffect(() => {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight
     }
   }, [cliInstallLog])
+
+  useEffect(() => {
+    if (loginLogRef.current) {
+      loginLogRef.current.scrollTop = loginLogRef.current.scrollHeight
+    }
+  }, [cliLoginLog])
 
   const handleCopyInstall = () => {
     navigator.clipboard.writeText(installCommand)
@@ -124,6 +140,15 @@ export function SetupScreen() {
           >
             {cliStatus === 'logging_in' ? 'Signing in...' : 'Sign in to Claude'}
           </button>
+
+          {cliLoginLog && (
+            <pre
+              ref={loginLogRef}
+              className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 text-xs text-neutral-400 font-mono h-32 overflow-y-auto whitespace-pre-wrap mb-4"
+            >
+              {cliLoginLog}
+            </pre>
+          )}
 
           <button
             onClick={checkCli}
