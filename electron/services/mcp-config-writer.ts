@@ -83,10 +83,14 @@ export function writeMcpConfig(projectPath: string, servers: McpServerEntry[], s
         mcpServerScript = path.join(app.getAppPath(), 'dist-electron', 'jira-mcp-server.js')
       }
 
+      const nodeCommand = app.isPackaged ? process.execPath : 'node'
+      const nodeEnv: Record<string, string> = app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}
+
       mcpServers['jira'] = {
         type: 'stdio',
-        command: 'node',
+        command: nodeCommand,
         args: [mcpServerScript, tokenFilePath],
+        ...(Object.keys(nodeEnv).length > 0 ? { env: nodeEnv } : {}),
       }
       console.log(`[McpConfigWriter] Injected Jira MCP server (tokens from ${tokenFilePath})`)
     }

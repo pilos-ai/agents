@@ -1,10 +1,9 @@
-import { execFile, spawn } from 'child_process'
+import { execFile, spawn, ChildProcess } from 'child_process'
 import { BrowserWindow } from 'electron'
 
 export interface CliCheckResult {
   available: boolean
   version?: string
-  npmAvailable: boolean
   error?: string
 }
 
@@ -28,19 +27,12 @@ export class CliChecker {
   async check(): Promise<CliCheckResult> {
     const env = getExpandedEnv()
 
-    const [claude, npm] = await Promise.allSettled([
-      this.execWithTimeout('claude', ['--version'], env),
-      this.execWithTimeout('npm', ['--version'], env),
-    ])
-
-    const available = claude.status === 'fulfilled'
-    const version = available ? claude.value.trim() : undefined
-    const npmAvailable = npm.status === 'fulfilled'
-    const error = !available && claude.status === 'rejected'
-      ? String(claude.reason)
-      : undefined
-
-    return { available, version, npmAvailable, error }
+    try {
+      const output = await this.execWithTimeout('claude', ['--version'], env)
+      return { available: true, version: output.trim() }
+    } catch (err) {
+      return { available: false, error: String(err) }
+    }
   }
 
   async checkAuth(): Promise<{ authenticated: boolean; accountName?: string }> {
@@ -93,10 +85,15 @@ export class CliChecker {
     const env = getExpandedEnv()
 
     return new Promise((resolve) => {
-      const proc = spawn('npm', ['install', '-g', '@anthropic-ai/claude-code'], {
-        env,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+      let proc: ChildProcess
+
+      if (process.platform === 'win32') {
+        proc = spawn('powershell', ['-NoProfile', '-Command',
+          'irm https://claude.ai/install.ps1 | iex'], { env, stdio: ['ignore', 'pipe', 'pipe'] })
+      } else {
+        proc = spawn('bash', ['-c',
+          'curl -fsSL https://claude.ai/install.sh | bash'], { env, stdio: ['ignore', 'pipe', 'pipe'] })
+      }
 
       proc.stdout?.on('data', (chunk: Buffer) => {
         this.send('cli:installOutput', { stream: 'stdout', data: chunk.toString() })

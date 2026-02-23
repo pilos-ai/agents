@@ -3,12 +3,15 @@ import { useAppStore } from '../../store/useAppStore'
 import { api } from '../../api'
 import type { CliInstallOutput } from '../../types'
 
-const isMac = typeof navigator !== 'undefined' && /Mac|darwin/i.test(navigator.platform || navigator.userAgent)
+const isWindows = typeof navigator !== 'undefined' && /Win/i.test(navigator.platform || navigator.userAgent)
+
+const installCommand = isWindows
+  ? 'irm https://claude.ai/install.ps1 | iex'
+  : 'curl -fsSL https://claude.ai/install.sh | bash'
 
 export function SetupScreen() {
   const cliStatus = useAppStore((s) => s.cliStatus)
   const cliVersion = useAppStore((s) => s.cliVersion)
-  const cliNpmAvailable = useAppStore((s) => s.cliNpmAvailable)
   const cliError = useAppStore((s) => s.cliError)
   const cliInstallLog = useAppStore((s) => s.cliInstallLog)
   const checkCli = useAppStore((s) => s.checkCli)
@@ -30,12 +33,8 @@ export function SetupScreen() {
     }
   }, [cliInstallLog])
 
-  const handleCopyNpm = () => {
-    navigator.clipboard.writeText('npm install -g @anthropic-ai/claude-code')
-  }
-
-  const handleCopyBrew = () => {
-    navigator.clipboard.writeText('brew install claude-code')
+  const handleCopyInstall = () => {
+    navigator.clipboard.writeText(installCommand)
   }
 
   // Checking state
@@ -156,79 +155,31 @@ export function SetupScreen() {
           </p>
         </div>
 
-        {/* Install button if npm is available */}
-        {cliNpmAvailable && (
-          <button
-            onClick={installCli}
-            className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors mb-4"
-          >
-            Install with npm
-          </button>
-        )}
+        <button
+          onClick={installCli}
+          className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors mb-4"
+        >
+          Install Claude CLI
+        </button>
 
-        {/* npm not available warning */}
-        {!cliNpmAvailable && (
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3 mb-4">
-            <p className="text-sm text-amber-400">
-              npm is not installed. Install{' '}
-              <a
-                href="https://nodejs.org"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-amber-300"
-              >
-                Node.js
-              </a>{' '}
-              first, then restart the app.
-            </p>
-          </div>
-        )}
-
-        {/* Manual install commands */}
+        {/* Manual install command */}
         <div className="mb-4 space-y-3">
-          <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider">Manual install</p>
-
-          {/* npm command */}
-          <div>
-            <p className="text-xs text-neutral-500 mb-1">npm</p>
-            <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden">
-              <code className="flex-1 px-4 py-2.5 text-sm text-neutral-300 font-mono">
-                npm install -g @anthropic-ai/claude-code
-              </code>
-              <button
-                onClick={handleCopyNpm}
-                className="px-3 py-2.5 text-neutral-500 hover:text-neutral-300 transition-colors border-l border-neutral-800"
-                title="Copy to clipboard"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-                </svg>
-              </button>
-            </div>
+          <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider">Or install manually</p>
+          <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden">
+            <code className="flex-1 px-4 py-2.5 text-sm text-neutral-300 font-mono">
+              {installCommand}
+            </code>
+            <button
+              onClick={handleCopyInstall}
+              className="px-3 py-2.5 text-neutral-500 hover:text-neutral-300 transition-colors border-l border-neutral-800"
+              title="Copy to clipboard"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+              </svg>
+            </button>
           </div>
-
-          {/* Homebrew command (macOS only) */}
-          {isMac && (
-            <div>
-              <p className="text-xs text-neutral-500 mb-1">Homebrew</p>
-              <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden">
-                <code className="flex-1 px-4 py-2.5 text-sm text-neutral-300 font-mono">
-                  brew install claude-code
-                </code>
-                <button
-                  onClick={handleCopyBrew}
-                  className="px-3 py-2.5 text-neutral-500 hover:text-neutral-300 transition-colors border-l border-neutral-800"
-                  title="Copy to clipboard"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Install log if failed */}

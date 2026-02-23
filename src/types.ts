@@ -354,7 +354,6 @@ export interface ExitPlanModeData {
 export interface CliCheckResult {
   available: boolean
   version?: string
-  npmAvailable: boolean
   error?: string
 }
 

@@ -9,7 +9,6 @@ interface AppStore {
   // CLI Status
   cliStatus: CliStatus
   cliVersion?: string
-  cliNpmAvailable: boolean
   cliError?: string
   cliInstallLog: string
 
@@ -43,7 +42,6 @@ interface AppStore {
 
 export const useAppStore = create<AppStore>((set, get) => ({
   cliStatus: 'checking',
-  cliNpmAvailable: false,
   cliInstallLog: '',
 
   activeView: 'chat',
@@ -66,16 +64,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
         try {
           const auth = await api.cli.checkAuth()
           if (auth.authenticated) {
-            set({ cliStatus: 'ready', cliVersion: result.version, cliNpmAvailable: result.npmAvailable })
+            set({ cliStatus: 'ready', cliVersion: result.version })
           } else {
-            set({ cliStatus: 'needs_login', cliVersion: result.version, cliNpmAvailable: result.npmAvailable })
+            set({ cliStatus: 'needs_login', cliVersion: result.version })
           }
         } catch {
           // If auth check fails, still allow through (older CLI versions may not support it)
-          set({ cliStatus: 'ready', cliVersion: result.version, cliNpmAvailable: result.npmAvailable })
+          set({ cliStatus: 'ready', cliVersion: result.version })
         }
       } else {
-        set({ cliStatus: 'missing', cliError: result.error, cliNpmAvailable: result.npmAvailable })
+        set({ cliStatus: 'missing', cliError: result.error })
       }
     } catch (err) {
       set({ cliStatus: 'error', cliError: String(err) })

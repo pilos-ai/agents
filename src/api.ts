@@ -6,7 +6,7 @@ const noopUnsub = () => noop
 
 const stubAPI: ElectronAPI = {
   cli: {
-    check: () => Promise.resolve({ available: true, npmAvailable: true }),
+    check: () => Promise.resolve({ available: true }),
     install: () => Promise.resolve(true),
     checkAuth: () => Promise.resolve({ authenticated: true }),
     login: () => Promise.resolve(true),
