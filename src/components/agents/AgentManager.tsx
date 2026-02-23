@@ -163,37 +163,38 @@ export function AgentManager({ agents, onSetAgents, onAddAgent, onRemoveAgent, o
 
       {/* Current agents */}
       {agents.length > 0 && (
-        <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
+        <div className="grid grid-cols-2 gap-1.5">
           {agents.map((agent) => {
             const colors = AGENT_COLORS[agent.color] || AGENT_COLORS.blue
             return (
               <div
                 key={agent.id}
-                className={`flex items-center gap-3 p-2.5 rounded-lg border ${colors.border} ${colors.bgLight}`}
+                className={`group flex items-center gap-2 px-2 py-1.5 rounded-md border ${colors.border} ${colors.bgLight}`}
               >
-                <span className="text-lg">{agent.emoji}</span>
+                <span className="text-sm">{agent.emoji}</span>
                 <div className="flex-1 min-w-0">
-                  <div className={`text-sm font-medium ${colors.text}`}>{agent.name}</div>
-                  <div className="text-xs text-neutral-500 truncate">{agent.role}</div>
+                  <div className={`text-xs font-medium ${colors.text} truncate`}>{agent.name}</div>
                 </div>
-                <button
-                  onClick={() => setEditingAgent(agent)}
-                  className="text-neutral-500 hover:text-neutral-300 transition-colors"
-                  title="Edit"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => onRemoveAgent(agent.id)}
-                  className="text-neutral-500 hover:text-red-400 transition-colors"
-                  title="Remove"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+                <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => setEditingAgent(agent)}
+                    className="text-neutral-500 hover:text-neutral-300 transition-colors p-0.5"
+                    title="Edit"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => onRemoveAgent(agent.id)}
+                    className="text-neutral-500 hover:text-red-400 transition-colors p-0.5"
+                    title="Remove"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             )
           })}
