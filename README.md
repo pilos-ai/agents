@@ -38,8 +38,7 @@ Grab the latest release from the [Releases page](https://github.com/pilos-ai/age
 
 **Prerequisites:**
 - [Node.js](https://nodejs.org/) 18+
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) — `npm i -g @anthropic-ai/claude-code`
-- An [Anthropic API key](https://console.anthropic.com/)
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) — `npm i -g @anthropic-ai/claude-code` (authenticate via `claude` command)
 
 ```bash
 git clone https://github.com/pilos-ai/agents.git
