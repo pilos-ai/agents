@@ -12,6 +12,8 @@ interface AppStore {
   cliError?: string
   cliInstallLog: string
   cliLoginLog: string
+  accountEmail?: string
+  accountPlan?: string
 
   // UI State
   activeView: AppView
@@ -67,7 +69,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         try {
           const auth = await api.cli.checkAuth()
           if (auth.authenticated) {
-            set({ cliStatus: 'ready', cliVersion: result.version })
+            set({ cliStatus: 'ready', cliVersion: result.version, accountEmail: auth.email, accountPlan: auth.plan })
           } else {
             set({ cliStatus: 'needs_login', cliVersion: result.version })
           }

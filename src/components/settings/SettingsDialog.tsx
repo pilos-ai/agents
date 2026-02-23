@@ -86,8 +86,9 @@ export function SettingsDialog() {
   const setSettingsOpen = useAppStore((s) => s.setSettingsOpen)
   const activeSection = useAppStore((s) => s.activeSettingsSection)
   const setActiveSection = useAppStore((s) => s.setActiveSettingsSection)
-  const terminalFontSize = useAppStore((s) => s.terminalFontSize)
-  const setTerminalFontSize = useAppStore((s) => s.setTerminalFontSize)
+  const accountEmail = useAppStore((s) => s.accountEmail)
+  const accountPlan = useAppStore((s) => s.accountPlan)
+  const cliVersion = useAppStore((s) => s.cliVersion)
 
   const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
   const openProjects = useProjectStore((s) => s.openProjects)
@@ -182,8 +183,9 @@ export function SettingsDialog() {
           {activeSection === 'license' && <LicenseSettingsSection />}
 
           {activeSection === 'general' && <GeneralSection
-            terminalFontSize={terminalFontSize}
-            setTerminalFontSize={setTerminalFontSize}
+            accountEmail={accountEmail}
+            accountPlan={accountPlan}
+            cliVersion={cliVersion}
           />}
         </div>
       </div>
@@ -485,30 +487,84 @@ function IntegrationsSection() {
   )
 }
 
-function GeneralSection({ terminalFontSize, setTerminalFontSize }: {
-  terminalFontSize: number
-  setTerminalFontSize: (size: number) => void
+declare const __APP_VERSION__: string
+
+function GeneralSection({ accountEmail, accountPlan, cliVersion }: {
+  accountEmail?: string
+  accountPlan?: string
+  cliVersion?: string
 }) {
+  const planLabel = accountPlan
+    ? accountPlan.charAt(0).toUpperCase() + accountPlan.slice(1)
+    : 'Unknown'
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-white">General</h2>
-        <p className="text-sm text-neutral-400 mt-1">Global application settings</p>
+        <p className="text-sm text-neutral-400 mt-1">Account and application info</p>
       </div>
 
-      {/* Terminal Font Size */}
-      <div>
-        <label className="block text-sm font-medium text-neutral-300 mb-2">
-          Terminal Font Size: {terminalFontSize}px
-        </label>
-        <input
-          type="range"
-          min={10}
-          max={20}
-          value={terminalFontSize}
-          onChange={(e) => setTerminalFontSize(Number(e.target.value))}
-          className="w-full accent-blue-500"
-        />
+      {/* Claude Account */}
+      <div className="rounded-xl border border-neutral-700/50 bg-neutral-800/50 p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white font-semibold text-sm">
+            {accountEmail ? accountEmail.charAt(0).toUpperCase() : '?'}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-white truncate">{accountEmail || 'Not signed in'}</p>
+            <p className="text-xs text-neutral-400">Claude account</p>
+          </div>
+        </div>
+
+        {/* Plan */}
+        <div className="flex items-center justify-between py-3 border-t border-neutral-700/50">
+          <div>
+            <p className="text-sm text-neutral-300">Plan</p>
+            <p className="text-xs text-neutral-500 mt-0.5">Current Claude subscription</p>
+          </div>
+          <span className="text-sm font-medium text-white bg-neutral-700/50 px-3 py-1 rounded-full">
+            {planLabel}
+          </span>
+        </div>
+
+        {/* Usage link */}
+        <div className="flex items-center justify-between py-3 border-t border-neutral-700/50">
+          <div>
+            <p className="text-sm text-neutral-300">Usage</p>
+            <p className="text-xs text-neutral-500 mt-0.5">View plan limits and usage details</p>
+          </div>
+          <button
+            onClick={() => window.api?.dialog?.openExternal('https://claude.ai/settings/billing')}
+            className="text-sm text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+          >
+            View on claude.ai
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* App Version */}
+      <div className="rounded-xl border border-neutral-700/50 bg-neutral-800/50 p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-neutral-300">Pilos Agents</p>
+            <p className="text-xs text-neutral-500 mt-0.5">Application version</p>
+          </div>
+          <span className="text-sm text-neutral-400 font-mono">v{__APP_VERSION__}</span>
+        </div>
+
+        {cliVersion && (
+          <div className="flex items-center justify-between pt-3 border-t border-neutral-700/50">
+            <div>
+              <p className="text-sm text-neutral-300">Claude CLI</p>
+              <p className="text-xs text-neutral-500 mt-0.5">Installed CLI version</p>
+            </div>
+            <span className="text-sm text-neutral-400 font-mono">{cliVersion}</span>
+          </div>
+        )}
       </div>
     </div>
   )

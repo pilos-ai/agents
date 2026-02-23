@@ -107,16 +107,20 @@ export class CliChecker {
     return { available: false, error: 'Claude CLI not found' }
   }
 
-  async checkAuth(): Promise<{ authenticated: boolean; accountName?: string }> {
+  async checkAuth(): Promise<{ authenticated: boolean; accountName?: string; email?: string; plan?: string }> {
     const env = getExpandedEnv()
     try {
-      const output = await this.execWithTimeout(this.claudePath, ['auth', 'status'], env)
-      const text = output.toLowerCase()
-      if (text.includes('not logged in') || text.includes('no active account') || text.includes('unauthenticated')) {
+      const output = await this.execWithTimeout(this.claudePath, ['auth', 'status', '--json'], env)
+      const data = JSON.parse(output)
+      if (!data.loggedIn) {
         return { authenticated: false }
       }
-      const nameMatch = output.match(/(?:logged in as|account[:\s]+)(.+)/i)
-      return { authenticated: true, accountName: nameMatch?.[1]?.trim() }
+      return {
+        authenticated: true,
+        accountName: data.orgName || data.email,
+        email: data.email,
+        plan: data.subscriptionType,
+      }
     } catch {
       return { authenticated: false }
     }

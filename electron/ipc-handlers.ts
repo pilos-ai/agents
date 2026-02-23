@@ -230,6 +230,11 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
     return result.canceled ? null : result.filePaths[0]
   })
 
+  ipcMain.handle('dialog:openExternal', async (_event, url: string) => {
+    const { shell } = await import('electron')
+    await shell.openExternal(url)
+  })
+
   // ── Jira & Stories (only if PM package is available) ──
   if (hasPm) {
     // ── Jira OAuth (project-scoped) ──

@@ -115,5 +115,8 @@ export default defineConfig({
     'window.__PILOS_LICENSE_SERVER__': JSON.stringify(
       process.env.VITE_LICENSE_SERVER || ''
     ),
+    '__APP_VERSION__': JSON.stringify(
+      JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')).version
+    ),
   },
 })

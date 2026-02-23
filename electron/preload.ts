@@ -118,6 +118,7 @@ contextBridge.exposeInMainWorld('api', {
   // Dialogs
   dialog: {
     openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
+    openExternal: (url: string) => ipcRenderer.invoke('dialog:openExternal', url),
   },
 
   // Menu

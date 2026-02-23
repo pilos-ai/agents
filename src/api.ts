@@ -64,6 +64,7 @@ const stubAPI: ElectronAPI = {
   },
   dialog: {
     openDirectory: () => Promise.resolve(null),
+    openExternal: noopAsync,
   },
   menu: {
     setActiveProject: noop,

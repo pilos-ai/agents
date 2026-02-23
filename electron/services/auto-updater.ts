@@ -1,5 +1,7 @@
-import { autoUpdater, UpdateInfo } from 'electron-updater'
+import pkg from 'electron-updater'
 import { BrowserWindow } from 'electron'
+
+const { autoUpdater } = pkg
 
 export function setupAutoUpdater(mainWindow: BrowserWindow): void {
   // Don't check for updates in dev mode
@@ -12,7 +14,7 @@ export function setupAutoUpdater(mainWindow: BrowserWindow): void {
     send(mainWindow, 'update:status', { status: 'checking' })
   })
 
-  autoUpdater.on('update-available', (info: UpdateInfo) => {
+  autoUpdater.on('update-available', (info) => {
     send(mainWindow, 'update:status', {
       status: 'available',
       version: info.version,
@@ -30,7 +32,7 @@ export function setupAutoUpdater(mainWindow: BrowserWindow): void {
     })
   })
 
-  autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
+  autoUpdater.on('update-downloaded', (info) => {
     send(mainWindow, 'update:status', {
       status: 'ready',
       version: info.version,
@@ -47,7 +49,7 @@ export function setupAutoUpdater(mainWindow: BrowserWindow): void {
 
   // Check for updates after a short delay to not block startup
   setTimeout(() => {
-    autoUpdater.checkForUpdates().catch((err) => {
+    autoUpdater.checkForUpdates().catch((err: Error) => {
       console.error('[AutoUpdater] Check failed:', err.message)
     })
   }, 5000)

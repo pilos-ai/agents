@@ -379,7 +379,7 @@ export interface ElectronAPI {
   cli: {
     check: () => Promise<CliCheckResult>
     install: () => Promise<boolean>
-    checkAuth: () => Promise<{ authenticated: boolean; accountName?: string }>
+    checkAuth: () => Promise<{ authenticated: boolean; accountName?: string; email?: string; plan?: string }>
     login: () => Promise<boolean>
     onInstallOutput: (callback: (data: CliInstallOutput) => void) => () => void
     onLoginOutput: (callback: (data: string) => void) => () => void
@@ -436,6 +436,7 @@ export interface ElectronAPI {
   }
   dialog: {
     openDirectory: () => Promise<string | null>
+    openExternal: (url: string) => Promise<void>
   }
   menu: {
     setActiveProject: (project: { path: string; name: string } | null) => void
