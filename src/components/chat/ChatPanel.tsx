@@ -18,27 +18,53 @@ export function ChatPanel() {
   const activeTab = openProjects.find((p) => p.projectPath === activeProjectPath)
   const scrollRef = useRef<HTMLDivElement>(null)
   const isAtBottom = useRef(true)
+  const prevMessageCount = useRef(0)
 
   const virtualizer = useVirtualizer({
     count: messages.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 120,
-    overscan: 5,
+    estimateSize: () => 150,
+    overscan: 8,
   })
+
+  // Re-measure all items when messages change content (tool results arriving, images loading, etc.)
+  useEffect(() => {
+    if (messages.length > 0) {
+      // When a new message arrives, measure from that index onward
+      if (messages.length !== prevMessageCount.current) {
+        prevMessageCount.current = messages.length
+        virtualizer.measure()
+      }
+    }
+  }, [messages, virtualizer])
+
+  // Re-measure periodically during streaming to account for growing content
+  useEffect(() => {
+    if (!streaming.isStreaming) return
+    const interval = setInterval(() => {
+      virtualizer.measure()
+    }, 500)
+    return () => clearInterval(interval)
+  }, [streaming.isStreaming, virtualizer])
 
   const handleScroll = useCallback(() => {
     if (!scrollRef.current) return
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
-    isAtBottom.current = scrollHeight - scrollTop - clientHeight < 50
+    isAtBottom.current = scrollHeight - scrollTop - clientHeight < 80
   }, [])
 
   const scrollToBottom = useCallback(() => {
-    requestAnimationFrame(() => {
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-      }
-    })
-  }, [])
+    if (messages.length > 0) {
+      // Use virtualizer API for reliable scroll positioning
+      virtualizer.scrollToIndex(messages.length - 1, { align: 'end' })
+      // Follow up with a raw scroll to truly hit the bottom (for streaming content below the virtual list)
+      requestAnimationFrame(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+        }
+      })
+    }
+  }, [messages.length, virtualizer])
 
   // Auto-scroll when new messages arrive or streaming updates (only if at bottom)
   useEffect(() => {
@@ -67,8 +93,8 @@ export function ChatPanel() {
       {/* Messages with neural background */}
       <div className="relative flex-1 min-h-0">
         <ThinkingBackground />
-        <div ref={scrollRef} onScroll={handleScroll} className="relative z-10 h-full overflow-y-auto px-4 py-3">
-          <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+        <div ref={scrollRef} onScroll={handleScroll} className="relative z-[1] h-full overflow-y-auto px-4 py-3">
+          <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
             {virtualizer.getVirtualItems().map((virtualRow) => {
               const msg = messages[virtualRow.index]
               const isLastAssistant =
@@ -77,7 +103,7 @@ export function ChatPanel() {
                 virtualRow.index === messages.length - 1
               return (
                 <div
-                  key={msg.id || msg.timestamp || virtualRow.index}
+                  key={msg.id || `msg-${virtualRow.index}-${msg.timestamp}`}
                   data-index={virtualRow.index}
                   ref={virtualizer.measureElement}
                   style={{
