@@ -422,6 +422,44 @@ export class Database {
     this.db!.prepare(`UPDATE metrics_buffer SET sent = 1, updated_at = datetime('now') WHERE id IN (${placeholders})`).run(...ids)
   }
 
+  // ── Storage Management ──
+
+  getStorageStats(): { conversations: number; messages: number; stories: number; metrics: number; dbSizeBytes: number } {
+    const conversations = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations').get() as { count: number }).count
+    const messages = (this.db!.prepare('SELECT COUNT(*) as count FROM messages').get() as { count: number }).count
+
+    let stories = 0
+    try {
+      stories = (this.db!.prepare('SELECT COUNT(*) as count FROM stories').get() as { count: number }).count
+    } catch { /* table may not exist */ }
+
+    let metrics = 0
+    try {
+      metrics = (this.db!.prepare('SELECT COUNT(*) as count FROM metrics_buffer').get() as { count: number }).count
+    } catch { /* table may not exist */ }
+
+    const pageCountRow = this.db!.prepare('PRAGMA page_count').get() as { page_count: number } | undefined
+    const pageSizeRow = this.db!.prepare('PRAGMA page_size').get() as { page_size: number } | undefined
+    const dbSizeBytes = (pageCountRow?.page_count || 0) * (pageSizeRow?.page_size || 0)
+
+    return { conversations, messages, stories, metrics, dbSizeBytes }
+  }
+
+  clearConversations(): void {
+    this.db!.exec('DELETE FROM messages')
+    this.db!.exec('DELETE FROM conversations')
+    this.db!.exec('VACUUM')
+  }
+
+  clearAllData(): void {
+    this.db!.exec('DELETE FROM messages')
+    this.db!.exec('DELETE FROM conversations')
+    try { this.db!.exec('DELETE FROM story_criteria') } catch { /* may not exist */ }
+    try { this.db!.exec('DELETE FROM stories') } catch { /* may not exist */ }
+    try { this.db!.exec('DELETE FROM metrics_buffer') } catch { /* may not exist */ }
+    this.db!.exec('VACUUM')
+  }
+
   close(): void {
     this.db?.close()
   }

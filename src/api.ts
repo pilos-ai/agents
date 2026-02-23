@@ -71,6 +71,11 @@ const stubAPI: ElectronAPI = {
     rebuildMenu: noop,
     onMenuAction: noopUnsub,
   },
+  storage: {
+    getStats: () => Promise.resolve({ conversations: 0, messages: 0, stories: 0, metrics: 0, dbSizeBytes: 0 }),
+    clearConversations: noopAsync,
+    clearAllData: noopAsync,
+  },
   metrics: {
     setLicenseKey: noopAsync,
   },

@@ -175,6 +175,13 @@ contextBridge.exposeInMainWorld('api', {
     getBoardConfig: (projectPath: string) => ipcRenderer.invoke('jira:getBoardConfig', projectPath),
   },
 
+  // Storage
+  storage: {
+    getStats: () => ipcRenderer.invoke('storage:getStats'),
+    clearConversations: () => ipcRenderer.invoke('storage:clearConversations'),
+    clearAllData: () => ipcRenderer.invoke('storage:clearAllData'),
+  },
+
   // Metrics
   metrics: {
     setLicenseKey: (key: string) => ipcRenderer.invoke('metrics:setLicenseKey', key),

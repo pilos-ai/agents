@@ -373,6 +373,16 @@ export interface UpdateStatusEvent {
   error?: string
 }
 
+// ── Storage Types ──
+
+export interface StorageStats {
+  conversations: number
+  messages: number
+  stories: number
+  metrics: number
+  dbSizeBytes: number
+}
+
 // ── API Types (exposed via preload) ──
 
 export interface ElectronAPI {
@@ -442,6 +452,11 @@ export interface ElectronAPI {
     setActiveProject: (project: { path: string; name: string } | null) => void
     rebuildMenu: () => void
     onMenuAction: (callback: (action: string, ...args: unknown[]) => void) => () => void
+  }
+  storage: {
+    getStats: () => Promise<StorageStats>
+    clearConversations: () => Promise<void>
+    clearAllData: () => Promise<void>
   }
   metrics: {
     setLicenseKey: (key: string) => Promise<void>

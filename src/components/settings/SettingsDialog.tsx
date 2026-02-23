@@ -489,11 +489,41 @@ function IntegrationsSection() {
 
 declare const __APP_VERSION__: string
 
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
 function GeneralSection({ accountEmail, accountPlan, cliVersion }: {
   accountEmail?: string
   accountPlan?: string
   cliVersion?: string
 }) {
+  const [storageStats, setStorageStats] = useState<{ conversations: number; messages: number; stories: number; metrics: number; dbSizeBytes: number } | null>(null)
+  const [clearing, setClearing] = useState(false)
+  const [confirmAction, setConfirmAction] = useState<'conversations' | 'all' | null>(null)
+
+  useEffect(() => {
+    window.api?.storage?.getStats().then(setStorageStats).catch(() => {})
+  }, [])
+
+  const handleClear = async (action: 'conversations' | 'all') => {
+    setClearing(true)
+    try {
+      if (action === 'conversations') {
+        await window.api?.storage?.clearConversations()
+      } else {
+        await window.api?.storage?.clearAllData()
+      }
+      const stats = await window.api?.storage?.getStats()
+      if (stats) setStorageStats(stats)
+    } catch { /* best effort */ }
+    setClearing(false)
+    setConfirmAction(null)
+  }
+
   const planLabel = accountPlan
     ? accountPlan.charAt(0).toUpperCase() + accountPlan.slice(1)
     : 'Unknown'
@@ -565,6 +595,80 @@ function GeneralSection({ accountEmail, accountPlan, cliVersion }: {
             <span className="text-sm text-neutral-400 font-mono">{cliVersion}</span>
           </div>
         )}
+      </div>
+
+      {/* Storage Management */}
+      <div className="rounded-xl border border-neutral-700/50 bg-neutral-800/50 p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-neutral-200">Storage</p>
+            <p className="text-xs text-neutral-500 mt-0.5">Local database usage</p>
+          </div>
+          {storageStats && (
+            <span className="text-sm font-medium text-neutral-400 font-mono">
+              {formatBytes(storageStats.dbSizeBytes)}
+            </span>
+          )}
+        </div>
+
+        {storageStats && (
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: 'Conversations', value: storageStats.conversations },
+              { label: 'Messages', value: storageStats.messages },
+              { label: 'Stories', value: storageStats.stories },
+              { label: 'Metric entries', value: storageStats.metrics },
+            ].map((item) => (
+              <div key={item.label} className="rounded-lg bg-neutral-900/50 px-3 py-2">
+                <p className="text-xs text-neutral-500">{item.label}</p>
+                <p className="text-sm font-medium text-neutral-300">{item.value.toLocaleString()}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="pt-3 border-t border-neutral-700/50 space-y-2">
+          {confirmAction === null ? (
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmAction('conversations')}
+                className="flex-1 px-3 py-2 text-sm font-medium text-neutral-300 bg-neutral-700/50 hover:bg-neutral-700 rounded-lg transition-colors"
+              >
+                Clear conversations
+              </button>
+              <button
+                onClick={() => setConfirmAction('all')}
+                className="flex-1 px-3 py-2 text-sm font-medium text-red-400 bg-red-500/10 hover:bg-red-500/20 rounded-lg transition-colors"
+              >
+                Clear all data
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+              <p className="text-sm text-red-300 mb-3">
+                {confirmAction === 'conversations'
+                  ? 'This will permanently delete all conversations and messages.'
+                  : 'This will permanently delete all conversations, messages, stories, and metrics.'}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setConfirmAction(null)}
+                  disabled={clearing}
+                  className="flex-1 px-3 py-2 text-sm font-medium text-neutral-300 bg-neutral-700/50 hover:bg-neutral-700 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleClear(confirmAction)}
+                  disabled={clearing}
+                  className="flex-1 px-3 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {clearing ? 'Clearing...' : 'Confirm'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

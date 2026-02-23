@@ -212,6 +212,19 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
     return settings.setProjectSettings(dirPath, partial)
   })
 
+  // ── Storage ──
+  ipcMain.handle('storage:getStats', async () => {
+    return database.getStorageStats()
+  })
+
+  ipcMain.handle('storage:clearConversations', async () => {
+    database.clearConversations()
+  })
+
+  ipcMain.handle('storage:clearAllData', async () => {
+    database.clearAllData()
+  })
+
   // ── MCP ──
   ipcMain.handle('mcp:writeConfig', async (_event, projectPath: string, servers) => {
     return writeMcpConfig(projectPath, servers, settings)
