@@ -7,12 +7,24 @@ export interface CliCheckResult {
   error?: string
 }
 
+function stripAnsi(text: string): string {
+  return text.replace(/\x1b\[[0-9;]*[A-Za-z]|\x1b\].*?(?:\x07|\x1b\\)/g, '')
+}
+
 function getExpandedEnv(): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(process.env)) {
     if (v !== undefined) env[k] = v
   }
-  if (process.platform !== 'win32') {
+  if (process.platform === 'win32') {
+    const home = process.env.USERPROFILE || ''
+    const localAppData = process.env.LOCALAPPDATA || ''
+    env.Path = [
+      `${home}\\.local\\bin`,
+      `${localAppData}\\Programs\\claude-code`,
+      env.Path || env.PATH || '',
+    ].join(';')
+  } else {
     const home = process.env.HOME || ''
     env.PATH = `/usr/local/bin:/opt/homebrew/bin:${home}/.local/bin:${env.PATH || ''}`
   }
@@ -99,11 +111,11 @@ export class CliChecker {
       }
 
       proc.stdout?.on('data', (chunk: Buffer) => {
-        this.send('cli:installOutput', { stream: 'stdout', data: chunk.toString() })
+        this.send('cli:installOutput', { stream: 'stdout', data: stripAnsi(chunk.toString()) })
       })
 
       proc.stderr?.on('data', (chunk: Buffer) => {
-        this.send('cli:installOutput', { stream: 'stderr', data: chunk.toString() })
+        this.send('cli:installOutput', { stream: 'stderr', data: stripAnsi(chunk.toString()) })
       })
 
       proc.on('close', (code) => {
