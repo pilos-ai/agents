@@ -166,7 +166,7 @@ function rebuildMenu() {
     submenu: [
       {
         label: 'Documentation',
-        click: () => shell.openExternal('https://pilos.dev/docs'),
+        click: () => shell.openExternal('https://pilos.net/docs'),
       },
       {
         label: 'Report Issue',
