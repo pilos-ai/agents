@@ -59,6 +59,12 @@ export function installUpdate(): void {
   autoUpdater.quitAndInstall(false, true)
 }
 
+export function checkForUpdates(): void {
+  autoUpdater.checkForUpdates().catch((err: Error) => {
+    console.error('[AutoUpdater] Manual check failed:', err.message)
+  })
+}
+
 function send(win: BrowserWindow, channel: string, data: unknown): void {
   if (win?.isDestroyed()) return
   win.webContents.send(channel, data)

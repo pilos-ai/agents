@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useRef, useCallback } from 'react'
 import { useConversationStore } from '../../store/useConversationStore'
 import { useProjectStore } from '../../store/useProjectStore'
 import { ReplyPreview } from './ReplyPreview'
@@ -22,8 +22,6 @@ function fileToBase64(file: File | Blob): Promise<string> {
 }
 
 export function InputBar() {
-  const [text, setText] = useState('')
-  const [images, setImages] = useState<ImageAttachment[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const sendMessage = useConversationStore((s) => s.sendMessage)
@@ -33,7 +31,11 @@ export function InputBar() {
   const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
   const openProjects = useProjectStore((s) => s.openProjects)
   const setProjectModel = useProjectStore((s) => s.setProjectModel)
+  const setDraftText = useProjectStore((s) => s.setDraftText)
+  const setDraftImages = useProjectStore((s) => s.setDraftImages)
   const activeTab = openProjects.find((p) => p.projectPath === activeProjectPath)
+  const text = activeTab?.draftText || ''
+  const images = activeTab?.draftImages || []
   const model = activeTab?.model || 'sonnet'
   const mcpCount = activeTab?.mcpServers?.filter((s) => s.enabled).length || 0
 
@@ -52,24 +54,30 @@ export function InputBar() {
       })
     }
     if (newImages.length > 0) {
-      setImages((prev) => [...prev, ...newImages])
+      const current = useProjectStore.getState().openProjects.find(
+        (p) => p.projectPath === useProjectStore.getState().activeProjectPath
+      )
+      setDraftImages([...(current?.draftImages || []), ...newImages])
     }
-  }, [])
+  }, [setDraftImages])
 
   const removeImage = useCallback((index: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== index))
-  }, [])
+    const current = useProjectStore.getState().openProjects.find(
+      (p) => p.projectPath === useProjectStore.getState().activeProjectPath
+    )
+    setDraftImages((current?.draftImages || []).filter((_, i) => i !== index))
+  }, [setDraftImages])
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim()
     if ((!trimmed && images.length === 0) || isLoading) return
     sendMessage(trimmed || 'What is in this image?', images.length > 0 ? images : undefined)
-    setText('')
-    setImages([])
+    setDraftText('')
+    setDraftImages([])
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
-  }, [text, images, isLoading, sendMessage])
+  }, [text, images, isLoading, sendMessage, setDraftText, setDraftImages])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -79,7 +87,7 @@ export function InputBar() {
   }
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setText(e.target.value)
+    setDraftText(e.target.value)
     const el = e.target
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 200) + 'px'

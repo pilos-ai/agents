@@ -101,6 +101,7 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
       // Best effort
     }
 
+    api.metrics.setLicenseKey('').catch(() => {})
     set({
       tier: 'free',
       licenseKey: null,

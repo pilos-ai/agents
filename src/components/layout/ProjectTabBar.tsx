@@ -73,6 +73,9 @@ export function ProjectTabBar() {
     <div className="flex items-center bg-neutral-900/80 border-b border-neutral-800 px-1 h-8 flex-shrink-0 overflow-x-auto">
       {openProjects.map((tab) => {
         const isActive = tab.projectPath === activeProjectPath
+        const isBackgroundBusy = !isActive && (
+          tab.snapshot?.isWaitingForResponse || tab.snapshot?.streaming.isStreaming
+        )
         return (
           <div
             key={tab.projectPath}
@@ -83,7 +86,20 @@ export function ProjectTabBar() {
             }`}
             onClick={() => setActiveProject(tab.projectPath)}
           >
+            {/* Activity indicator for background tabs with running sessions */}
+            {isBackgroundBusy && (
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+              </span>
+            )}
             <span className="truncate">{tab.projectName}</span>
+            {/* Unread message badge */}
+            {!isActive && tab.unreadCount > 0 && (
+              <span className="flex items-center justify-center min-w-[16px] h-4 px-1 bg-blue-600 text-white text-[10px] font-bold rounded-full shrink-0">
+                {tab.unreadCount > 99 ? '99+' : tab.unreadCount}
+              </span>
+            )}
             <button
               onClick={(e) => {
                 e.stopPropagation()

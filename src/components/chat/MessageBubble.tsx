@@ -107,6 +107,18 @@ export const MessageBubble = memo(function MessageBubble({ message, messages, is
     )
   }
 
+  // Thinking message (persisted from background tab processing)
+  if (message.type === 'thinking' && message.content) {
+    return (
+      <div className="flex flex-col items-start">
+        <div className="max-w-[85%] rounded-lg px-4 py-2.5 bg-neutral-800/30 text-neutral-400 text-xs italic border-l-2 border-neutral-600">
+          <div className="mb-1 text-neutral-500 text-[10px] uppercase tracking-wider font-medium">Thinking</div>
+          <div className="whitespace-pre-wrap">{message.content}</div>
+        </div>
+      </div>
+    )
+  }
+
   // Non-agent message with content blocks (solo mode)
   if (message.contentBlocks && message.contentBlocks.length > 0) {
     return (

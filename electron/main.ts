@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { registerIpcHandlers } from './ipc-handlers'
@@ -33,6 +33,7 @@ async function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      spellcheck: true,
     },
     show: false,
   })
@@ -72,6 +73,55 @@ async function createWindow() {
   // Set up auto-updater
   setupAutoUpdater(mainWindow)
   ipcMain.handle('update:install', () => installUpdate())
+
+  // Native context menu with spell check, Look Up, Share, etc.
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const menuItems: Electron.MenuItemConstructorOptions[] = []
+
+    // Spell check suggestions
+    if (params.misspelledWord) {
+      for (const suggestion of params.dictionarySuggestions.slice(0, 5)) {
+        menuItems.push({
+          label: suggestion,
+          click: () => mainWindow?.webContents.replaceMisspelling(suggestion),
+        })
+      }
+      if (menuItems.length > 0) menuItems.push({ type: 'separator' })
+      menuItems.push({
+        label: 'Add to Dictionary',
+        click: () => mainWindow?.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
+      })
+      menuItems.push({ type: 'separator' })
+    }
+
+    // Look Up (macOS)
+    if (process.platform === 'darwin' && params.selectionText) {
+      menuItems.push({
+        label: `Look Up "${params.selectionText.slice(0, 20)}${params.selectionText.length > 20 ? '...' : ''}"`,
+        click: () => mainWindow?.webContents.showDefinitionForSelection(),
+      })
+      menuItems.push({ type: 'separator' })
+    }
+
+    // Standard edit actions
+    if (params.isEditable) {
+      menuItems.push(
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      )
+    } else if (params.selectionText) {
+      menuItems.push({ role: 'copy' })
+    }
+
+    if (menuItems.length > 0) {
+      Menu.buildFromTemplate(menuItems).popup()
+    }
+  })
 
   mainWindow.on('closed', () => {
     mainWindow = null

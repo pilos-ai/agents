@@ -5,7 +5,7 @@ import { SettingsStore } from './settings-store'
 
 const FLUSH_INTERVAL = 5 * 60_000       // 5 minutes
 const SYNC_INTERVAL = 24 * 60 * 60_000  // 24 hours
-const LICENSE_SERVER = process.env.PILOS_LICENSE_SERVER || 'https://license.pilosagents.com'
+const LICENSE_SERVER = process.env.PILOS_LICENSE_SERVER || 'https://license.pilos.net'
 
 export class MetricsCollector {
   private database: Database
@@ -56,6 +56,13 @@ export class MetricsCollector {
 
   setLicenseKey(key: string | null): void {
     this.licenseKey = key
+    // Persist so it's available on next cold start (before renderer loads)
+    this.settings.set('licenseKey', key || '')
+    // Flush current counters and sync immediately now that we have a key
+    if (key) {
+      this.flush()
+      this.sync()
+    }
   }
 
   trackSessionStarted(): void {
@@ -112,7 +119,10 @@ export class MetricsCollector {
   }
 
   async sync(): Promise<void> {
-    if (!this.licenseKey) return
+    if (!this.licenseKey) {
+      console.debug('[MetricsCollector] No license key — skipping sync')
+      return
+    }
 
     try {
       const rows = this.database.getUnsentMetrics()
@@ -144,8 +154,8 @@ export class MetricsCollector {
         this.database.markMetricsSent(ids)
         console.log(`[MetricsCollector] synced ${ids.length} metric rows`)
       }
-    } catch {
-      // Silently skip — retry next cycle
+    } catch (err) {
+      console.error('[MetricsCollector] sync error:', err)
     }
   }
 

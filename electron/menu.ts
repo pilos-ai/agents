@@ -1,5 +1,6 @@
 import { app, Menu, shell, BrowserWindow, ipcMain, MenuItemConstructorOptions } from 'electron'
 import { SettingsStore } from './services/settings-store'
+import { checkForUpdates } from './services/auto-updater'
 
 let win: BrowserWindow
 let settings: SettingsStore
@@ -22,6 +23,10 @@ function rebuildMenu() {
       label: app.name,
       submenu: [
         { role: 'about' },
+        {
+          label: 'Check for Updates...',
+          click: () => checkForUpdates(),
+        },
         { type: 'separator' },
         {
           label: 'Settings...',
