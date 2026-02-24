@@ -5,46 +5,87 @@
 <h1 align="center">Pilos Agents</h1>
 
 <p align="center">
-  A desktop app for working with AI agents — built on Claude Code.
+  <strong>The visual desktop app for Claude Code — multi-agent teams, MCP integrations, and project tabs in one native UI.</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/pilos-ai/agents/blob/main/LICENSE"><img src="https://img.shields.io/github/license/pilos-ai/agents" alt="License" /></a>
   <a href="https://github.com/pilos-ai/agents/releases"><img src="https://img.shields.io/github/v/release/pilos-ai/agents" alt="Release" /></a>
+  <a href="https://github.com/pilos-ai/agents/blob/main/LICENSE"><img src="https://img.shields.io/github/license/pilos-ai/agents" alt="License" /></a>
   <a href="https://github.com/pilos-ai/agents/stargazers"><img src="https://img.shields.io/github/stars/pilos-ai/agents" alt="Stars" /></a>
+  <a href="https://pilos.net"><img src="https://img.shields.io/badge/website-pilos.net-blue" alt="Website" /></a>
 </p>
 
-<!-- screenshot -->
+<p align="center"><img src="resources/demo.gif" width="800" alt="Pilos Agents demo" /></p>
 
-## What is Pilos Agents
+---
 
-Pilos Agents is an Electron-based desktop application that gives you a visual interface on top of [Claude Code](https://docs.anthropic.com/en/docs/claude-code). It supports multi-agent teams, integrated terminals, MCP tool integrations, and persistent project memory — all in a native app for macOS and Windows.
+## Why Pilos?
+
+Claude Code is powerful, but it lives in the terminal. Pilos gives it a native desktop home:
+
+- **See all your projects at once** — multi-tab interface, switch between projects without losing context
+- **Multi-agent collaboration** — PM, Architect, Developer, Designer, and Product agents work together on your tasks
+- **One-click MCP tools** — connect GitHub, Jira, Supabase, Sentry, browser automation, and more without editing JSON configs
+- **Everything persists** — conversations, project memory, and agent context survive restarts
+
+No lock-in. Your Claude Code CLI does all the AI work. Pilos is the visual layer on top.
+
+## Download
+
+<table>
+  <tr>
+    <td align="center"><b>macOS</b></td>
+    <td align="center"><b>Windows</b></td>
+    <td align="center"><b>Linux</b></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/pilos-ai/agents/releases/latest">Download .dmg</a></td>
+    <td align="center"><a href="https://github.com/pilos-ai/agents/releases/latest">Download .exe</a></td>
+    <td align="center"><a href="https://github.com/pilos-ai/agents/releases/latest">Download .AppImage</a></td>
+  </tr>
+</table>
+
+> **Prerequisite:** [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) — `npm i -g @anthropic-ai/claude-code`
 
 ## Features
 
-- **🤖 Multi-Agent Team Mode** — 5 built-in agent roles (PM, Architect, Developer, Designer, Product) that collaborate on tasks
-- **💻 Integrated Terminal** — Full terminal emulator powered by xterm.js, embedded alongside agent output
-- **🔌 MCP Integrations** — 3 free built-in servers: GitHub, Supabase, and Filesystem
-- **🧠 Persistent Project Memory** — SQLite-backed memory with multi-project tabs so context carries across sessions
-- **🔒 Permission Modes** — Auto-approve, ask-before-running, or read-only — control what agents can do
+### Free (MIT)
 
-## Quick Start
+- **Multi-Agent Teams** — 5 built-in roles (PM, Architect, Developer, Designer, Product) that collaborate on tasks with distinct perspectives
+- **Multi-Project Tabs** — Work on multiple projects simultaneously, each with isolated conversations and context
+- **Integrated Terminal** — Full terminal emulator (xterm.js) embedded alongside agent output
+- **MCP Integrations** — Built-in servers for GitHub, Supabase, and Filesystem — one-click setup, no JSON editing
+- **Persistent Memory** — SQLite-backed project memory that carries across sessions and restarts
+- **Permission Modes** — Auto-approve, ask-before-running, or read-only — you control what agents can do
+- **Native Context Menu** — Spell check, Look Up, and standard macOS/Windows edit actions
+- **Auto Updates** — Automatic update checks with in-app install
 
-### Download
+### Pro
 
-Grab the latest release from the [Releases page](https://github.com/pilos-ai/agents/releases).
+- **Browser MCP** — Let Claude see and interact with your browser via a Chrome extension
+- **Computer Use** — macOS screen automation (screenshot, click, type) for visual tasks
+- **Jira Integration** — Read and update Jira issues directly from the agent conversation
+- **Sentry Integration** — Query errors, issues, and AI-powered root cause analysis
+- **Premium MCP Templates** — One-click setup for Notion, Linear, Slack, and more
 
-### Build from Source
+See [pilos.net/pricing](https://pilos.net/pricing) for plans.
 
-**Prerequisites:**
-- [Node.js](https://nodejs.org/) 18+
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) — `npm i -g @anthropic-ai/claude-code` (authenticate via `claude` command)
+## Build from Source
 
 ```bash
 git clone https://github.com/pilos-ai/agents.git
 cd agents
 npm install
 npm run dev
+```
+
+**Requirements:** Node.js 18+, Claude Code CLI authenticated
+
+```bash
+npm run build          # Production build
+npm run dist:mac       # Package for macOS (.dmg)
+npm run dist:win       # Package for Windows (.exe)
+npm run dist:linux     # Package for Linux (.AppImage)
 ```
 
 ## Tech Stack
@@ -66,20 +107,6 @@ packages/           Optional feature packages (PM, Pro)
 resources/          App icons and assets
 ```
 
-## Building
-
-```bash
-npm run dev          # Start dev server with hot reload
-npm run build        # Production build
-npm run dist:mac     # Package for macOS (.dmg)
-npm run dist:win     # Package for Windows (.exe)
-npm run dist:linux   # Package for Linux (.AppImage)
-```
-
-## Pro Features
-
-Pilos Agents follows an open-core model. The core app is free and MIT-licensed. Pro features (browser automation, computer use, Jira integration) are available with a license — see [pilos.net/pricing](https://pilos.net/pricing).
-
 ## Contributing
 
 Contributions are welcome.
@@ -93,10 +120,11 @@ See [open issues](https://github.com/pilos-ai/agents/issues) for ideas on where 
 
 ## Community
 
+- [Website](https://pilos.net) — Download, docs, and pricing
 - [GitHub Issues](https://github.com/pilos-ai/agents/issues) — Bug reports and feature requests
 - [Discord](https://discord.gg/pilos) — Chat with the team
 - [X / Twitter](https://x.com/pilosdotnet) — Updates and announcements
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE) for details. Pro extensions are [BUSL-1.1](https://github.com/pilos-ai/agents/blob/main/packages/pro/LICENSE).
