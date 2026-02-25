@@ -13,6 +13,9 @@
   <a href="https://github.com/pilos-ai/agents/blob/main/LICENSE"><img src="https://img.shields.io/github/license/pilos-ai/agents" alt="License" /></a>
   <a href="https://github.com/pilos-ai/agents/stargazers"><img src="https://img.shields.io/github/stars/pilos-ai/agents" alt="Stars" /></a>
   <a href="https://pilos.net"><img src="https://img.shields.io/badge/website-pilos.net-blue" alt="Website" /></a>
+  <a href="https://discord.gg/pilos"><img src="https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
+  <a href="https://x.com/pilosdotnet"><img src="https://img.shields.io/badge/follow-@pilosdotnet-black?logo=x" alt="Twitter" /></a>
+  <a href="https://dev.to/pilosdotnet"><img src="https://img.shields.io/badge/dev.to-pilosdotnet-0A0A0A?logo=devdotto" alt="Dev.to" /></a>
 </p>
 
 <p align="center"><img src="resources/demo.gif" width="800" alt="Pilos Agents demo" /></p>
