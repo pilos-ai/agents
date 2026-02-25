@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useAppStore } from '../../store/useAppStore'
 import { api } from '../../api'
 import type { CliInstallOutput, DependencyInfo, DependencyInstallInfo, DependencyName } from '../../types'
@@ -63,6 +63,10 @@ function DependencyRow({
   installInfo,
   onBrowse,
   onInstall,
+  onAutoInstall,
+  installing,
+  installProgress,
+  installError,
   children,
 }: {
   label: string
@@ -70,6 +74,10 @@ function DependencyRow({
   installInfo?: DependencyInstallInfo | null
   onBrowse?: () => void
   onInstall?: () => void
+  onAutoInstall?: () => void
+  installing?: boolean
+  installProgress?: string
+  installError?: string
   children?: React.ReactNode
 }) {
   const status = info?.status ?? 'checking'
@@ -77,10 +85,11 @@ function DependencyRow({
   return (
     <div className="flex items-start gap-3 px-4 py-3 rounded-lg bg-neutral-900/50 border border-neutral-800/50">
       <div className="mt-0.5 flex-shrink-0">
-        {status === 'checking' && <SpinnerIcon className="w-5 h-5 text-neutral-400 animate-spin" />}
-        {status === 'found' && <CheckIcon className="w-5 h-5 text-emerald-400" />}
-        {status === 'not_found' && <XIcon className="w-5 h-5 text-red-400" />}
-        {status === 'error' && <XIcon className="w-5 h-5 text-amber-400" />}
+        {installing && <SpinnerIcon className="w-5 h-5 text-blue-400 animate-spin" />}
+        {!installing && status === 'checking' && <SpinnerIcon className="w-5 h-5 text-neutral-400 animate-spin" />}
+        {!installing && status === 'found' && <CheckIcon className="w-5 h-5 text-emerald-400" />}
+        {!installing && status === 'not_found' && <XIcon className="w-5 h-5 text-red-400" />}
+        {!installing && status === 'error' && <XIcon className="w-5 h-5 text-amber-400" />}
       </div>
 
       <div className="flex-1 min-w-0">
@@ -93,7 +102,15 @@ function DependencyRow({
           )}
         </div>
 
-        {status === 'not_found' && installInfo && (
+        {installing && installProgress && (
+          <p className="text-xs text-blue-400 mt-1 font-mono truncate">{installProgress}</p>
+        )}
+
+        {installError && !installing && (
+          <p className="text-xs text-red-400 mt-1">{installError}</p>
+        )}
+
+        {status === 'not_found' && !installing && installInfo && (
           <div className="mt-2 space-y-2">
             <p className="text-xs text-neutral-500">{installInfo.instructions}</p>
             {installInfo.command && (
@@ -105,6 +122,14 @@ function DependencyRow({
               </div>
             )}
             <div className="flex items-center gap-2">
+              {onAutoInstall && (
+                <button
+                  onClick={onAutoInstall}
+                  className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors font-medium"
+                >
+                  Auto-install
+                </button>
+              )}
               {onInstall && (
                 <button
                   onClick={onInstall}
@@ -150,7 +175,6 @@ export function SetupScreen() {
   const cliLoginLog = useAppStore((s) => s.cliLoginLog)
   const checkDependencies = useAppStore((s) => s.checkDependencies)
   const browseForBinary = useAppStore((s) => s.browseForBinary)
-  const installCli = useAppStore((s) => s.installCli)
   const loginCli = useAppStore((s) => s.loginCli)
   const appendCliInstallLog = useAppStore((s) => s.appendCliInstallLog)
   const appendCliLoginLog = useAppStore((s) => s.appendCliLoginLog)
@@ -158,6 +182,41 @@ export function SetupScreen() {
   const loginLogRef = useRef<HTMLPreElement>(null)
 
   const [installInfoMap, setInstallInfoMap] = useState<Record<string, DependencyInstallInfo>>({})
+  const [installingTools, setInstallingTools] = useState<Record<string, boolean>>({})
+  const [installProgressMap, setInstallProgressMap] = useState<Record<string, string>>({})
+  const [installErrorMap, setInstallErrorMap] = useState<Record<string, string>>({})
+
+  // Subscribe to dependency auto-install progress
+  useEffect(() => {
+    const unsub = api.deps.onInstallProgress((data) => {
+      setInstallProgressMap((prev) => ({ ...prev, [data.tool]: data.message }))
+    })
+    return unsub
+  }, [])
+
+  const handleAutoInstall = useCallback(async (tool: DependencyName) => {
+    setInstallingTools((prev) => ({ ...prev, [tool]: true }))
+    setInstallErrorMap((prev) => ({ ...prev, [tool]: '' }))
+    setInstallProgressMap((prev) => ({ ...prev, [tool]: 'Starting...' }))
+
+    try {
+      const result = await api.deps.autoInstall(tool)
+      if (result.success) {
+        setInstallProgressMap((prev) => ({ ...prev, [tool]: 'Installed successfully!' }))
+        // Re-check all dependencies after successful install
+        setTimeout(() => {
+          setInstallingTools((prev) => ({ ...prev, [tool]: false }))
+          checkDependencies()
+        }, 1000)
+      } else {
+        setInstallingTools((prev) => ({ ...prev, [tool]: false }))
+        setInstallErrorMap((prev) => ({ ...prev, [tool]: result.error || 'Installation failed' }))
+      }
+    } catch (err) {
+      setInstallingTools((prev) => ({ ...prev, [tool]: false }))
+      setInstallErrorMap((prev) => ({ ...prev, [tool]: String(err) }))
+    }
+  }, [checkDependencies])
 
   // Subscribe to CLI install output
   useEffect(() => {
@@ -337,19 +396,30 @@ export function SetupScreen() {
             info={git}
             installInfo={installInfoMap.git}
             onBrowse={() => browseForBinary('git')}
+            onAutoInstall={() => handleAutoInstall('git')}
+            installing={installingTools.git}
+            installProgress={installProgressMap.git}
+            installError={installErrorMap.git}
           />
           <DependencyRow
             label="Node.js"
             info={node}
             installInfo={installInfoMap.node}
             onBrowse={() => browseForBinary('node')}
+            onAutoInstall={() => handleAutoInstall('node')}
+            installing={installingTools.node}
+            installProgress={installProgressMap.node}
+            installError={installErrorMap.node}
           />
           <DependencyRow
             label="Claude CLI"
             info={claude}
             installInfo={installInfoMap.claude}
             onBrowse={() => browseForBinary('claude')}
-            onInstall={installCli}
+            onAutoInstall={() => handleAutoInstall('claude')}
+            installing={installingTools.claude}
+            installProgress={installProgressMap.claude}
+            installError={installErrorMap.claude}
           >
             {/* Install log if failed */}
             {setupStatus === 'install_failed' && cliInstallLog && (

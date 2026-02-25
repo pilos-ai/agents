@@ -24,6 +24,8 @@ const stubAPI: ElectronAPI = {
     openInstallPage: noopAsync,
     setCustomPath: () => Promise.resolve({ name: 'git' as const, status: 'found' as const }),
     browseForBinary: () => Promise.resolve(null),
+    autoInstall: () => Promise.resolve({ success: false, error: 'stub' }),
+    onInstallProgress: noopUnsub,
   },
   claude: {
     startSession: noopAsync,

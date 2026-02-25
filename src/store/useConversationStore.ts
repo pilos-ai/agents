@@ -136,7 +136,22 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   },
 
   setActiveConversation: async (id) => {
-    set({ activeConversationId: id, messages: [], streaming: { ...emptyStreaming }, hasActiveSession: false, replyToMessage: null, scrollToMessageId: null })
+    // Abort the previous chat's Claude process to prevent context divergence.
+    // If we don't abort, the CLI keeps running and its internal state diverges
+    // from the app's DB — causing context bleeding when resuming later.
+    const prevId = get().activeConversationId
+    if (prevId && prevId !== id && get().hasActiveSession) {
+      api.claude.abort(prevId)
+    }
+
+    set({ activeConversationId: id, messages: [], streaming: { ...emptyStreaming }, hasActiveSession: false, permissionRequest: null, askUserQuestion: null, exitPlanMode: null, replyToMessage: null, scrollToMessageId: null })
+
+    // Register the new conversation for event routing
+    if (id) {
+      const projectPath = useProjectStore.getState().activeProjectPath || ''
+      useProjectStore.getState().registerConversation(id, projectPath)
+    }
+
     if (id) {
       const loaded = await api.conversations.getMessages(id)
 

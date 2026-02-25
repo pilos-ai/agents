@@ -27,6 +27,12 @@ contextBridge.exposeInMainWorld('api', {
     setCustomPath: (tool: string, binaryPath: string) =>
       ipcRenderer.invoke('deps:setCustomPath', tool, binaryPath),
     browseForBinary: (tool: string) => ipcRenderer.invoke('deps:browseForBinary', tool),
+    autoInstall: (tool: string) => ipcRenderer.invoke('deps:autoInstall', tool),
+    onInstallProgress: (callback: (data: { tool: string; message: string }) => void) => {
+      const handler = (_event: unknown, data: { tool: string; message: string }) => callback(data)
+      ipcRenderer.on('deps:install-progress', handler)
+      return () => ipcRenderer.removeListener('deps:install-progress', handler)
+    },
   },
 
   // Claude CLI

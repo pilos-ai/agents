@@ -7,6 +7,7 @@ import { SettingsStore } from './services/settings-store'
 import { CliChecker } from './services/cli-checker'
 import { DependencyChecker } from './services/dependency-checker'
 import type { DependencyName } from './services/dependency-checker'
+import { installNode, installGit, installClaude } from './services/dependency-installer'
 import { writeMcpConfig } from './services/mcp-config-writer'
 import type { MetricsCollector } from './services/metrics-collector'
 
@@ -78,6 +79,23 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
 
   ipcMain.handle('deps:browseForBinary', async (_event, tool: string) => {
     return dependencyChecker.browseForBinary(tool as DependencyName)
+  })
+
+  ipcMain.handle('deps:autoInstall', async (_event, tool: string) => {
+    try {
+      switch (tool) {
+        case 'node':
+          return { success: true, path: await installNode(mainWindow, settings) }
+        case 'git':
+          return { success: true, path: await installGit(mainWindow, settings) }
+        case 'claude':
+          return { success: true, path: await installClaude(mainWindow, settings) }
+        default:
+          return { success: false, error: `Unknown tool: ${tool}` }
+      }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
   })
 
   // ── Claude CLI ──

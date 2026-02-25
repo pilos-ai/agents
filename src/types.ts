@@ -443,6 +443,8 @@ export interface ElectronAPI {
     openInstallPage: (tool: DependencyName) => Promise<void>
     setCustomPath: (tool: DependencyName, binaryPath: string) => Promise<DependencyInfo>
     browseForBinary: (tool: DependencyName) => Promise<DependencyInfo | null>
+    autoInstall: (tool: DependencyName) => Promise<{ success: boolean; path?: string; error?: string }>
+    onInstallProgress: (callback: (data: { tool: DependencyName; message: string }) => void) => () => void
   }
   claude: {
     startSession: (sessionId: string, options: Record<string, unknown>) => Promise<void>
