@@ -270,7 +270,17 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       const appendSystemPrompt = systemPromptParts.join('\n\n')
 
       // Generate MCP config (always write — Jira MCP server is auto-injected server-side)
-      const mcpConfigPath = await api.mcp.writeConfig(projectPath, tab?.mcpServers || [])
+      const mcpResult = await api.mcp.writeConfig(projectPath, tab?.mcpServers || [])
+
+      // Surface MCP config warnings (e.g. Jira connected on another project)
+      for (const warning of mcpResult.warnings) {
+        get().addMessage({
+          role: 'assistant',
+          type: 'text',
+          content: `⚠️ ${warning}`,
+          timestamp: Date.now(),
+        })
+      }
 
       await api.claude.startSession(conversationId, {
         prompt: cliText,
@@ -280,7 +290,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         model: tab?.model,
         permissionMode: tab?.permissionMode,
         appendSystemPrompt,
-        mcpConfigPath,
+        mcpConfigPath: mcpResult.configPath,
       })
       set((s) => ({
         processLogs: [...s.processLogs, {

@@ -492,7 +492,7 @@ export interface ElectronAPI {
     getAll: () => Promise<Record<string, unknown>>
   }
   mcp: {
-    writeConfig: (projectPath: string, servers: McpServer[]) => Promise<string>
+    writeConfig: (projectPath: string, servers: McpServer[]) => Promise<{ configPath: string; warnings: string[] }>
   }
   files: {
     revertEdit: (filePath: string, oldString: string, newString: string) =>

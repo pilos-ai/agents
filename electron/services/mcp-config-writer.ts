@@ -17,12 +17,17 @@ interface McpServerEntry {
   }
 }
 
+export interface McpConfigResult {
+  configPath: string
+  warnings: string[]
+}
+
 /**
  * Writes an MCP config JSON file for a project and returns its absolute path.
  * Only includes enabled servers. Output format matches Claude CLI expectations.
  * When Jira is connected (tokens exist in settings), auto-injects the Jira MCP server.
  */
-export function writeMcpConfig(projectPath: string, servers: McpServerEntry[], settings?: SettingsStore): string {
+export function writeMcpConfig(projectPath: string, servers: McpServerEntry[], settings?: SettingsStore): McpConfigResult {
   const configDir = path.join(app.getPath('userData'), 'mcp-configs')
   if (!fs.existsSync(configDir)) {
     fs.mkdirSync(configDir, { recursive: true })
@@ -62,6 +67,7 @@ export function writeMcpConfig(projectPath: string, servers: McpServerEntry[], s
   }
 
   // Auto-inject Jira MCP server when connected (project-scoped tokens)
+  const warnings: string[] = []
   if (settings) {
     const tokenKey = projectPath ? `jiraTokens:${projectPath}` : 'jiraTokens'
     const jiraTokens = settings.get(tokenKey) as { accessToken: string; cloudId: string } | null
@@ -93,6 +99,20 @@ export function writeMcpConfig(projectPath: string, servers: McpServerEntry[], s
         ...(Object.keys(nodeEnv).length > 0 ? { env: nodeEnv } : {}),
       }
       console.log(`[McpConfigWriter] Injected Jira MCP server (tokens from ${tokenFilePath})`)
+    } else {
+      // No tokens for this project — check if Jira is connected on another project
+      const allSettings = settings.getAll()
+      const otherJiraKey = Object.keys(allSettings).find(
+        (key) => key.startsWith('jiraTokens:') && key !== tokenKey && allSettings[key] != null
+      )
+      if (otherJiraKey) {
+        const otherPath = otherJiraKey.replace('jiraTokens:', '')
+        warnings.push(
+          `Jira is connected on another project (${path.basename(otherPath)}) but not on this one. ` +
+          `Open the PM sidebar and connect Jira for this project to use Jira tools.`
+        )
+        console.log(`[McpConfigWriter] Warning: Jira tokens found for ${otherPath} but not for ${projectPath}`)
+      }
     }
   }
 
@@ -119,5 +139,5 @@ export function writeMcpConfig(projectPath: string, servers: McpServerEntry[], s
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
   console.log(`[McpConfigWriter] Wrote config with ${Object.keys(mcpServers).length} servers to ${configPath}`)
 
-  return configPath
+  return { configPath, warnings }
 }

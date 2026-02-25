@@ -309,7 +309,17 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
 
   // ── MCP ──
   ipcMain.handle('mcp:writeConfig', async (_event, projectPath: string, servers) => {
-    return writeMcpConfig(projectPath, servers, settings)
+    // Refresh Jira tokens before writing MCP config to avoid stale tokens
+    if (jiraOAuth && projectPath) {
+      try {
+        jiraOAuth.setActiveProject(projectPath)
+        await jiraOAuth.getValidTokens() // refreshes and saves to settings if needed
+      } catch {
+        // Token refresh failed — writeMcpConfig will handle missing/stale tokens
+      }
+    }
+    const result = writeMcpConfig(projectPath, servers, settings)
+    return result
   })
 
   // ── Files ──

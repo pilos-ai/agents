@@ -73,7 +73,7 @@ const stubAPI: ElectronAPI = {
     getAll: () => Promise.resolve({}),
   },
   mcp: {
-    writeConfig: () => Promise.resolve('/tmp/stub-mcp.json'),
+    writeConfig: () => Promise.resolve({ configPath: '/tmp/stub-mcp.json', warnings: [] }),
   },
   files: {
     revertEdit: () => Promise.resolve({ success: false, error: 'stub' }),
