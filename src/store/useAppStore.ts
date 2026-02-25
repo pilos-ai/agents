@@ -1,11 +1,17 @@
 import { create } from 'zustand'
 import { api } from '../api'
+import type { DependencyCheckResult, DependencyName } from '../types'
 
 export type CliStatus = 'checking' | 'ready' | 'missing' | 'installing' | 'install_failed' | 'error' | 'needs_login' | 'logging_in'
+export type SetupStatus = 'checking_deps' | 'deps_missing' | 'checking_cli' | 'ready' | 'missing' | 'installing' | 'install_failed' | 'error' | 'needs_login' | 'logging_in'
 export type SettingsSection = 'project' | 'agents' | 'mcp' | 'integrations' | 'license' | 'general'
 export type AppView = 'chat' | (string & {})
 
 interface AppStore {
+  // Setup / Dependencies
+  setupStatus: SetupStatus
+  dependencyResult: DependencyCheckResult | null
+
   // CLI Status
   cliStatus: CliStatus
   cliVersion?: string
@@ -29,6 +35,8 @@ interface AppStore {
 
   // Actions
   setActiveView: (view: AppView) => void
+  checkDependencies: () => Promise<void>
+  browseForBinary: (tool: DependencyName) => Promise<void>
   checkCli: () => Promise<void>
   installCli: () => Promise<void>
   loginCli: () => Promise<void>
@@ -45,6 +53,9 @@ interface AppStore {
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
+  setupStatus: 'checking_deps',
+  dependencyResult: null,
+
   cliStatus: 'checking',
   cliInstallLog: '',
   cliLoginLog: '',
@@ -59,6 +70,47 @@ export const useAppStore = create<AppStore>((set, get) => ({
   terminalFontSize: 13,
 
   setActiveView: (view) => set({ activeView: view }),
+
+  checkDependencies: async () => {
+    set({ setupStatus: 'checking_deps', dependencyResult: null })
+    try {
+      const result = await api.deps.checkAll()
+      set({ dependencyResult: result })
+
+      if (!result.allFound) {
+        set({ setupStatus: 'deps_missing' })
+        return
+      }
+
+      // All deps found — proceed to CLI auth check
+      set({ setupStatus: 'checking_cli' })
+      const cliCheck = await api.cli.check()
+      if (cliCheck.available) {
+        try {
+          const auth = await api.cli.checkAuth()
+          if (auth.authenticated) {
+            set({ setupStatus: 'ready', cliStatus: 'ready', cliVersion: cliCheck.version, accountEmail: auth.email, accountPlan: auth.plan })
+          } else {
+            set({ setupStatus: 'needs_login', cliStatus: 'needs_login', cliVersion: cliCheck.version })
+          }
+        } catch {
+          // If auth check fails, still allow through (older CLI versions may not support it)
+          set({ setupStatus: 'ready', cliStatus: 'ready', cliVersion: cliCheck.version })
+        }
+      } else {
+        set({ setupStatus: 'missing', cliStatus: 'missing', cliError: cliCheck.error })
+      }
+    } catch (err) {
+      set({ setupStatus: 'error', cliError: String(err) })
+    }
+  },
+
+  browseForBinary: async (tool) => {
+    const result = await api.deps.browseForBinary(tool)
+    if (result && result.status === 'found') {
+      await get().checkDependencies()
+    }
+  },
 
   checkCli: async () => {
     set({ cliStatus: 'checking' })

@@ -4,6 +4,7 @@ import { writeFile, readFile } from 'fs/promises'
 import { BrowserWindow } from 'electron'
 import { SettingsStore } from '../services/settings-store'
 import { getExpandedEnv, findClaudeBinary } from '../services/cli-checker'
+import path from 'path'
 
 export interface ClaudeSessionOptions {
   prompt?: string
@@ -98,8 +99,14 @@ export class ClaudeProcess {
       args.push('--mcp-config', options.mcpConfigPath)
     }
 
-    // Use expanded env with known CLI install dirs, strip Claude env vars
-    const env = getExpandedEnv()
+    // Read dependency binary dirs from settings to include in PATH
+    const depPaths = (this.settings.get('dependencyPaths') as Record<string, string>) || {}
+    const extraDirs = Object.values(depPaths)
+      .filter(p => p && !['git', 'node', 'claude'].includes(p))
+      .map(p => path.dirname(p))
+
+    // Use expanded env with known CLI install dirs + discovered deps, strip Claude env vars
+    const env = getExpandedEnv(extraDirs)
     for (const k of Object.keys(env)) {
       if (k.startsWith('CLAUDE')) delete env[k]
     }

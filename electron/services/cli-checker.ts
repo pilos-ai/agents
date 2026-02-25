@@ -13,15 +13,17 @@ function stripAnsi(text: string): string {
   return text.replace(/\x1b\[[0-9;]*[A-Za-z]|\x1b\].*?(?:\x07|\x1b\\)/g, '')
 }
 
-export function getExpandedEnv(): Record<string, string> {
+export function getExpandedEnv(extraBinDirs?: string[]): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(process.env)) {
     if (v !== undefined) env[k] = v
   }
+  const extra = (extraBinDirs || []).filter(Boolean)
   if (process.platform === 'win32') {
     const home = process.env.USERPROFILE || ''
     const localAppData = process.env.LOCALAPPDATA || ''
     env.Path = [
+      ...extra,
       `${home}\\.local\\bin`,
       `${home}\\.claude\\bin`,
       `${localAppData}\\Programs\\claude-code`,
@@ -30,7 +32,14 @@ export function getExpandedEnv(): Record<string, string> {
     ].join(';')
   } else {
     const home = process.env.HOME || ''
-    env.PATH = `/usr/local/bin:/opt/homebrew/bin:${home}/.local/bin:${home}/.claude/bin:${env.PATH || ''}`
+    env.PATH = [
+      ...extra,
+      '/usr/local/bin',
+      '/opt/homebrew/bin',
+      `${home}/.local/bin`,
+      `${home}/.claude/bin`,
+      env.PATH || '',
+    ].join(':')
   }
   return env
 }

@@ -20,13 +20,13 @@ export default function App() {
   const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
   const loadSettings = useAppStore((s) => s.loadSettings)
   const settingsOpen = useAppStore((s) => s.settingsOpen)
-  const cliStatus = useAppStore((s) => s.cliStatus)
-  const checkCli = useAppStore((s) => s.checkCli)
+  const setupStatus = useAppStore((s) => s.setupStatus)
+  const checkDependencies = useAppStore((s) => s.checkDependencies)
 
   const hasOpenProjects = openProjects.length > 0
 
   useEffect(() => {
-    checkCli()
+    checkDependencies()
     loadSettings()
     loadRecentProjects()
     useLicenseStore.getState().checkLicense()
@@ -113,7 +113,7 @@ export default function App() {
       {/* macOS drag region */}
       <div className="titlebar-drag h-8 flex-shrink-0" />
 
-      {cliStatus !== 'ready' ? (
+      {setupStatus !== 'ready' ? (
         <SetupScreen />
       ) : settingsOpen ? (
         <SettingsDialog />

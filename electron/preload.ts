@@ -19,6 +19,16 @@ contextBridge.exposeInMainWorld('api', {
     },
   },
 
+  // Dependency Checker
+  deps: {
+    checkAll: () => ipcRenderer.invoke('deps:checkAll'),
+    getInstallInfo: (tool: string) => ipcRenderer.invoke('deps:getInstallInfo', tool),
+    openInstallPage: (tool: string) => ipcRenderer.invoke('deps:openInstallPage', tool),
+    setCustomPath: (tool: string, binaryPath: string) =>
+      ipcRenderer.invoke('deps:setCustomPath', tool, binaryPath),
+    browseForBinary: (tool: string) => ipcRenderer.invoke('deps:browseForBinary', tool),
+  },
+
   // Claude CLI
   claude: {
     startSession: (sessionId: string, options: Record<string, unknown>) =>

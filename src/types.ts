@@ -366,6 +366,32 @@ export interface ExitPlanModeData {
   input: Record<string, unknown>
 }
 
+// ── Dependency Checker Types ──
+
+export type DependencyName = 'git' | 'node' | 'claude'
+export type DependencyItemStatus = 'checking' | 'found' | 'not_found' | 'error'
+
+export interface DependencyInfo {
+  name: DependencyName
+  status: DependencyItemStatus
+  version?: string
+  path?: string
+  error?: string
+}
+
+export interface DependencyCheckResult {
+  git: DependencyInfo
+  node: DependencyInfo
+  claude: DependencyInfo
+  allFound: boolean
+}
+
+export interface DependencyInstallInfo {
+  url: string
+  command?: string
+  instructions: string
+}
+
 // ── CLI Check Types ──
 
 export interface CliCheckResult {
@@ -410,6 +436,13 @@ export interface ElectronAPI {
     login: () => Promise<boolean>
     onInstallOutput: (callback: (data: CliInstallOutput) => void) => () => void
     onLoginOutput: (callback: (data: string) => void) => () => void
+  }
+  deps: {
+    checkAll: () => Promise<DependencyCheckResult>
+    getInstallInfo: (tool: DependencyName) => Promise<DependencyInstallInfo>
+    openInstallPage: (tool: DependencyName) => Promise<void>
+    setCustomPath: (tool: DependencyName, binaryPath: string) => Promise<DependencyInfo>
+    browseForBinary: (tool: DependencyName) => Promise<DependencyInfo | null>
   }
   claude: {
     startSession: (sessionId: string, options: Record<string, unknown>) => Promise<void>

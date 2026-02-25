@@ -13,6 +13,18 @@ const stubAPI: ElectronAPI = {
     onInstallOutput: noopUnsub,
     onLoginOutput: noopUnsub,
   },
+  deps: {
+    checkAll: () => Promise.resolve({
+      git: { name: 'git' as const, status: 'found' as const },
+      node: { name: 'node' as const, status: 'found' as const },
+      claude: { name: 'claude' as const, status: 'found' as const },
+      allFound: true,
+    }),
+    getInstallInfo: () => Promise.resolve({ url: '', instructions: '' }),
+    openInstallPage: noopAsync,
+    setCustomPath: () => Promise.resolve({ name: 'git' as const, status: 'found' as const }),
+    browseForBinary: () => Promise.resolve(null),
+  },
   claude: {
     startSession: noopAsync,
     sendMessage: noopAsync,

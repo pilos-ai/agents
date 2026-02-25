@@ -5,6 +5,8 @@ import { ProcessTracker } from './core/process-tracker'
 import { Database } from './core/database'
 import { SettingsStore } from './services/settings-store'
 import { CliChecker } from './services/cli-checker'
+import { DependencyChecker } from './services/dependency-checker'
+import type { DependencyName } from './services/dependency-checker'
 import { writeMcpConfig } from './services/mcp-config-writer'
 import type { MetricsCollector } from './services/metrics-collector'
 
@@ -15,6 +17,7 @@ let database: Database
 let settings: SettingsStore
 let cliChecker: CliChecker
 let metricsCollector: MetricsCollector | null = null
+let dependencyChecker: DependencyChecker
 let jiraOAuth: any  // Dynamically loaded from @pilos/agents-pm
 let jiraClient: any // Dynamically loaded from @pilos/agents-pm
 
@@ -26,6 +29,7 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
   terminalManager = new TerminalManager(mainWindow)
   processTracker = new ProcessTracker(mainWindow)
   cliChecker = new CliChecker(mainWindow)
+  dependencyChecker = new DependencyChecker(mainWindow, settings)
 
   // Dynamically load PM/Jira services if available
   let hasPm = false
@@ -53,6 +57,27 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
 
   ipcMain.handle('cli:login', async () => {
     return cliChecker.login()
+  })
+
+  // ── Dependency Checker ──
+  ipcMain.handle('deps:checkAll', async () => {
+    return dependencyChecker.checkAll()
+  })
+
+  ipcMain.handle('deps:getInstallInfo', async (_event, tool: string) => {
+    return dependencyChecker.getInstallInfo(tool as DependencyName)
+  })
+
+  ipcMain.handle('deps:openInstallPage', async (_event, tool: string) => {
+    dependencyChecker.openInstallPage(tool as DependencyName)
+  })
+
+  ipcMain.handle('deps:setCustomPath', async (_event, tool: string, binaryPath: string) => {
+    return dependencyChecker.setCustomPath(tool as DependencyName, binaryPath)
+  })
+
+  ipcMain.handle('deps:browseForBinary', async (_event, tool: string) => {
+    return dependencyChecker.browseForBinary(tool as DependencyName)
   })
 
   // ── Claude CLI ──
