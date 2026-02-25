@@ -8,6 +8,7 @@ import { AgentManager } from '../agents/AgentManager'
 import { McpServerManager } from '../mcp/McpServerManager'
 import { LicenseSection } from './LicenseSection'
 import { ProBadge } from '../common/ProBadge'
+import { api } from '../../api'
 
 // Lazily loaded PM integration card
 let PmJiraIntegrationCard: ComponentType | null = null
@@ -384,6 +385,52 @@ function LicenseSettingsSection() {
   )
 }
 
+function AutomationToggleCard({ label, description, settingsKey, extra }: {
+  label: string
+  description: string
+  settingsKey: string
+  extra?: React.ReactNode
+}) {
+  const [enabled, setEnabled] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.settings.get(settingsKey).then((val: unknown) => {
+      setEnabled(!!val)
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [settingsKey])
+
+  const toggle = () => {
+    const next = !enabled
+    setEnabled(next)
+    api.settings.set(settingsKey, next)
+  }
+
+  return (
+    <div className="p-4 rounded-lg border border-neutral-800 bg-neutral-900/50">
+      <div className="flex items-center justify-between">
+        <div className="flex-1">
+          <p className="text-sm font-medium text-neutral-200">{label}</p>
+          <p className="text-xs text-neutral-500 mt-0.5">{description}</p>
+        </div>
+        <button
+          onClick={toggle}
+          disabled={loading}
+          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+            enabled ? 'bg-blue-500' : 'bg-neutral-700'
+          }`}
+        >
+          <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+            enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'
+          }`} />
+        </button>
+      </div>
+      {extra && enabled && <div className="mt-3 pt-3 border-t border-neutral-800">{extra}</div>}
+    </div>
+  )
+}
+
 function IntegrationsSection() {
   const [, forceUpdate] = useState(0)
   const { flags } = useLicenseStore()
@@ -402,6 +449,24 @@ function IntegrationsSection() {
         <p className="text-sm text-neutral-400 mt-1">Connect project management and collaboration tools</p>
       </div>
 
+      {/* Automation Section */}
+      <div>
+        <h3 className="text-sm font-medium text-neutral-300 mb-3">Automation</h3>
+        <div className="space-y-3">
+          <AutomationToggleCard
+            label="Computer Use"
+            description="Desktop automation: screenshots, mouse, keyboard (macOS)"
+            settingsKey="computerUseEnabled"
+            extra={
+              <p className="text-xs text-neutral-500">
+                Requires Accessibility permission: System Settings &gt; Privacy &amp; Security &gt; Accessibility &gt; add Pilos Agents. Restart chat sessions after enabling.
+              </p>
+            }
+          />
+        </div>
+      </div>
+
+      {/* PM Integrations */}
       {isPro && PmJiraIntegrationCard && <PmJiraIntegrationCard />}
 
       {!isPro && (

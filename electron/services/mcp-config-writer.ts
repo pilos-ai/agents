@@ -96,6 +96,25 @@ export function writeMcpConfig(projectPath: string, servers: McpServerEntry[], s
     }
   }
 
+  // Auto-inject Computer Use MCP server when enabled
+  if (settings) {
+    const computerUseEnabled = settings.get('computerUseEnabled')
+    if (computerUseEnabled) {
+      let mcpServerScript: string
+      if (app.isPackaged) {
+        mcpServerScript = path.join(process.resourcesPath, 'dist-electron', 'computer-use-mcp-server.js')
+      } else {
+        mcpServerScript = path.join(app.getAppPath(), 'dist-electron', 'computer-use-mcp-server.js')
+      }
+      mcpServers['computer-use'] = {
+        type: 'stdio',
+        command: 'node',
+        args: [mcpServerScript],
+      }
+      console.log('[McpConfigWriter] Injected Computer Use MCP server')
+    }
+  }
+
   const config = { mcpServers }
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
   console.log(`[McpConfigWriter] Wrote config with ${Object.keys(mcpServers).length} servers to ${configPath}`)

@@ -3,6 +3,7 @@ import type { McpServerTemplate } from '../types'
 export const MCP_CATEGORIES = [
   'Development',
   'Database',
+  'Automation',
 ] as const
 
 export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
@@ -67,5 +68,23 @@ export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
       'You can optionally pass allowed directories as additional args',
     ],
     docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem',
+  },
+  {
+    id: 'computer-use',
+    name: 'Computer Use',
+    icon: '🖥️',
+    description: 'Desktop automation: screenshots, mouse, keyboard, and window management (macOS)',
+    category: 'Automation',
+    config: {
+      type: 'stdio',
+      command: 'node',
+      args: ['computer-use-mcp-server.js'],
+      env: {},
+    },
+    requiredEnvVars: [],
+    setupSteps: [
+      'Enable Computer Use in Settings > Integrations',
+      'Grant Accessibility permission: System Settings > Privacy & Security > Accessibility > add Pilos Agents',
+    ],
   },
 ]

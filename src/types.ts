@@ -519,6 +519,9 @@ export interface ElectronAPI {
     install: () => Promise<void>
     onStatus: (callback: (data: UpdateStatusEvent) => void) => () => void
   }
+  shell: {
+    openPath: (path: string) => Promise<string>
+  }
   jira?: {
     setActiveProject: (projectPath: string) => Promise<void>
     authorize: (projectPath: string) => Promise<JiraTokens>

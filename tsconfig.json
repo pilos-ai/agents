@@ -18,9 +18,11 @@
       "@pilos/pro": ["packages/pro"],
       "@pilos/pro/*": ["packages/pro/*"],
       "@pilos/agents-pm": ["packages/pm"],
-      "@pilos/agents-pm/*": ["packages/pm/*"]
+      "@pilos/agents-pm/*": ["packages/pm/*"],
+      "@pilos/computer-use": ["packages/computer-use"],
+      "@pilos/computer-use/*": ["packages/computer-use/*"]
     }
   },
-  "include": ["src/**/*", "electron/**/*", "packages/pm/**/*"],
+  "include": ["src/**/*", "electron/**/*", "packages/pm/**/*", "packages/computer-use/**/*"],
   "exclude": ["node_modules", "dist", "dist-electron"]
 }

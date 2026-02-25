@@ -169,6 +169,11 @@ contextBridge.exposeInMainWorld('api', {
     },
   },
 
+  // Shell
+  shell: {
+    openPath: (p: string) => ipcRenderer.invoke('shell:openPath', p),
+  },
+
   // Jira
   jira: {
     setActiveProject: (projectPath: string) => ipcRenderer.invoke('jira:setActiveProject', projectPath),

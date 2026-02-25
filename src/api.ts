@@ -99,6 +99,9 @@ const stubAPI: ElectronAPI = {
     install: noopAsync,
     onStatus: noopUnsub,
   },
+  shell: {
+    openPath: () => Promise.resolve(''),
+  },
   jira: {
     setActiveProject: noopAsync,
     authorize: noopAsync as any,

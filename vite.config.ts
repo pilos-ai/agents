@@ -35,6 +35,9 @@ function optionalPackageStubs(): import('vite').Plugin {
   }
 }
 
+const computerUsePath = 'packages/computer-use/electron/computer-use-mcp-server.ts'
+const hasComputerUse = fs.existsSync(path.resolve(__dirname, computerUsePath))
+
 const electronEntries: Parameters<typeof electron>[0] = [
   {
     entry: 'electron/main.ts',
@@ -102,11 +105,27 @@ if (hasPmPackage) {
   })
 }
 
+if (hasComputerUse) {
+  electronEntries.push({
+    entry: computerUsePath,
+    vite: {
+      build: {
+        outDir: 'dist-electron',
+        minify: false,
+        rollupOptions: {
+          external: ['fs', 'path', 'os', 'child_process', 'crypto', 'http', 'net', 'events', 'stream', 'url'],
+        },
+      },
+    },
+  })
+}
+
 const rendererAliases: Record<string, string> = {
   '@': path.resolve(__dirname, 'src'),
 }
 if (hasPmPackage) rendererAliases['@pilos/agents-pm'] = path.resolve(__dirname, 'packages/pm')
 if (hasProPackage) rendererAliases['@pilos/pro'] = path.resolve(__dirname, 'packages/pro')
+if (hasComputerUse) rendererAliases['@pilos/computer-use'] = path.resolve(__dirname, 'packages/computer-use')
 
 export default defineConfig({
   plugins: [
