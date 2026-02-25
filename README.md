@@ -13,7 +13,7 @@
   <a href="https://github.com/pilos-ai/agents/blob/main/LICENSE"><img src="https://img.shields.io/github/license/pilos-ai/agents" alt="License" /></a>
   <a href="https://github.com/pilos-ai/agents/stargazers"><img src="https://img.shields.io/github/stars/pilos-ai/agents" alt="Stars" /></a>
   <a href="https://pilos.net"><img src="https://img.shields.io/badge/website-pilos.net-blue" alt="Website" /></a>
-  <a href="https://discord.gg/pilos"><img src="https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
+  <a href="https://discord.gg/Qzs6MQkUY8"><img src="https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
   <a href="https://x.com/pilosdotnet"><img src="https://img.shields.io/badge/follow-@pilosdotnet-black?logo=x" alt="Twitter" /></a>
   <a href="https://dev.to/pilosdotnet"><img src="https://img.shields.io/badge/dev.to-pilosdotnet-0A0A0A?logo=devdotto" alt="Dev.to" /></a>
 </p>
@@ -125,7 +125,7 @@ See [open issues](https://github.com/pilos-ai/agents/issues) for ideas on where 
 
 - [Website](https://pilos.net) — Download, docs, and pricing
 - [GitHub Issues](https://github.com/pilos-ai/agents/issues) — Bug reports and feature requests
-- [Discord](https://discord.gg/pilos) — Chat with the team
+- [Discord](https://discord.gg/Qzs6MQkUY8) — Chat with the team
 - [X / Twitter](https://x.com/pilosdotnet) — Updates and announcements
 
 ## License
