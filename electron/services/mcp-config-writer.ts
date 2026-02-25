@@ -70,7 +70,12 @@ export function writeMcpConfig(projectPath: string, servers: McpServerEntry[], s
   const warnings: string[] = []
   if (settings) {
     const tokenKey = projectPath ? `jiraTokens:${projectPath}` : 'jiraTokens'
+    // Log all jira token keys in settings for debugging
+    const allKeys = Object.keys(settings.getAll()).filter(k => k.startsWith('jiraTokens'))
+    console.log(`[McpConfigWriter] All Jira token keys in settings: [${allKeys.join(', ')}]`)
+    console.log(`[McpConfigWriter] Looking up Jira tokens with key: "${tokenKey}"`)
     const jiraTokens = settings.get(tokenKey) as { accessToken: string; cloudId: string } | null
+    console.log(`[McpConfigWriter] Jira tokens found: ${jiraTokens ? 'yes' : 'no'}`)
     if (jiraTokens) {
       // Write tokens to temp file for the MCP server to read
       const tokenFilePath = path.join(configDir, `jira-tokens-${encoded}.json`)
@@ -79,18 +84,22 @@ export function writeMcpConfig(projectPath: string, servers: McpServerEntry[], s
         cloudId: jiraTokens.cloudId,
       }))
 
-      // Resolve jira-mcp-server.js path (in dist-electron next to main.js)
-      // In dev: dist-electron/jira-mcp-server.js
-      // In prod: resources/dist-electron/jira-mcp-server.js
+      // Resolve jira-mcp-server.js path
+      // In dev: {appPath}/dist-electron/jira-mcp-server.js
+      // In prod: {resources}/app.asar.unpacked/dist-electron/jira-mcp-server.js
+      //   (script is in asarUnpack so it's on the real filesystem, not inside app.asar)
       let mcpServerScript: string
       if (app.isPackaged) {
-        mcpServerScript = path.join(process.resourcesPath, 'dist-electron', 'jira-mcp-server.js')
+        mcpServerScript = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist-electron', 'jira-mcp-server.js')
       } else {
         mcpServerScript = path.join(app.getAppPath(), 'dist-electron', 'jira-mcp-server.js')
       }
 
       const nodeCommand = app.isPackaged ? process.execPath : 'node'
       const nodeEnv: Record<string, string> = app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}
+
+      const scriptExists = fs.existsSync(mcpServerScript)
+      console.log(`[McpConfigWriter] Jira MCP server script: ${mcpServerScript} (exists: ${scriptExists})`)
 
       mcpServers['jira'] = {
         type: 'stdio',
@@ -122,7 +131,7 @@ export function writeMcpConfig(projectPath: string, servers: McpServerEntry[], s
     if (computerUseEnabled) {
       let mcpServerScript: string
       if (app.isPackaged) {
-        mcpServerScript = path.join(process.resourcesPath, 'dist-electron', 'computer-use-mcp-server.js')
+        mcpServerScript = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist-electron', 'computer-use-mcp-server.js')
       } else {
         mcpServerScript = path.join(app.getAppPath(), 'dist-electron', 'computer-use-mcp-server.js')
       }
@@ -137,7 +146,7 @@ export function writeMcpConfig(projectPath: string, servers: McpServerEntry[], s
 
   const config = { mcpServers }
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
-  console.log(`[McpConfigWriter] Wrote config with ${Object.keys(mcpServers).length} servers to ${configPath}`)
+  console.log(`[McpConfigWriter] Wrote config with servers: [${Object.keys(mcpServers).join(', ')}] to ${configPath}`)
 
   return { configPath, warnings }
 }

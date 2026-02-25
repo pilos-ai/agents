@@ -23,6 +23,8 @@ files:
 asarUnpack:
   - "node_modules/better-sqlite3/**"
   - "node_modules/node-pty/**"
+  - "dist-electron/jira-mcp-server.js"
+  - "dist-electron/computer-use-mcp-server.js"
 
 mac:
   category: public.app-category.developer-tools
