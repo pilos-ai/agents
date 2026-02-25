@@ -135,10 +135,14 @@ export function writeMcpConfig(projectPath: string, servers: McpServerEntry[], s
       } else {
         mcpServerScript = path.join(app.getAppPath(), 'dist-electron', 'computer-use-mcp-server.js')
       }
+      const cuNodeCommand = app.isPackaged ? process.execPath : 'node'
+      const cuNodeEnv: Record<string, string> = app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}
+
       mcpServers['computer-use'] = {
         type: 'stdio',
-        command: 'node',
+        command: cuNodeCommand,
         args: [mcpServerScript],
+        ...(Object.keys(cuNodeEnv).length > 0 ? { env: cuNodeEnv } : {}),
       }
       console.log('[McpConfigWriter] Injected Computer Use MCP server')
     }
