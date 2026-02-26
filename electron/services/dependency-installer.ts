@@ -286,48 +286,37 @@ export async function installGit(win: BrowserWindow, settings: SettingsStore): P
 // ── Claude CLI ──
 
 export async function installClaude(win: BrowserWindow, settings: SettingsStore): Promise<string> {
-  emitProgress(win, 'claude', 'Installing Claude CLI...')
+  emitProgress(win, 'claude', 'Installing Claude CLI via native installer...')
 
-  // Find npm binary - prefer our managed Node.js
-  const managedDir = getManagedDir()
-  const npmBin = process.platform === 'win32'
-    ? path.join(managedDir, 'node', 'npm.cmd')
-    : path.join(managedDir, 'node', 'bin', 'npm')
-
-  // Check if managed npm exists, otherwise try system npm
-  let npmCmd: string
-  let npmEnv = { ...process.env } as Record<string, string>
-
-  if (fs.existsSync(npmBin)) {
-    npmCmd = npmBin
-    // Add managed node to PATH so npm can find it
-    const nodeDir = process.platform === 'win32'
-      ? path.join(managedDir, 'node')
-      : path.join(managedDir, 'node', 'bin')
-    npmEnv.PATH = `${nodeDir}${path.delimiter}${npmEnv.PATH || ''}`
-  } else {
-    npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-  }
-
-  // Set npm prefix to managed directory so claude is installed locally
-  const npmPrefix = path.join(managedDir, 'node')
+  const env = { ...process.env } as Record<string, string>
 
   return new Promise((resolve, reject) => {
-    const args = ['install', '-g', '@anthropic-ai/claude-code', '--prefix', npmPrefix]
-    emitProgress(win, 'claude', `Running: npm ${args.join(' ')}`)
+    let proc: ReturnType<typeof spawn>
 
-    const proc = spawn(npmCmd, args, {
-      env: npmEnv,
-      stdio: 'pipe',
-    })
+    if (process.platform === 'win32') {
+      const psPath = path.join(
+        process.env.SYSTEMROOT || 'C:\\Windows',
+        'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'
+      )
+      emitProgress(win, 'claude', 'Running: irm https://claude.ai/install.ps1 | iex')
+      proc = spawn(psPath, [
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+        'irm https://claude.ai/install.ps1 | iex'
+      ], { env, stdio: ['ignore', 'pipe', 'pipe'] })
+    } else {
+      emitProgress(win, 'claude', 'Running: curl -fsSL https://claude.ai/install.sh | bash')
+      proc = spawn('bash', ['-c',
+        'curl -fsSL https://claude.ai/install.sh | bash'
+      ], { env, stdio: ['ignore', 'pipe', 'pipe'] })
+    }
 
     let output = ''
-    proc.stdout?.on('data', (d) => {
+    proc.stdout?.on('data', (d: Buffer) => {
       output += d.toString()
       const line = d.toString().trim()
       if (line) emitProgress(win, 'claude', line)
     })
-    proc.stderr?.on('data', (d) => {
+    proc.stderr?.on('data', (d: Buffer) => {
       output += d.toString()
       const line = d.toString().trim()
       if (line) emitProgress(win, 'claude', line)
@@ -335,17 +324,31 @@ export async function installClaude(win: BrowserWindow, settings: SettingsStore)
 
     proc.on('close', (code) => {
       if (code !== 0) {
-        reject(new Error(`npm install failed (exit ${code}): ${output}`))
+        reject(new Error(`Claude CLI installation failed (exit ${code}): ${output}`))
         return
       }
 
-      // Find the installed claude binary
-      const claudeBin = process.platform === 'win32'
-        ? path.join(npmPrefix, 'claude.cmd')
-        : path.join(npmPrefix, 'bin', 'claude')
+      // Find the installed claude binary in known locations
+      const home = os.homedir()
+      const candidates: string[] = process.platform === 'win32'
+        ? [
+            path.join(home, '.local', 'bin', 'claude.exe'),
+            path.join(home, '.claude', 'bin', 'claude.exe'),
+            path.join(process.env.LOCALAPPDATA || '', 'Programs', 'claude-code', 'claude.exe'),
+          ]
+        : [
+            path.join(home, '.local', 'bin', 'claude'),
+            path.join(home, '.claude', 'bin', 'claude'),
+            '/usr/local/bin/claude',
+            '/opt/homebrew/bin/claude',
+          ]
 
-      if (!fs.existsSync(claudeBin)) {
-        reject(new Error(`Claude CLI binary not found at ${claudeBin} after installation`))
+      const claudeBin = candidates.find(p => {
+        try { return fs.existsSync(p) } catch { return false }
+      })
+
+      if (!claudeBin) {
+        reject(new Error('Claude CLI binary not found after installation. Please check the install output above.'))
         return
       }
 

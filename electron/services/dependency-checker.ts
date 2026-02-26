@@ -200,14 +200,14 @@ export class DependencyChecker {
         if (platform === 'win32') {
           return {
             url: 'https://claude.ai/download',
-            command: 'npm install -g @anthropic-ai/claude-code',
-            instructions: 'Install via npm (requires Node.js) or use the PowerShell installer.',
+            command: 'irm https://claude.ai/install.ps1 | iex',
+            instructions: 'Run the PowerShell installer, or use Windows CMD: curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd',
           }
         }
         return {
           url: 'https://claude.ai/download',
-          command: 'npm install -g @anthropic-ai/claude-code',
-          instructions: 'Install via npm or use the shell installer.',
+          command: 'curl -fsSL https://claude.ai/install.sh | bash',
+          instructions: 'Run the install command in your terminal. Native installations auto-update in the background.',
         }
     }
   }

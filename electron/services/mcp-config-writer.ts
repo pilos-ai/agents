@@ -111,17 +111,9 @@ export function writeMcpConfig(projectPath: string, servers: McpServerEntry[], s
     } else {
       // No tokens for this project — check if Jira is connected on another project
       const allSettings = settings.getAll()
-      const otherJiraKey = Object.keys(allSettings).find(
+      Object.keys(allSettings).find(
         (key) => key.startsWith('jiraTokens:') && key !== tokenKey && allSettings[key] != null
       )
-      if (otherJiraKey) {
-        const otherPath = otherJiraKey.replace('jiraTokens:', '')
-        warnings.push(
-          `Jira is connected on another project (${path.basename(otherPath)}) but not on this one. ` +
-          `Open the PM sidebar and connect Jira for this project to use Jira tools.`
-        )
-        console.log(`[McpConfigWriter] Warning: Jira tokens found for ${otherPath} but not for ${projectPath}`)
-      }
     }
   }
 
