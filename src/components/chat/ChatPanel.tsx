@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Icon } from '../common/Icon'
 import { useConversationStore } from '../../store/useConversationStore'
 import { useProjectStore } from '../../store/useProjectStore'
 import { AGENT_COLORS } from '../../data/agent-templates'
@@ -183,7 +184,7 @@ export function ChatPanel() {
               <div className="flex flex-col items-start space-y-1 mt-3">
                 {streamingAgent && (
                   <div className="flex items-center gap-1.5 mb-1 ml-1">
-                    <span className="text-base">{streamingAgent.emoji}</span>
+                    <Icon icon={streamingAgent.icon} className="text-base" />
                     <span className={`text-xs font-semibold ${agentColors!.text}`}>{streamingAgent.name}</span>
                   </div>
                 )}

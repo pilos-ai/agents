@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { Icon } from '../common/Icon'
 import type { AgentDefinition, McpServer } from '../../types'
 import { AGENT_TEMPLATES, AGENT_COLORS, TEAM_PRESETS, AGENT_TEMPLATE_CATEGORIES } from '../../data/agent-templates'
 import { AgentEditModal } from './AgentEditModal'
@@ -67,7 +68,7 @@ export function AgentManager({ agents, onSetAgents, onAddAgent, onRemoveAgent, o
         agents: premAgents.map((pa) => ({
           id: pa.id,
           name: pa.name,
-          emoji: pa.icon,
+          icon: pa.icon,
           color: PREMIUM_CATEGORY_COLORS[pa.category] || 'amber',
           role: pa.description,
           personality: pa.systemPrompt,
@@ -171,7 +172,7 @@ export function AgentManager({ agents, onSetAgents, onAddAgent, onRemoveAgent, o
                 key={agent.id}
                 className={`group flex items-center gap-2 px-2 py-1.5 rounded-md border ${colors.border} ${colors.bgLight}`}
               >
-                <span className="text-sm">{agent.emoji}</span>
+                <Icon icon={agent.icon} className="text-sm" />
                 <div className="flex-1 min-w-0">
                   <div className={`text-xs font-medium ${colors.text} truncate`}>{agent.name}</div>
                 </div>
@@ -224,7 +225,7 @@ export function AgentManager({ agents, onSetAgents, onAddAgent, onRemoveAgent, o
                         }}
                         className={`flex items-center gap-2 p-2 rounded-lg border border-neutral-700 bg-neutral-800/50 hover:${colors.border} hover:${colors.bgLight} transition-colors text-left`}
                       >
-                        <span className="text-base">{template.emoji}</span>
+                        <Icon icon={template.icon} className="text-base" />
                         <div className="min-w-0">
                           <div className="text-xs font-medium text-neutral-200">{template.name}</div>
                           <div className="text-[10px] text-neutral-500 truncate">{template.role}</div>
@@ -265,7 +266,7 @@ export function AgentManager({ agents, onSetAgents, onAddAgent, onRemoveAgent, o
                           }}
                           className="flex items-center gap-2 p-2 rounded-lg border border-amber-500/20 bg-amber-500/5 hover:border-amber-500/40 hover:bg-amber-500/10 transition-colors text-left"
                         >
-                          <span className="text-base">{template.emoji}</span>
+                          <Icon icon={template.icon} className="text-base" />
                           <div className="min-w-0">
                             <div className="text-xs font-medium text-amber-200">{template.name}</div>
                             <div className="text-[10px] text-neutral-500 truncate">{template.role}</div>

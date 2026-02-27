@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { api } from '../api'
 import { useProjectStore, getActiveProjectTab } from './useProjectStore'
+import { useAnalyticsStore } from './useAnalyticsStore'
 import { buildTeamSystemPrompt } from '../utils/team-prompt-builder'
 import { restoreAgentIds } from '../utils/agent-names'
 import { AGENT_COLORS } from '../data/agent-templates'
@@ -23,6 +24,8 @@ interface StreamingState {
   isStreaming: boolean
   currentAgentName: string | null
   _partialJson: string
+  _turnTokens: number
+  _turnStartTime: number
 }
 
 interface ConversationStore {
@@ -65,17 +68,19 @@ const emptyStreaming: StreamingState = {
   isStreaming: false,
   currentAgentName: null,
   _partialJson: '',
+  _turnTokens: 0,
+  _turnStartTime: 0,
 }
 
 /** Parse text into agent-attributed segments for team mode */
 function parseAgentSegments(
   text: string,
   agents: AgentDefinition[]
-): Array<{ agentName: string | null; agentId?: string; agentEmoji?: string; agentColor?: string; text: string }> {
+): Array<{ agentName: string | null; agentId?: string; agentIcon?: string; agentColor?: string; text: string }> {
   const agentNameSet = new Set(agents.map((a) => a.name))
   const lines = text.split('\n')
-  const segments: Array<{ agentName: string | null; agentId?: string; agentEmoji?: string; agentColor?: string; text: string }> = []
-  let current: { agentName: string | null; agentId?: string; agentEmoji?: string; agentColor?: string; lines: string[] } = {
+  const segments: Array<{ agentName: string | null; agentId?: string; agentIcon?: string; agentColor?: string; text: string }> = []
+  let current: { agentName: string | null; agentId?: string; agentIcon?: string; agentColor?: string; lines: string[] } = {
     agentName: null,
     lines: [],
   }
@@ -89,14 +94,14 @@ function parseAgentSegments(
         if (current.lines.length > 0 || current.agentName) {
           const text = current.lines.join('\n').trim()
           if (text) {
-            segments.push({ agentName: current.agentName, agentId: current.agentId, agentEmoji: current.agentEmoji, agentColor: current.agentColor, text })
+            segments.push({ agentName: current.agentName, agentId: current.agentId, agentIcon: current.agentIcon, agentColor: current.agentColor, text })
           }
         }
         const agent = agents.find((a) => a.name === name)
         current = {
           agentName: name,
           agentId: agent?.id,
-          agentEmoji: agent?.emoji,
+          agentIcon: agent?.icon,
           agentColor: agent?.color,
           lines: [],
         }
@@ -109,7 +114,7 @@ function parseAgentSegments(
   // Flush last segment
   const lastText = current.lines.join('\n').trim()
   if (lastText) {
-    segments.push({ agentName: current.agentName, agentId: current.agentId, agentEmoji: current.agentEmoji, agentColor: current.agentColor, text: lastText })
+    segments.push({ agentName: current.agentName, agentId: current.agentId, agentIcon: current.agentIcon, agentColor: current.agentColor, text: lastText })
   }
 
   return segments
@@ -169,7 +174,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
                   content: seg.text,
                   agentId: seg.agentId,
                   agentName: seg.agentName || undefined,
-                  agentEmoji: seg.agentEmoji,
+                  agentIcon: seg.agentIcon,
                   agentColor: seg.agentColor,
                 })
               }
@@ -239,7 +244,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     set((s) => ({ messages: [...s.messages, userMsg] }))
 
     // Start or send to Claude
-    set({ isWaitingForResponse: true, streaming: { ...emptyStreaming, isStreaming: true } })
+    set({ isWaitingForResponse: true, streaming: { ...emptyStreaming, isStreaming: true, _turnStartTime: Date.now() } })
 
     // Always start a new session if none is active for this conversation
     if (!get().hasActiveSession) {
@@ -465,6 +470,17 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
           })
         }
 
+        // Accumulate token usage for analytics
+        const usage = (event.message as { usage?: { input_tokens?: number; output_tokens?: number } })?.usage
+        if (usage) {
+          const tokens = (usage.input_tokens || 0) + (usage.output_tokens || 0)
+          if (tokens > 0) {
+            set((s) => ({
+              streaming: { ...s.streaming, _turnTokens: s.streaming._turnTokens + tokens },
+            }))
+          }
+        }
+
         // Extract tool_use blocks and add as separate messages
         const toolUseBlocks = msg.content.filter((b): b is ToolUseBlock => b.type === 'tool_use')
         for (const block of toolUseBlocks) {
@@ -486,7 +502,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
             content: '',
             contentBlocks: [block],
             agentName: agent?.name,
-            agentEmoji: agent?.emoji,
+            agentIcon: agent?.icon,
             agentColor: agent?.color,
             timestamp: Date.now(),
           }
@@ -636,7 +652,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
             content: '',
             contentBlocks: [lastBlock],
             agentName: agent?.name,
-            agentEmoji: agent?.emoji,
+            agentIcon: agent?.icon,
             agentColor: agent?.color,
             timestamp: Date.now(),
           }
@@ -681,7 +697,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
             content: '',
             contentBlocks: [block],
             agentName: agent?.name,
-            agentEmoji: agent?.emoji,
+            agentIcon: agent?.icon,
             agentColor: agent?.color,
             timestamp: Date.now(),
           }
@@ -726,7 +742,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
                 content: seg.text,
                 agentId: seg.agentId,
                 agentName: seg.agentName || undefined,
-                agentEmoji: seg.agentEmoji,
+                agentIcon: seg.agentIcon,
                 agentColor: seg.agentColor,
                 timestamp: Date.now(),
               })
@@ -740,6 +756,24 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
               timestamp: Date.now(),
             })
           }
+        }
+
+        // Record analytics entry
+        const turnTokens = streaming._turnTokens
+        const turnStart = streaming._turnStartTime
+        if (turnTokens > 0 || (event as Record<string, unknown>).cost_usd) {
+          const ev = event as Record<string, unknown>
+          useAnalyticsStore.getState().addEntry({
+            timestamp: Date.now(),
+            agentName: streaming.currentAgentName,
+            tokens: turnTokens,
+            cost: parseFloat(String(ev.cost_usd || '0')) || 0,
+            durationMs: ev.duration_ms
+              ? parseInt(String(ev.duration_ms))
+              : turnStart > 0 ? Date.now() - turnStart : 0,
+            success: true,
+            conversationId: get().activeConversationId,
+          })
         }
 
         set({
@@ -827,7 +861,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         content: message.content,
         contentBlocks: message.contentBlocks,
         agentName: message.agentName,
-        agentEmoji: message.agentEmoji,
+        agentIcon: message.agentIcon,
         agentColor: message.agentColor,
         replyToId: message.replyToId,
       }).then((saved) => {

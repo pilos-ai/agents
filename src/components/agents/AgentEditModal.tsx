@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { AgentDefinition } from '../../types'
 import { AGENT_COLORS } from '../../data/agent-templates'
+import { IconPicker } from '../common/IconPicker'
 
 interface Props {
   agent: AgentDefinition | null // null = creating new custom agent
@@ -13,7 +14,7 @@ const COLOR_OPTIONS = Object.keys(AGENT_COLORS) as string[]
 export function AgentEditModal({ agent, onSave, onClose }: Props) {
   const isNew = !agent
   const [name, setName] = useState(agent?.name || '')
-  const [emoji, setEmoji] = useState(agent?.emoji || '🤖')
+  const [icon, setIcon] = useState(agent?.icon || 'lucide:bot')
   const [color, setColor] = useState(agent?.color || 'blue')
   const [role, setRole] = useState(agent?.role || '')
   const [personality, setPersonality] = useState(agent?.personality || '')
@@ -25,7 +26,7 @@ export function AgentEditModal({ agent, onSave, onClose }: Props) {
     onSave({
       id,
       name: name.trim(),
-      emoji: emoji.trim() || '🤖',
+      icon: icon.trim() || 'lucide:bot',
       color,
       role: role.trim(),
       personality: personality.trim(),
@@ -56,13 +57,9 @@ export function AgentEditModal({ agent, onSave, onClose }: Props) {
                 className="w-full bg-neutral-800 text-sm text-neutral-100 rounded-md px-3 py-1.5 border border-neutral-700 outline-none focus:border-blue-500"
               />
             </div>
-            <div className="w-16">
-              <label className="block text-xs text-neutral-400 mb-1">Emoji</label>
-              <input
-                value={emoji}
-                onChange={(e) => setEmoji(e.target.value)}
-                className="w-full bg-neutral-800 text-sm text-center rounded-md px-2 py-1.5 border border-neutral-700 outline-none focus:border-blue-500"
-              />
+            <div className="w-36">
+              <label className="block text-xs text-neutral-400 mb-1">Icon</label>
+              <IconPicker value={icon} onChange={setIcon} />
             </div>
           </div>
 

@@ -1,4 +1,5 @@
 import { memo, useMemo, useState, useEffect } from 'react'
+import { Icon } from '../common/Icon'
 import type { ConversationMessage, ContentBlock } from '../../types'
 import { AGENT_COLORS } from '../../data/agent-templates'
 import { ToolUseBlock } from './ToolUseBlock'
@@ -85,7 +86,7 @@ export const MessageBubble = memo(function MessageBubble({ message, messages, is
       <div className="flex flex-col items-start">
         {message.replyToId && <MessageReference replyToId={message.replyToId} messages={messages} />}
         <div className="flex items-center gap-1.5 mb-1 ml-1">
-          <span className="text-base">{message.agentEmoji}</span>
+          {message.agentIcon && <Icon icon={message.agentIcon} className="text-base" />}
           <span className={`text-xs font-semibold ${colors.text}`}>{message.agentName}</span>
         </div>
         {message.content && (

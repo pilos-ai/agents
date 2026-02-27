@@ -6,7 +6,7 @@ export function buildTeamSystemPrompt(agents: AgentDefinition[]): string {
   const agentList = agents
     .map(
       (a) =>
-        `- **${a.name}** (${a.emoji} ${a.role}): ${a.personality}\n  Expertise: ${a.expertise.join(', ')}`
+        `- **${a.name}** (${a.role}): ${a.personality}\n  Expertise: ${a.expertise.join(', ')}`
     )
     .join('\n')
 

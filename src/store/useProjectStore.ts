@@ -53,6 +53,8 @@ interface StreamingSnapshot {
   isStreaming: boolean
   currentAgentName: string | null
   _partialJson: string
+  _turnTokens: number
+  _turnStartTime: number
 }
 
 export interface ConversationSnapshot {
@@ -124,6 +126,8 @@ const emptyStreaming: StreamingSnapshot = {
   isStreaming: false,
   currentAgentName: null,
   _partialJson: '',
+  _turnTokens: 0,
+  _turnStartTime: 0,
 }
 
 const emptySnapshot: ConversationSnapshot = {
@@ -244,7 +248,7 @@ function applyEventToSnapshot(
           content: '',
           contentBlocks: [block],
           agentName: agent?.name,
-          agentEmoji: agent?.emoji,
+          agentIcon: agent?.icon,
           agentColor: agent?.color,
           timestamp: Date.now(),
         }
@@ -321,7 +325,7 @@ function applyEventToSnapshot(
           content: '',
           contentBlocks: [lastBlock],
           agentName: agent?.name,
-          agentEmoji: agent?.emoji,
+          agentIcon: agent?.icon,
           agentColor: agent?.color,
           timestamp: Date.now(),
         }
@@ -360,7 +364,7 @@ function applyEventToSnapshot(
           content: '',
           contentBlocks: [block],
           agentName: agent?.name,
-          agentEmoji: agent?.emoji,
+          agentIcon: agent?.icon,
           agentColor: agent?.color,
           timestamp: Date.now(),
         }
@@ -908,7 +912,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             content: msg.content,
             contentBlocks: msg.contentBlocks,
             agentName: msg.agentName,
-            agentEmoji: msg.agentEmoji,
+            agentIcon: msg.agentIcon,
             agentColor: msg.agentColor,
           })
         }

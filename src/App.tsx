@@ -1,9 +1,5 @@
-import { useEffect } from 'react'
-import { AppShell } from './components/layout/AppShell'
-import { ProjectTabBar } from './components/layout/ProjectTabBar'
-import { WelcomeScreen } from './components/welcome/WelcomeScreen'
-import { SetupScreen } from './components/setup/SetupScreen'
-import { SettingsDialog } from './components/settings/SettingsDialog'
+import { useEffect, lazy, Suspense } from 'react'
+import { V2Layout } from './components/v2/V2Layout'
 import { useProjectStore } from './store/useProjectStore'
 import { useConversationStore } from './store/useConversationStore'
 import { useAppStore } from './store/useAppStore'
@@ -13,17 +9,15 @@ import { api } from './api'
 import { loadPmModule } from './lib/pm'
 import type { ClaudeEvent } from './types'
 
+const OnboardingPage = lazy(() => import('./components/v2/pages/OnboardingPage'))
+
 export default function App() {
   const loadRecentProjects = useProjectStore((s) => s.loadRecentProjects)
   const routeClaudeEvent = useProjectStore((s) => s.routeClaudeEvent)
-  const openProjects = useProjectStore((s) => s.openProjects)
   const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
   const loadSettings = useAppStore((s) => s.loadSettings)
-  const settingsOpen = useAppStore((s) => s.settingsOpen)
   const setupStatus = useAppStore((s) => s.setupStatus)
   const checkDependencies = useAppStore((s) => s.checkDependencies)
-
-  const hasOpenProjects = openProjects.length > 0
 
   useEffect(() => {
     checkDependencies()
@@ -78,7 +72,7 @@ export default function App() {
     return api.menu.onMenuAction((action: string, ...args: unknown[]) => {
       switch (action) {
         case 'menu:openSettings':
-          useAppStore.getState().setSettingsOpen(true)
+          useAppStore.getState().setActiveView('settings')
           break
         case 'menu:openProject':
           api.dialog.openDirectory().then((dir) => {
@@ -87,6 +81,7 @@ export default function App() {
           break
         case 'menu:newConversation':
           if (useProjectStore.getState().activeProjectPath) {
+            useAppStore.getState().setActiveView('terminal')
             useConversationStore.getState().createConversation()
           }
           break
@@ -99,7 +94,7 @@ export default function App() {
           break
         }
         case 'menu:openProjectSettings':
-          useAppStore.getState().setSettingsOpen(true)
+          useAppStore.getState().setActiveView('settings')
           break
         case 'menu:toggleRightPanel':
           useAppStore.getState().toggleRightPanel()
@@ -109,21 +104,16 @@ export default function App() {
   }, [])
 
   return (
-    <div className="h-screen w-screen bg-neutral-950 text-neutral-100 flex flex-col overflow-hidden">
+    <div className="h-screen w-screen bg-pilos-bg text-[#fafafa] font-sans flex flex-col overflow-hidden">
       {/* macOS drag region */}
       <div className="titlebar-drag h-8 flex-shrink-0" />
 
       {setupStatus !== 'ready' ? (
-        <SetupScreen />
-      ) : settingsOpen ? (
-        <SettingsDialog />
-      ) : hasOpenProjects ? (
-        <>
-          <ProjectTabBar />
-          <AppShell />
-        </>
+        <Suspense fallback={<div className="flex-1" />}>
+          <OnboardingPage />
+        </Suspense>
       ) : (
-        <WelcomeScreen />
+        <V2Layout />
       )}
       <UpdateNotification />
     </div>

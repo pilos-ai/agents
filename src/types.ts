@@ -119,7 +119,7 @@ export interface ConversationMessage {
   toolResult?: string
   agentId?: string
   agentName?: string
-  agentEmoji?: string
+  agentIcon?: string
   agentColor?: string
   replyToId?: number
   timestamp: number
@@ -161,14 +161,37 @@ export interface TrackedProcess {
 
 // ── Multi-Agent Team Types ──
 
+export type PermissionLevel = 'restricted' | 'standard' | 'elevated'
+export type ResponseFormat = 'markdown' | 'plain' | 'structured'
+
+export interface AgentCapabilities {
+  tools: string[]                // enabled tool IDs: 'fs_access', 'git_ops', etc.
+  allowedPaths: string[]         // file access restrictions, empty = unrestricted
+  maxTokensPerRequest: number    // per-request token limit
+  permissionLevel: PermissionLevel
+  allowedMcpServers: string[]    // MCP server IDs this agent can access, empty = all
+  contextWindowSize: number      // max context window in tokens (default 128000)
+  conversationHistoryLimit: number // max messages to retain, 0 = unlimited (default 50)
+  memoryEnabled: boolean         // persist knowledge across sessions
+  memorySummarizationEnabled: boolean // auto-summarize long conversations
+  customInstructions: string     // per-agent instructions (like CLAUDE.md)
+  temperature: number            // creativity/randomness (0.0–1.0, default 0.7)
+  responseFormat: ResponseFormat // output format preference
+  maxRetries: number             // retry failed operations (0–5, default 2)
+  timeoutSeconds: number         // per-request timeout (30–600, default 120)
+  debugMode: boolean             // verbose logging for troubleshooting
+  autoApproveReadOnly: boolean   // auto-approve read-only operations
+}
+
 export interface AgentDefinition {
   id: string
   name: string         // e.g. "Dev"
-  emoji: string        // e.g. "💻"
+  icon: string         // lucide icon id, e.g. "lucide:code-2"
   color: string        // tailwind key: 'blue' | 'purple' | 'green' | 'pink' | 'orange' | 'cyan'
   role: string         // e.g. "Senior Developer"
   personality: string  // system prompt personality text
   expertise: string[]  // e.g. ['implementation', 'debugging']
+  capabilities?: AgentCapabilities
 }
 
 export type ProjectMode = 'solo' | 'team'

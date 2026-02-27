@@ -5,7 +5,7 @@ import type { DependencyCheckResult, DependencyName } from '../types'
 export type CliStatus = 'checking' | 'ready' | 'missing' | 'installing' | 'install_failed' | 'error' | 'needs_login' | 'logging_in'
 export type SetupStatus = 'checking_deps' | 'deps_missing' | 'checking_cli' | 'ready' | 'missing' | 'installing' | 'install_failed' | 'error' | 'needs_login' | 'logging_in'
 export type SettingsSection = 'project' | 'agents' | 'mcp' | 'integrations' | 'license' | 'general'
-export type AppView = 'chat' | (string & {})
+export type AppView = 'dashboard' | 'terminal' | 'tasks' | 'config' | 'analytics' | 'settings' | (string & {})
 
 interface AppStore {
   // Setup / Dependencies
@@ -60,7 +60,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   cliInstallLog: '',
   cliLoginLog: '',
 
-  activeView: 'chat',
+  activeView: 'dashboard',
   sidebarWidth: 220,
   rightPanelWidth: 350,
   rightPanelOpen: false,
