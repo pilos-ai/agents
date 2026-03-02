@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Icon } from '../../common/Icon'
 import { StatusDot } from '../components/StatusDot'
 import { useWorkflowStore } from '../../../store/useWorkflowStore'
@@ -5,7 +6,7 @@ import { useWorkflowStore } from '../../../store/useWorkflowStore'
 const statusColors: Record<string, 'green' | 'orange' | 'blue' | 'gray'> = {
   idle: 'gray',
   running: 'orange',
-  paused: 'gray',
+  paused: 'blue',
   completed: 'green',
   failed: 'gray',
 }
@@ -18,7 +19,7 @@ const statusLabels: Record<string, string> = {
   failed: 'Failed',
 }
 
-export function WorkflowExecutionBar() {
+export function WorkflowExecutionBar({ onShowResults }: { onShowResults?: () => void } = {}) {
   const execution = useWorkflowStore((s) => s.execution)
   const saveWorkflow = useWorkflowStore((s) => s.saveWorkflow)
   const startExecution = useWorkflowStore((s) => s.startExecution)
@@ -26,14 +27,77 @@ export function WorkflowExecutionBar() {
   const resetExecution = useWorkflowStore((s) => s.resetExecution)
   const showLogs = useWorkflowStore((s) => s.showLogs)
   const setShowLogs = useWorkflowStore((s) => s.setShowLogs)
+  const isFixing = useWorkflowStore((s) => s.isFixing)
+  const aiFixResult = useWorkflowStore((s) => s.aiFixResult)
+  const aiFixWorkflow = useWorkflowStore((s) => s.aiFixWorkflow)
+  const clearAiFix = useWorkflowStore((s) => s.clearAiFix)
+  const validationResult = useWorkflowStore((s) => s.validationResult)
+  const clearValidation = useWorkflowStore((s) => s.clearValidation)
+  const selectNode = useWorkflowStore((s) => s.selectNode)
+  const jiraProjects = useWorkflowStore((s) => s.jiraProjects)
+  const jiraProjectKey = useWorkflowStore((s) => s.jiraProjectKey)
+  const setJiraProjectKey = useWorkflowStore((s) => s.setJiraProjectKey)
+  const loadJiraProjects = useWorkflowStore((s) => s.loadJiraProjects)
+  const debugPaused = useWorkflowStore((s) => s.debugPaused)
+  const debugStep = useWorkflowStore((s) => s.debugStep)
+  const debugContinue = useWorkflowStore((s) => s.debugContinue)
+  const nodes = useWorkflowStore((s) => s.nodes)
+  const edges = useWorkflowStore((s) => s.edges)
+
+  useEffect(() => { loadJiraProjects() }, [loadJiraProjects])
+
+  // Auto-save with 2s debounce
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (nodes.length === 0) return
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+    setSaveStatus('idle')
+    saveTimerRef.current = setTimeout(() => {
+      setSaveStatus('saving')
+      saveWorkflow()
+      setSaveStatus('saved')
+      savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000)
+    }, 2000)
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+    }
+  }, [nodes, edges, saveWorkflow])
+
+  // Run dropdown
+  const [showRunMenu, setShowRunMenu] = useState(false)
+  const runMenuRef = useRef<HTMLDivElement>(null)
+
+  const closeRunMenu = useCallback(() => setShowRunMenu(false), [])
+
+  useEffect(() => {
+    if (!showRunMenu) return
+    const handler = (e: MouseEvent) => {
+      if (runMenuRef.current && !runMenuRef.current.contains(e.target as HTMLElement)) {
+        closeRunMenu()
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showRunMenu, closeRunMenu])
 
   const status = execution?.status || 'idle'
   const isRunning = status === 'running'
+  const isPaused = status === 'paused'
   const isFinished = status === 'completed' || status === 'failed'
+  const hasFailures = execution?.stepResults.some((r) => r.status === 'failed') || false
 
-  const successCount = execution?.stepResults.filter((r) => r.status === 'completed').length || 0
+  // Deduplicate by nodeId — loop iterations re-execute the same nodes,
+  // so count unique completed nodes to avoid exceeding 100%
+  const uniqueCompleted = new Set(
+    execution?.stepResults.filter((r) => r.status === 'completed').map((r) => r.nodeId) || []
+  ).size
   const totalSteps = execution?.totalSteps || 0
-  const successRate = totalSteps > 0 ? Math.round((successCount / totalSteps) * 100) : 0
+  const successRate = totalSteps > 0 ? Math.min(100, Math.round((uniqueCompleted / totalSteps) * 100)) : 0
 
   return (
     <div className="border-t border-pilos-border flex-shrink-0 bg-pilos-bg">
@@ -43,14 +107,14 @@ export function WorkflowExecutionBar() {
         <div className="flex items-center gap-2 min-w-[120px]">
           <StatusDot color={statusColors[status]} pulse={isRunning} />
           <span className={`text-xs font-bold uppercase tracking-wider ${
-            isRunning ? 'text-orange-400' : status === 'completed' ? 'text-emerald-400' : status === 'failed' ? 'text-red-400' : 'text-zinc-500'
+            isRunning ? 'text-orange-400' : isPaused ? 'text-blue-400' : status === 'completed' ? 'text-emerald-400' : status === 'failed' ? 'text-red-400' : 'text-zinc-500'
           }`}>
             {statusLabels[status]}
           </span>
         </div>
 
         {/* Step progress */}
-        {(isRunning || isFinished) && (
+        {(isRunning || isPaused || isFinished) && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-zinc-400">
               Step {execution?.currentStep || 0} of {totalSteps}:
@@ -63,13 +127,24 @@ export function WorkflowExecutionBar() {
           </div>
         )}
 
-        {/* Success rate */}
+        {/* Success rate + View Results */}
         {isFinished && (
-          <div className="flex items-center gap-1.5 ml-auto mr-3">
-            <span className="text-[10px] text-zinc-600 uppercase tracking-widest">Success</span>
-            <span className={`text-xs font-bold ${successRate === 100 ? 'text-emerald-400' : successRate > 50 ? 'text-orange-400' : 'text-red-400'}`}>
-              {successRate}%
-            </span>
+          <div className="flex items-center gap-3 ml-auto mr-3">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-zinc-600 uppercase tracking-widest">Success</span>
+              <span className={`text-xs font-bold ${successRate === 100 ? 'text-emerald-400' : successRate > 50 ? 'text-orange-400' : 'text-red-400'}`}>
+                {successRate}%
+              </span>
+            </div>
+            {onShowResults && (
+              <button
+                onClick={onShowResults}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600/20 border border-cyan-500/30 text-cyan-300 text-xs font-bold rounded-lg hover:bg-cyan-600/30 transition-colors"
+              >
+                <Icon icon="lucide:layout-dashboard" className="text-[10px]" />
+                View Results
+              </button>
+            )}
           </div>
         )}
 
@@ -77,54 +152,103 @@ export function WorkflowExecutionBar() {
         {!isFinished && <div className="flex-1" />}
 
         {/* Execution timer */}
-        {isRunning && execution?.startedAt && (
+        {(isRunning || isPaused) && execution?.startedAt && (
           <div className="flex items-center gap-1.5 text-zinc-500">
             <Icon icon="lucide:timer" className="text-[10px]" />
             <ExecutionTimer startedAt={execution.startedAt} />
           </div>
         )}
 
+        {/* Jira project selector */}
+        {jiraProjects.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <Icon icon="simple-icons:jira" className="text-[10px] text-blue-400" />
+            <select
+              value={jiraProjectKey || ''}
+              onChange={(e) => setJiraProjectKey(e.target.value)}
+              disabled={isRunning}
+              className="bg-pilos-card border border-pilos-border rounded-lg text-xs text-zinc-300 px-2 py-1.5 outline-none hover:border-zinc-600 focus:border-blue-500/50 transition-colors disabled:opacity-50 cursor-pointer"
+            >
+              {jiraProjects.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {p.key} — {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={saveWorkflow}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-pilos-card border border-pilos-border rounded-lg text-xs text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors"
-          >
-            <Icon icon="lucide:save" className="text-[10px]" />
-            Save
-          </button>
+          {/* Auto-save indicator */}
+          {saveStatus !== 'idle' && (
+            <span className={`text-[10px] ${saveStatus === 'saved' ? 'text-emerald-400' : 'text-zinc-500'}`}>
+              {saveStatus === 'saving' ? 'Saving...' : 'Saved'}
+            </span>
+          )}
 
-          {!isRunning && (
+          {!isRunning && !isPaused && (
             <>
               {isFinished && (
                 <button
                   onClick={resetExecution}
+                  title="Reset execution state"
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-pilos-card border border-pilos-border rounded-lg text-xs text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors"
                 >
                   <Icon icon="lucide:rotate-ccw" className="text-[10px]" />
                   Reset
                 </button>
               )}
-              <button
-                onClick={startExecution}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-pilos-card border border-pilos-border rounded-lg text-xs text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors"
-              >
-                <Icon icon="lucide:flask-conical" className="text-[10px]" />
-                Test Run
-              </button>
-              <button
-                onClick={startExecution}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-lg shadow-blue-600/20 transition-all"
-              >
-                <Icon icon="lucide:play" className="text-[10px]" />
-                Run Workflow
-              </button>
+              {/* Run split button */}
+              <div className="relative" ref={runMenuRef}>
+                <div className="flex items-stretch">
+                  <button
+                    onClick={() => startExecution()}
+                    title="Run workflow"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-l-lg shadow-lg shadow-blue-600/20 transition-all"
+                  >
+                    <Icon icon="lucide:play" className="text-[10px]" />
+                    Run
+                  </button>
+                  <button
+                    onClick={() => setShowRunMenu(!showRunMenu)}
+                    className="flex items-center justify-center px-2.5 bg-blue-600 hover:bg-blue-500 text-white border-l border-blue-500/40 rounded-r-lg shadow-lg shadow-blue-600/20 transition-all"
+                  >
+                    <Icon icon="lucide:chevron-down" className="text-[10px]" />
+                  </button>
+                </div>
+                {showRunMenu && (
+                  <div className="absolute right-0 bottom-full mb-1 w-48 bg-pilos-card border border-pilos-border rounded-lg shadow-xl z-50 overflow-hidden">
+                    <button
+                      onClick={() => { startExecution({ dryRun: true }); closeRunMenu() }}
+                      className="w-full px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-2"
+                    >
+                      <Icon icon="lucide:flask-conical" className="text-[10px] text-zinc-500" />
+                      <div>
+                        <span className="text-white font-medium">Dry Run</span>
+                        <p className="text-[10px] text-zinc-600 mt-0.5">No API calls</p>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => { startExecution({ debugMode: true }); closeRunMenu() }}
+                      className="w-full px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-2 border-t border-pilos-border"
+                    >
+                      <Icon icon="lucide:bug" className="text-[10px] text-zinc-500" />
+                      <div>
+                        <span className="text-white font-medium">Debug</span>
+                        <p className="text-[10px] text-zinc-600 mt-0.5">Step by step</p>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
             </>
           )}
 
           {isRunning && (
             <button
               onClick={stopExecution}
+              title="Stop execution"
               className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 border border-red-500/30 text-red-400 text-xs font-bold rounded-lg hover:bg-red-600/30 transition-colors"
             >
               <Icon icon="lucide:square" className="text-[10px]" />
@@ -132,8 +256,38 @@ export function WorkflowExecutionBar() {
             </button>
           )}
 
+          {isPaused && debugPaused && (
+            <>
+              <button
+                onClick={debugStep}
+                title="Execute next step"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600/20 border border-blue-500/30 text-blue-300 text-xs font-bold rounded-lg hover:bg-blue-600/30 transition-colors"
+              >
+                <Icon icon="lucide:step-forward" className="text-[10px]" />
+                Step
+              </button>
+              <button
+                onClick={debugContinue}
+                title="Continue running all steps"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold rounded-lg hover:bg-emerald-600/30 transition-colors"
+              >
+                <Icon icon="lucide:play" className="text-[10px]" />
+                Continue
+              </button>
+              <button
+                onClick={stopExecution}
+                title="Stop execution"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 border border-red-500/30 text-red-400 text-xs font-bold rounded-lg hover:bg-red-600/30 transition-colors"
+              >
+                <Icon icon="lucide:square" className="text-[10px]" />
+                Stop
+              </button>
+            </>
+          )}
+
           <button
             onClick={() => setShowLogs(!showLogs)}
+            title="Toggle execution logs"
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
               showLogs ? 'bg-blue-600/10 text-blue-400 border border-blue-500/30' : 'text-zinc-500 hover:text-zinc-300'
             }`}
@@ -143,6 +297,73 @@ export function WorkflowExecutionBar() {
         </div>
       </div>
 
+      {/* Validation errors */}
+      {validationResult && validationResult.issues.length > 0 && (
+        <div className="border-t border-pilos-border bg-red-500/5 max-h-[160px] overflow-y-auto custom-scrollbar">
+          <div className="px-4 py-2 flex items-center justify-between border-b border-red-500/10">
+            <div className="flex items-center gap-2">
+              <Icon icon="lucide:alert-triangle" className="text-red-400 text-xs" />
+              <span className="text-xs font-bold text-red-400">
+                Validation failed — {validationResult.issues.filter((i) => i.type === 'error').length} error(s), {validationResult.issues.filter((i) => i.type === 'warning').length} warning(s)
+              </span>
+            </div>
+            <button onClick={clearValidation} className="text-zinc-500 hover:text-white transition-colors">
+              <Icon icon="lucide:x" className="text-xs" />
+            </button>
+          </div>
+          <div className="px-4 py-2 space-y-1">
+            {validationResult.issues.map((issue, i) => (
+              <div
+                key={i}
+                className={`flex items-start gap-2 text-xs cursor-pointer hover:bg-zinc-800/50 px-1.5 py-1 rounded ${
+                  issue.type === 'error' ? 'text-red-400' : 'text-orange-400'
+                }`}
+                onClick={() => { if (issue.nodeId) selectNode(issue.nodeId) }}
+              >
+                <Icon
+                  icon={issue.type === 'error' ? 'lucide:x-circle' : 'lucide:alert-circle'}
+                  className="text-[10px] flex-shrink-0 mt-0.5"
+                />
+                <span>{issue.message}</span>
+              </div>
+            ))}
+          </div>
+          {isFinished && hasFailures && (
+            <div className="px-4 py-2 border-t border-red-500/10 flex justify-end">
+              <button
+                onClick={() => aiFixWorkflow()}
+                disabled={isFixing}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600/20 border border-violet-500/30 text-violet-300 text-xs font-bold rounded-lg hover:bg-violet-600/30 transition-colors disabled:opacity-50"
+              >
+                <Icon icon={isFixing ? 'lucide:loader-2' : 'lucide:sparkles'} className={`text-[10px] ${isFixing ? 'animate-spin' : ''}`} />
+                {isFixing ? 'Fixing...' : 'AI Fix'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* AI Fix result banner */}
+      {aiFixResult && (
+        <div className="border-t border-pilos-border bg-violet-500/5 px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <Icon icon="lucide:sparkles" className="text-violet-400 text-xs flex-shrink-0" />
+            <span className="text-xs text-violet-300 truncate">{aiFixResult.summary}</span>
+            {aiFixResult.suggestions.length > 0 && (
+              <span className="text-[10px] text-violet-400/60 flex-shrink-0">
+                ({aiFixResult.suggestions.length} change{aiFixResult.suggestions.length !== 1 ? 's' : ''} applied)
+              </span>
+            )}
+          </div>
+          <button
+            onClick={clearAiFix}
+            className="text-zinc-500 hover:text-white transition-colors flex-shrink-0 ml-2"
+          >
+            <Icon icon="lucide:x" className="text-xs" />
+          </button>
+        </div>
+      )}
+
       {/* Execution log panel */}
       {showLogs && execution && (
         <div className="border-t border-pilos-border bg-pilos-card max-h-[200px] overflow-y-auto custom-scrollbar">
@@ -150,16 +371,29 @@ export function WorkflowExecutionBar() {
             <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Execution Log</span>
             <span className="text-[10px] text-zinc-700">{execution.logs.length} entries</span>
           </div>
-          <div className="px-4 py-2 space-y-0.5 font-mono text-[11px]">
-            {execution.logs.map((log, i) => (
-              <div key={i} className={`leading-relaxed ${
-                log.includes('[WARN]') ? 'text-orange-400/80'
-                : log.includes('[ERROR]') ? 'text-red-400/80'
+          <div className="px-4 py-2 space-y-0.5 font-mono text-xs">
+            {execution.logs.map((log, i) => {
+              const levelMatch = log.match(/^\[(WARN|ERROR|DEBUG|INFO)\]\s*/)
+              const level = levelMatch?.[1]
+              const text = levelMatch ? log.slice(levelMatch[0].length) : log
+              const badgeClass = level === 'ERROR' ? 'bg-red-500/20 text-red-400'
+                : level === 'WARN' ? 'bg-orange-500/20 text-orange-400'
+                : level === 'DEBUG' ? 'bg-blue-500/20 text-blue-400'
+                : level === 'INFO' ? 'bg-zinc-500/20 text-zinc-400'
+                : null
+              const textClass = level === 'ERROR' ? 'text-red-400/80'
+                : level === 'WARN' ? 'text-orange-400/80'
+                : level === 'DEBUG' ? 'text-blue-400/70'
                 : 'text-zinc-500'
-              }`}>
-                {log}
-              </div>
-            ))}
+              return (
+                <div key={i} className={`leading-relaxed flex items-start gap-1.5 ${textClass}`}>
+                  {badgeClass && (
+                    <span className={`px-1 py-0.5 rounded text-[9px] font-bold flex-shrink-0 ${badgeClass}`}>{level}</span>
+                  )}
+                  <span className="break-all">{text}</span>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
@@ -168,8 +402,15 @@ export function WorkflowExecutionBar() {
 }
 
 function ExecutionTimer({ startedAt }: { startedAt: string }) {
-  // Simple static display — in production this would use an interval
-  const elapsed = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
+  const [elapsed, setElapsed] = useState(() => Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000))
+
+  useEffect(() => {
+    const start = new Date(startedAt).getTime()
+    setElapsed(Math.floor((Date.now() - start) / 1000))
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 1000)
+    return () => clearInterval(id)
+  }, [startedAt])
+
   const mins = Math.floor(elapsed / 60)
   const secs = elapsed % 60
   return (

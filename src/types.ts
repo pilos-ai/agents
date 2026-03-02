@@ -520,9 +520,13 @@ export interface ElectronAPI {
   files: {
     revertEdit: (filePath: string, oldString: string, newString: string) =>
       Promise<{ success: boolean; error?: string }>
+    readFile: (filePath: string) => Promise<string>
+    readDir: (dirPath: string, recursive?: boolean) =>
+      Promise<{ name: string; path: string; isDirectory: boolean }[]>
   }
   dialog: {
     openDirectory: () => Promise<string | null>
+    openPath: (options?: { directory?: boolean }) => Promise<string | null>
     openExternal: (url: string) => Promise<void>
   }
   menu: {
@@ -537,6 +541,7 @@ export interface ElectronAPI {
   }
   metrics: {
     setLicenseKey: (key: string) => Promise<void>
+    getMachineId: () => Promise<string>
   }
   updater: {
     install: () => Promise<void>
@@ -556,6 +561,7 @@ export interface ElectronAPI {
     getSprints: (boardId: number) => Promise<JiraSprint[]>
     getSprintIssues: (sprintId: number) => Promise<JiraIssue[]>
     getIssues: (jql: string) => Promise<JiraIssue[]>
+    createIssue: (projectKey: string, summary: string, description: string, issueType: string) => Promise<JiraIssue>
     createEpic: (projectKey: string, summary: string, description: string) => Promise<JiraIssue>
     createSubTask: (parentKey: string, summary: string, description: string) => Promise<JiraIssue>
     transitionIssue: (issueKey: string, transitionId: string) => Promise<void>

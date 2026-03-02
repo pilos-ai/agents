@@ -77,9 +77,12 @@ const stubAPI: ElectronAPI = {
   },
   files: {
     revertEdit: () => Promise.resolve({ success: false, error: 'stub' }),
+    readFile: () => Promise.resolve(''),
+    readDir: () => Promise.resolve([]),
   },
   dialog: {
     openDirectory: () => Promise.resolve(null),
+    openPath: () => Promise.resolve(null),
     openExternal: noopAsync,
   },
   menu: {
@@ -94,6 +97,7 @@ const stubAPI: ElectronAPI = {
   },
   metrics: {
     setLicenseKey: noopAsync,
+    getMachineId: () => Promise.resolve('stub-machine-id'),
   },
   updater: {
     install: noopAsync,
@@ -113,6 +117,7 @@ const stubAPI: ElectronAPI = {
     getSprints: () => Promise.resolve([]),
     getSprintIssues: () => Promise.resolve([]),
     getIssues: () => Promise.resolve([]),
+    createIssue: noopAsync,
     createEpic: noopAsync,
     createSubTask: noopAsync,
     transitionIssue: noopAsync,

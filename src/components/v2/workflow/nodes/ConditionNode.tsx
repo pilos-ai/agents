@@ -30,7 +30,7 @@ export function ConditionNode({ data, selected }: ConditionNodeProps) {
 
       <span className="text-[10px] font-medium text-zinc-400 mt-2">{data.label}</span>
       {data.conditionExpression && (
-        <span className="text-[9px] font-mono text-zinc-600 mt-0.5">{data.conditionExpression}</span>
+        <span className="text-[10px] font-mono text-zinc-600 mt-0.5">{data.conditionExpression}</span>
       )}
 
       {/* Yes handle (right) */}
@@ -41,6 +41,7 @@ export function ConditionNode({ data, selected }: ConditionNodeProps) {
         className="!w-2.5 !h-2.5 !bg-emerald-500 !border-2 !border-pilos-bg"
         style={{ top: '50%' }}
       />
+      <span className="absolute right-[-26px] top-1/2 -translate-y-1/2 text-[10px] text-emerald-400 font-bold">True</span>
       {/* No handle (bottom) */}
       <Handle
         type="source"
@@ -48,6 +49,7 @@ export function ConditionNode({ data, selected }: ConditionNodeProps) {
         id="no"
         className="!w-2.5 !h-2.5 !bg-red-500 !border-2 !border-pilos-bg"
       />
+      <span className="absolute -bottom-4 left-1/2 -translate-x-1/2 text-[10px] text-red-400 font-bold">False</span>
     </div>
   )
 }

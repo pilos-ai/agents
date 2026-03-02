@@ -41,9 +41,24 @@ export function ToolNode({ data, selected }: ToolNodeProps) {
           <p className="text-[10px] text-zinc-500 truncate pl-8">{data.description}</p>
         )}
         <div className="flex items-center gap-1.5 mt-1.5 pl-8">
-          <span className="text-[9px] font-mono text-zinc-700 uppercase">{data.toolId || 'custom'}</span>
+          <span className="text-[10px] text-zinc-600">{data.toolCategory || 'Tool'}</span>
+          {(() => {
+            const params = data.parameters ? Object.values(data.parameters).filter(Boolean) : []
+            const hasEmptyRequired = params.some((p: any) => p.required && (p.value === '' || p.value === undefined || p.value === null))
+            if (!hasEmptyRequired) return null
+            return (
+              <span className="text-[9px] font-bold text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded-full">
+                Needs setup
+              </span>
+            )
+          })()}
         </div>
       </div>
+      {data.executionError && (
+        <div className="px-3 py-1.5 border-t border-red-500/20 bg-red-500/5">
+          <p className="text-[10px] text-red-400 truncate">{data.executionError as string}</p>
+        </div>
+      )}
 
       <Handle type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-blue-500 !border-2 !border-pilos-bg" />
     </div>

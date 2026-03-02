@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { Icon } from '../../common/Icon'
 import { GradientAvatar } from '../components/GradientAvatar'
 import { StatusDot } from '../components/StatusDot'
+import { ActiveTaskCard } from '../components/ActiveTaskCard'
 import { useProjectStore } from '../../../store/useProjectStore'
 import { useConversationStore } from '../../../store/useConversationStore'
 import { useAppStore } from '../../../store/useAppStore'
@@ -186,11 +187,13 @@ export default function DashboardPage() {
   const analyticsEntries = useAnalyticsStore((s) => s.entries)
   const summary = useMemo(() => computeSummary(analyticsEntries), [analyticsEntries])
   const tasks = useTaskStore((s) => s.tasks)
+  const activeExecutions = useTaskStore((s) => s.activeExecutions)
   const setActiveView = useAppStore((s) => s.setActiveView)
 
   const activeTab = openProjects.find((p) => p.projectPath === activeProjectPath)
   const agents = activeTab?.agents || []
   const activeTasks = tasks.filter((t) => t.status === 'running' || t.status === 'queued').length
+  const runningTasks = tasks.filter((t) => t.status === 'running' || activeExecutions[t.id])
 
   useEffect(() => {
     useAnalyticsStore.getState().loadEntries()
@@ -303,6 +306,31 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
+
+            {/* Active Tasks */}
+            {runningTasks.length > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Active Tasks</h2>
+                  <button
+                    onClick={() => setActiveView('tasks')}
+                    className="text-xs text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+                  >
+                    View All
+                    <Icon icon="lucide:chevron-right" className="text-[10px]" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {runningTasks.map((task) => (
+                    <ActiveTaskCard
+                      key={task.id}
+                      task={task}
+                      execution={activeExecutions[task.id]}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Active Agents */}
             <div className="mb-6">

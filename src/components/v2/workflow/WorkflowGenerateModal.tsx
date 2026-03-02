@@ -3,6 +3,8 @@ import { Icon } from '../../common/Icon'
 import { api } from '../../../api'
 import { useWorkflowStore } from '../../../store/useWorkflowStore'
 import { useProjectStore } from '../../../store/useProjectStore'
+import { extractJson, hydrateToolNodes, validateAiPromptNodes, WORKFLOW_RUNTIME_GUIDE } from '../../../utils/workflow-ai'
+import { normalizeNodeTypes } from '../../../store/useWorkflowStore'
 import type { ClaudeEvent } from '../../../types'
 import type { WorkflowNodeData } from '../../../types/workflow'
 import type { Node, Edge } from '@xyflow/react'
@@ -26,7 +28,7 @@ function buildGenerationPrompt(userDescription: string): string {
 OUTPUT ONLY THE RAW JSON OBJECT. Do not include any text before or after the JSON. No markdown code fences. No explanation. Start your response with { and end with }.
 
 JSON schema:
-{"nodes":[{"id":"NODE_START_01","type":"start|end|mcp_tool|condition|loop|delay|parallel|merge|variable|note","position":{"x":300,"y":50},"data":{"type":"(same as node type)","label":"short name","description":"optional for mcp_tool","toolId":"optional: read_files|create_pr|git_commit|git_diff|transform_json|filter_data|aggregate|jira_search|jira_create|jira_transition|slack_message|slack_thread|run_command|run_script|web_search|email_alert|webhook","toolCategory":"optional: GitHub Operations|Data Processing|Jira Integration|Slack Integration|Code Execution|Notifications","toolIcon":"optional: lucide:icon-name","conditionExpression":"for condition","conditionOperator":"equals|contains|greater_than|less_than|regex","conditionValue":"for condition","loopType":"count|collection|while","loopCount":3,"delayMs":5,"delayUnit":"s|ms|min|h","variableName":"for variable","variableValue":"for variable","variableOperation":"set|append|increment|transform","noteText":"for note"}}],"edges":[{"id":"edge_01","source":"node id","target":"node id","sourceHandle":"null or yes/no for condition, body/done for loop, branch_1/branch_2 for parallel","type":"dashed"}]}
+{"nodes":[{"id":"NODE_START_01","type":"start|end|mcp_tool|ai_prompt|condition|loop|delay|parallel|merge|variable|note","position":{"x":300,"y":50},"data":{"type":"(same as node type)","label":"short name","description":"optional for mcp_tool","toolId":"optional: read_files|create_pr|git_commit|git_diff|transform_json|filter_data|aggregate|jira_search|jira_get_issue|jira_create|jira_transition|jira_get_transitions|slack_message|slack_thread|run_command|run_script|web_search|email_alert|webhook","toolCategory":"optional: GitHub Operations|Data Processing|Jira Integration|Slack Integration|Code Execution|Notifications","toolIcon":"optional: lucide:icon-name","aiPrompt":"for ai_prompt: the prompt text for Claude","aiModel":"for ai_prompt: haiku|sonnet|opus","conditionExpression":"for condition","conditionOperator":"equals|contains|greater_than|less_than|regex","conditionValue":"for condition","loopType":"count|collection|while","loopCount":3,"loopCollection":"for collection loops: use {{NODE_ID.arrayField}} to reference upstream output","delayMs":5,"delayUnit":"s|ms|min|h","variableName":"for variable","variableValue":"for variable","variableOperation":"set|append|increment|transform","noteText":"for note"}}],"edges":[{"id":"edge_01","source":"node id","target":"node id","sourceHandle":"null or yes/no for condition, body/done for loop, branch_1/branch_2 for parallel","type":"dashed"}]}
 
 Rules:
 - Always include start and end nodes
@@ -37,40 +39,13 @@ Rules:
 - loop: sourceHandle "body"/"done"
 - parallel/merge for concurrency
 - Keep labels 2-4 words
-- Only include data fields relevant to each node type`
-}
+- Only include data fields relevant to each node type
+- collection loops MUST set loopCollection to reference the upstream node output, e.g. "{{NODE_FIND_01.files}}" where NODE_FIND_01 is the id of the node whose output contains the array
+- Use mcp_tool for standard operations (Jira search/create/transition, API calls, etc.) — these run directly via API, no AI needed
+- Use ai_prompt ONLY when reasoning/analysis/summarization is needed (e.g. "analyze these issues", "write a summary", "decide what to do"). Set aiPrompt and optionally aiModel
+- ai_prompt nodes MUST have a non-empty "aiPrompt" field with a detailed, actionable prompt. Include specific references to upstream data using {{NODE_ID.field}} syntax. Never leave aiPrompt empty or with placeholder text
 
-/** Extract JSON from Claude's response, handling surrounding text or code fences */
-function extractJson(text: string): string {
-  let cleaned = text.trim()
-
-  // Strip markdown code fences
-  const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)
-  if (fenceMatch) {
-    cleaned = fenceMatch[1].trim()
-  }
-
-  // If it doesn't start with {, try to find the JSON object
-  if (!cleaned.startsWith('{')) {
-    const firstBrace = cleaned.indexOf('{')
-    if (firstBrace === -1) throw new Error('No JSON object found in response')
-    cleaned = cleaned.slice(firstBrace)
-  }
-
-  // Find the matching closing brace
-  let depth = 0
-  let end = -1
-  for (let i = 0; i < cleaned.length; i++) {
-    if (cleaned[i] === '{') depth++
-    else if (cleaned[i] === '}') {
-      depth--
-      if (depth === 0) { end = i; break }
-    }
-  }
-
-  if (end === -1) throw new Error('Incomplete JSON object in response')
-
-  return cleaned.slice(0, end + 1)
+${WORKFLOW_RUNTIME_GUIDE}`
 }
 
 export function WorkflowGenerateModal({ open, onClose }: Props) {
@@ -163,6 +138,11 @@ export function WorkflowGenerateModal({ open, onClose }: Props) {
             throw new Error('Invalid workflow: missing nodes array')
           }
 
+          // Normalize node types, hydrate tool definitions, validate ai_prompt nodes
+          const typedNodes = normalizeNodeTypes(workflow.nodes as unknown as Array<Record<string, unknown>>)
+          const hydratedNodes = hydrateToolNodes(typedNodes)
+          const validatedNodes = validateAiPromptNodes(hydratedNodes, workflow.edges || [])
+
           // Load the generated workflow into the store
           const store = useWorkflowStore.getState()
 
@@ -171,7 +151,7 @@ export function WorkflowGenerateModal({ open, onClose }: Props) {
 
           // Replace nodes and edges with generated workflow
           useWorkflowStore.setState({
-            nodes: workflow.nodes,
+            nodes: validatedNodes,
             edges: (workflow.edges || []).map((e) => ({
               ...e,
               type: e.type || 'dashed',

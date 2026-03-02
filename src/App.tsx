@@ -10,6 +10,7 @@ import { loadPmModule } from './lib/pm'
 import type { ClaudeEvent } from './types'
 
 const OnboardingPage = lazy(() => import('./components/v2/pages/OnboardingPage'))
+const LoginPage = lazy(() => import('./components/v2/pages/LoginPage'))
 
 export default function App() {
   const loadRecentProjects = useProjectStore((s) => s.loadRecentProjects)
@@ -18,12 +19,14 @@ export default function App() {
   const loadSettings = useAppStore((s) => s.loadSettings)
   const setupStatus = useAppStore((s) => s.setupStatus)
   const checkDependencies = useAppStore((s) => s.checkDependencies)
+  const isAuthenticated = useLicenseStore((s) => s.isAuthenticated)
+  const authLoaded = useLicenseStore((s) => s.authLoaded)
 
   useEffect(() => {
     checkDependencies()
     loadSettings()
     loadRecentProjects()
-    useLicenseStore.getState().checkLicense()
+    useLicenseStore.getState().loadAuthState()
 
     // Dynamically initialize PM module if available
     loadPmModule().then((pm) => {
@@ -111,6 +114,12 @@ export default function App() {
       {setupStatus !== 'ready' ? (
         <Suspense fallback={<div className="flex-1" />}>
           <OnboardingPage />
+        </Suspense>
+      ) : !authLoaded ? (
+        <div className="flex-1" />
+      ) : !isAuthenticated ? (
+        <Suspense fallback={<div className="flex-1" />}>
+          <LoginPage />
         </Suspense>
       ) : (
         <V2Layout />

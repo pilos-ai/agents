@@ -133,11 +133,16 @@ contextBridge.exposeInMainWorld('api', {
   files: {
     revertEdit: (filePath: string, oldString: string, newString: string) =>
       ipcRenderer.invoke('files:revertEdit', filePath, oldString, newString),
+    readFile: (filePath: string) =>
+      ipcRenderer.invoke('files:readFile', filePath),
+    readDir: (dirPath: string, recursive?: boolean) =>
+      ipcRenderer.invoke('files:readDir', dirPath, recursive),
   },
 
   // Dialogs
   dialog: {
     openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
+    openPath: (options?: { directory?: boolean }) => ipcRenderer.invoke('dialog:openPath', options),
     openExternal: (url: string) => ipcRenderer.invoke('dialog:openExternal', url),
   },
 
@@ -186,6 +191,8 @@ contextBridge.exposeInMainWorld('api', {
     getSprints: (boardId: number) => ipcRenderer.invoke('jira:getSprints', boardId),
     getSprintIssues: (sprintId: number) => ipcRenderer.invoke('jira:getSprintIssues', sprintId),
     getIssues: (jql: string) => ipcRenderer.invoke('jira:getIssues', jql),
+    createIssue: (projectKey: string, summary: string, description: string, issueType: string) =>
+      ipcRenderer.invoke('jira:createIssue', projectKey, summary, description, issueType),
     createEpic: (projectKey: string, summary: string, description: string) =>
       ipcRenderer.invoke('jira:createEpic', projectKey, summary, description),
     createSubTask: (parentKey: string, summary: string, description: string) =>
@@ -210,6 +217,7 @@ contextBridge.exposeInMainWorld('api', {
   // Metrics
   metrics: {
     setLicenseKey: (key: string) => ipcRenderer.invoke('metrics:setLicenseKey', key),
+    getMachineId: () => ipcRenderer.invoke('metrics:getMachineId') as Promise<string>,
   },
 
   // Updates

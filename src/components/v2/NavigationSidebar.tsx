@@ -1,6 +1,7 @@
 import { Icon } from '../common/Icon'
 import { useAppStore, type AppView } from '../../store/useAppStore'
 import { useProjectStore } from '../../store/useProjectStore'
+import { useLicenseStore } from '../../store/useLicenseStore'
 import { api } from '../../api'
 
 interface NavItem {
@@ -42,6 +43,60 @@ function NavSection({ label, items }: { label: string; items: NavItem[] }) {
             </button>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+const TIER_BADGE: Record<string, { bg: string; text: string }> = {
+  free: { bg: 'bg-zinc-700', text: 'text-zinc-400' },
+  pro: { bg: 'bg-amber-500/20', text: 'text-amber-400' },
+  teams: { bg: 'bg-purple-500/20', text: 'text-purple-400' },
+}
+
+function SidebarFooter() {
+  const setActiveView = useAppStore((s) => s.setActiveView)
+  const email = useLicenseStore((s) => s.email)
+  const tier = useLicenseStore((s) => s.tier)
+  const logout = useLicenseStore((s) => s.logout)
+
+  const initials = email
+    ? email.split('@')[0].slice(0, 2).toUpperCase()
+    : '??'
+
+  const badge = TIER_BADGE[tier] || TIER_BADGE.free
+
+  return (
+    <div className="border-t border-pilos-border p-3 titlebar-no-drag">
+      <div className="flex items-center gap-2.5">
+        <div className="w-8 h-8 bg-gradient-to-br from-blue-600/20 to-indigo-700/20 rounded-full flex items-center justify-center border border-blue-500/20">
+          <span className="text-[10px] font-bold text-blue-400">{initials}</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <p className="text-xs font-medium text-zinc-300 truncate">{email || 'Unknown'}</p>
+            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${badge.bg} ${badge.text}`}>
+              {tier}
+            </span>
+          </div>
+          <p className="text-[10px] text-zinc-600">v2.1.0-alpha</p>
+        </div>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => setActiveView('settings')}
+            className="p-1.5 text-zinc-600 hover:text-zinc-300 transition-colors"
+            title="Settings"
+          >
+            <Icon icon="lucide:settings" className="text-sm" />
+          </button>
+          <button
+            onClick={logout}
+            className="p-1.5 text-zinc-600 hover:text-red-400 transition-colors"
+            title="Sign out"
+          >
+            <Icon icon="lucide:log-out" className="text-sm" />
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -125,24 +180,8 @@ export function NavigationSidebar() {
         <NavSection label="Advanced" items={advancedItems} />
       </nav>
 
-      {/* Footer */}
-      <div className="border-t border-pilos-border p-3 titlebar-no-drag">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-600/20 to-indigo-700/20 rounded-full flex items-center justify-center border border-blue-500/20">
-            <span className="text-[10px] font-bold text-blue-400">JD</span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-zinc-300 truncate">Dev Instance</p>
-            <p className="text-[10px] text-zinc-600">v2.1.0-alpha</p>
-          </div>
-          <button
-            onClick={() => setActiveView('settings')}
-            className="p-1.5 text-zinc-600 hover:text-zinc-300 transition-colors"
-          >
-            <Icon icon="lucide:settings" className="text-sm" />
-          </button>
-        </div>
-      </div>
+      {/* Footer — User Account */}
+      <SidebarFooter />
     </div>
   )
 }

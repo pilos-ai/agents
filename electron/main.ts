@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, Menu } from 'electron'
+import crypto from 'crypto'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { registerIpcHandlers } from './ipc-handlers'
@@ -68,6 +69,16 @@ async function createWindow() {
   // IPC: forward license key to metrics collector
   ipcMain.handle('metrics:setLicenseKey', (_event, key: string) => {
     metricsCollector?.setLicenseKey(key)
+  })
+
+  // IPC: expose machineId to renderer for license enforcement
+  ipcMain.handle('metrics:getMachineId', () => {
+    let id = settings.get('machineId') as string | null
+    if (!id) {
+      id = crypto.randomUUID()
+      settings.set('machineId', id)
+    }
+    return id
   })
 
   // Set up auto-updater

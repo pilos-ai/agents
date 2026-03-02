@@ -3,9 +3,12 @@ import { Icon } from '../../common/Icon'
 import { StatusDot } from './StatusDot'
 import { FormToggle } from './FormToggle'
 import { TaskRunCard } from './TaskRunCard'
+import { WorkflowResultsBoard } from './WorkflowResultsBoard'
 import { SCHEDULE_OPTIONS } from '../../../data/task-templates'
 import { useTaskStore, type Task, type TaskStatus } from '../../../store/useTaskStore'
 import { useWorkflowStore } from '../../../store/useWorkflowStore'
+import type { Node } from '@xyflow/react'
+import type { WorkflowNodeData } from '../../../types/workflow'
 
 const statusColors: Record<TaskStatus, 'green' | 'orange' | 'blue' | 'gray'> = {
   idle: 'gray',
@@ -37,7 +40,7 @@ function timeAgo(dateStr: string | null): string {
   return `${days}d ago`
 }
 
-const TABS = ['Overview', 'Run History'] as const
+const TABS = ['Overview', 'Results', 'Run History'] as const
 
 interface Props {
   task: Task
@@ -49,11 +52,21 @@ export function TaskDetailPanel({ task, onClose }: Props) {
   const [showRunMenu, setShowRunMenu] = useState(false)
 
   const triggerRun = useTaskStore((s) => s.triggerRun)
+  const runTaskWorkflow = useTaskStore((s) => s.runTaskWorkflow)
   const toggleSchedule = useTaskStore((s) => s.toggleSchedule)
   const removeTask = useTaskStore((s) => s.removeTask)
+  const activeExecution = useTaskStore((s) => s.activeExecutions[task.id])
 
   const jiraIntegration = task.integrations.find((i) => i.config.type === 'jira')
   const intervalLabel = SCHEDULE_OPTIONS.find((o) => o.value === task.schedule.interval)?.label || task.schedule.interval
+
+  // Get step results: from live execution or latest persisted run
+  const stepResults = activeExecution?.stepResults
+    || task.runs[0]?.stepResults
+    || []
+
+  // Get workflow nodes for labels
+  const workflowNodes: Node<WorkflowNodeData>[] = task.workflow?.nodes || []
 
   return (
     <div className="w-[360px] border-l border-pilos-border flex flex-col bg-pilos-bg flex-shrink-0">
@@ -93,7 +106,14 @@ export function TaskDetailPanel({ task, onClose }: Props) {
           {showRunMenu && task.status !== 'running' && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-800 border border-pilos-border rounded-lg shadow-xl z-10 overflow-hidden">
               <button
-                onClick={() => { triggerRun(task.id, 'manual'); setShowRunMenu(false) }}
+                onClick={() => {
+                  if (task.workflow?.nodes?.length) {
+                    runTaskWorkflow(task.id)
+                  } else {
+                    triggerRun(task.id, 'manual')
+                  }
+                  setShowRunMenu(false)
+                }}
                 className="w-full flex items-center gap-2 px-3 py-2 hover:bg-zinc-700 transition-colors text-left"
               >
                 <Icon icon="lucide:play" className="text-green-400 text-xs" />
@@ -247,6 +267,15 @@ export function TaskDetailPanel({ task, onClose }: Props) {
               </button>
             </div>
           </>
+        )}
+
+        {tab === 'Results' && (
+          <WorkflowResultsBoard
+            stepResults={stepResults}
+            nodes={workflowNodes}
+            onAiFix={() => useWorkflowStore.getState().aiFixWorkflow()}
+            isFixing={useWorkflowStore.getState().isFixing}
+          />
         )}
 
         {tab === 'Run History' && (

@@ -333,11 +333,49 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
     return { success: true }
   })
 
+  ipcMain.handle('files:readFile', async (_event, filePath: string) => {
+    const fs = await import('fs/promises')
+    const content = await fs.readFile(filePath, 'utf-8')
+    return content
+  })
+
+  ipcMain.handle('files:readDir', async (_event, dirPath: string, recursive?: boolean) => {
+    const fs = await import('fs/promises')
+    const path = await import('path')
+    const entries: { name: string; path: string; isDirectory: boolean }[] = []
+    const items = await fs.readdir(dirPath, { withFileTypes: true })
+    for (const item of items) {
+      const fullPath = path.join(dirPath, item.name)
+      entries.push({ name: item.name, path: fullPath, isDirectory: item.isDirectory() })
+      if (recursive && item.isDirectory()) {
+        try {
+          const subItems = await fs.readdir(fullPath, { withFileTypes: true })
+          for (const sub of subItems) {
+            entries.push({
+              name: `${item.name}/${sub.name}`,
+              path: path.join(fullPath, sub.name),
+              isDirectory: sub.isDirectory(),
+            })
+          }
+        } catch { /* skip unreadable dirs */ }
+      }
+    }
+    return entries
+  })
+
   // ── Dialogs ──
   ipcMain.handle('dialog:openDirectory', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openDirectory'],
     })
+    return result.canceled ? null : result.filePaths[0]
+  })
+
+  ipcMain.handle('dialog:openPath', async (_event, options?: { directory?: boolean }) => {
+    const properties: ('openFile' | 'openDirectory')[] = options?.directory
+      ? ['openDirectory']
+      : ['openFile', 'openDirectory']
+    const result = await dialog.showOpenDialog(mainWindow, { properties })
     return result.canceled ? null : result.filePaths[0]
   })
 
@@ -397,6 +435,10 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
 
     ipcMain.handle('jira:getIssues', async (_event, jql: string) => {
       return jiraClient.getIssues(jql)
+    })
+
+    ipcMain.handle('jira:createIssue', async (_event, projectKey: string, summary: string, description: string, issueType: string) => {
+      return jiraClient.createIssue(projectKey, summary, description, issueType)
     })
 
     ipcMain.handle('jira:createEpic', async (_event, projectKey: string, summary: string, description: string) => {

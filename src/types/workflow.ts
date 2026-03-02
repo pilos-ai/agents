@@ -1,8 +1,28 @@
 import type { Node, Edge } from '@xyflow/react'
 
+// ── Output Schema (design-time description of what a tool returns) ──
+
+export interface OutputField {
+  key: string
+  label: string
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object'
+  children?: OutputField[]
+  description?: string
+}
+
+// ── Chat Messages ──
+
+export interface WorkflowChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: number
+  changeSummary?: string
+}
+
 // ── Node Types ──
 
-export type WorkflowNodeType = 'start' | 'end' | 'mcp_tool' | 'condition' | 'loop' | 'delay' | 'parallel' | 'merge' | 'variable' | 'note'
+export type WorkflowNodeType = 'start' | 'end' | 'mcp_tool' | 'ai_prompt' | 'condition' | 'loop' | 'delay' | 'parallel' | 'merge' | 'variable' | 'note' | 'results_display'
 
 export interface WorkflowParameter {
   key: string
@@ -46,7 +66,16 @@ export interface WorkflowNodeData {
   variableOperation?: 'set' | 'append' | 'increment' | 'transform'
   // Note
   noteText?: string
+  // Results Display
+  displayFormat?: 'auto' | 'table' | 'list' | 'json'
+  displayTitle?: string
+  displaySource?: string
+  displayData?: unknown
+  // AI Prompt
+  aiPrompt?: string
+  aiModel?: 'haiku' | 'sonnet' | 'opus'
   executionStatus?: 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
+  executionError?: string
 }
 
 // ── Workflow Definition (persisted on Task) ──
@@ -87,7 +116,31 @@ export interface WorkflowExecution {
   logs: string[]
 }
 
+// ── AI Fix ──
+
+export interface AiFixSuggestion {
+  nodeId: string
+  paramKey: string
+  oldValue: unknown
+  newValue: unknown
+  reason: string
+}
+
+export interface AiFixResult {
+  suggestions: AiFixSuggestion[]
+  appliedAt?: string
+  summary: string
+  // Full workflow replacement (structural fixes)
+  nodes?: import('@xyflow/react').Node<WorkflowNodeData>[]
+  edges?: import('@xyflow/react').Edge[]
+}
+
 // ── MCP Tool Catalog ──
+
+export interface DirectHandlerConfig {
+  handler: string          // e.g. 'jira.getIssues', 'jira.transitionIssue'
+  paramMap: Record<string, string>  // tool param key → API arg name
+}
 
 export interface McpToolDefinition {
   id: string
@@ -96,6 +149,8 @@ export interface McpToolDefinition {
   description: string
   category: string
   parameters: WorkflowParameter[]
+  direct?: DirectHandlerConfig
+  outputSchema?: OutputField[]
 }
 
 export interface McpToolCategory {

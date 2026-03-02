@@ -54,6 +54,7 @@ export function LoopNode({ data, selected }: LoopNodeProps) {
         id="body"
         className="!w-2.5 !h-2.5 !bg-purple-500 !border-2 !border-pilos-bg"
       />
+      <span className="absolute -bottom-4 left-1/2 -translate-x-1/2 text-[10px] text-purple-400 font-bold">Each Item</span>
       {/* Loop complete output */}
       <Handle
         type="source"
@@ -62,6 +63,7 @@ export function LoopNode({ data, selected }: LoopNodeProps) {
         className="!w-2.5 !h-2.5 !bg-emerald-500 !border-2 !border-pilos-bg"
         style={{ top: '50%' }}
       />
+      <span className="absolute right-[-32px] top-1/2 -translate-y-1/2 text-[10px] text-emerald-400 font-bold">Done</span>
     </div>
   )
 }

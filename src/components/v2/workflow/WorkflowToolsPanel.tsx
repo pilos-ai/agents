@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Icon } from '../../common/Icon'
 import { WorkflowToolCard } from './WorkflowToolCard'
 import { WorkflowGenerateModal } from './WorkflowGenerateModal'
@@ -64,6 +64,8 @@ const STRUCTURAL_NODES = [
   { id: '_merge', name: 'Merge', icon: 'lucide:git-merge', description: 'Join parallel branches', nodeType: 'merge' },
   { id: '_variable', name: 'Variable', icon: 'lucide:variable', description: 'Set or transform data', nodeType: 'variable' },
   { id: '_note', name: 'Note', icon: 'lucide:sticky-note', description: 'Add annotation', nodeType: 'note' },
+  { id: '_ai_prompt', name: 'AI Prompt', icon: 'lucide:sparkles', description: 'Ask Claude AI to help', nodeType: 'ai_prompt' },
+  { id: '_results_display', name: 'Results', icon: 'lucide:layout-dashboard', description: 'Display workflow output', nodeType: 'results_display' },
 ] as const
 
 const NODE_COLORS: Record<string, { bg: string; bgHover: string; text: string }> = {
@@ -76,6 +78,8 @@ const NODE_COLORS: Record<string, { bg: string; bgHover: string; text: string }>
   merge: { bg: 'bg-indigo-500/10', bgHover: 'group-hover:bg-indigo-500/20', text: 'text-indigo-400' },
   variable: { bg: 'bg-violet-500/10', bgHover: 'group-hover:bg-violet-500/20', text: 'text-violet-400' },
   note: { bg: 'bg-yellow-500/10', bgHover: 'group-hover:bg-yellow-500/20', text: 'text-yellow-400' },
+  ai_prompt: { bg: 'bg-purple-500/10', bgHover: 'group-hover:bg-purple-500/20', text: 'text-purple-400' },
+  results_display: { bg: 'bg-cyan-500/10', bgHover: 'group-hover:bg-cyan-500/20', text: 'text-cyan-400' },
 }
 
 function StructuralNodeCard({ node }: { node: typeof STRUCTURAL_NODES[number] }) {
@@ -102,7 +106,9 @@ function StructuralNodeCard({ node }: { node: typeof STRUCTURAL_NODES[number] })
 }
 
 export function WorkflowToolsPanel() {
-  const [showGenerate, setShowGenerate] = useState(false)
+  const showGenerate = useWorkflowStore((s) => s.showGenerateModal)
+  const setShowGenerate = useWorkflowStore((s) => s.setShowGenerateModal)
+  const toggleChatMode = useWorkflowStore((s) => s.toggleChatMode)
   const search = useWorkflowStore((s) => s.toolSearchQuery)
   const setSearch = useWorkflowStore((s) => s.setToolSearchQuery)
   const tab = useWorkflowStore((s) => s.toolFilterTab)
@@ -137,23 +143,23 @@ export function WorkflowToolsPanel() {
       {/* Header */}
       <div className="px-4 py-3 border-b border-pilos-border flex-shrink-0">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">MCP Tools</h3>
+          <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Tools</h3>
           <div className="flex items-center gap-1.5">
             {enabledMcpServers.length > 0 && (
               <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/20">
-                +{enabledMcpServers.length} MCP
+                +{enabledMcpServers.length} connected
               </span>
             )}
           </div>
         </div>
 
-        {/* AI Generate button */}
+        {/* AI Chat / Tools toggle */}
         <button
-          onClick={() => setShowGenerate(true)}
+          onClick={toggleChatMode}
           className="w-full mb-2.5 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition-all shadow-lg shadow-blue-500/10"
         >
           <Icon icon="lucide:sparkles" className="text-xs" />
-          AI Generate Workflow
+          Build with AI Chat
         </button>
 
         {/* Search */}
@@ -218,9 +224,6 @@ export function WorkflowToolsPanel() {
               <div className="flex items-center gap-1.5 mb-2">
                 <Icon icon={cat.icon} className={`text-[10px] ${isMcp ? 'text-emerald-600' : 'text-zinc-600'}`} />
                 <h4 className={`text-[10px] font-bold uppercase tracking-widest ${isMcp ? 'text-emerald-600' : 'text-zinc-600'}`}>{cat.name}</h4>
-                {isMcp && (
-                  <span className="text-[8px] font-bold text-emerald-500 bg-emerald-500/10 px-1 py-0.5 rounded">MCP</span>
-                )}
               </div>
               <div className="space-y-1.5">
                 {cat.tools.map((tool) => (

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { api } from '../api'
-import type { WorkflowDefinition } from '../types/workflow'
+import { executeWorkflow } from '../utils/workflow-executor'
+import type { WorkflowDefinition, WorkflowStepResult } from '../types/workflow'
 
 // ── Schedule Types ──
 
@@ -62,6 +63,19 @@ export interface TaskRun {
   actions: RunAction[]
   summary: string
   logs: string[]
+  stepResults?: WorkflowStepResult[]
+}
+
+// ── Active Execution (runtime only, not persisted) ──
+
+export interface ActiveExecution {
+  status: 'running' | 'completed' | 'failed'
+  currentStep: number
+  totalSteps: number
+  currentNodeLabel: string | null
+  logs: string[]
+  stepResults: WorkflowStepResult[]
+  startedAt: string
 }
 
 // ── Task Types ──
@@ -103,7 +117,7 @@ const INTERVAL_MS: Record<ScheduleInterval, number> = {
   '1w': 7 * 24 * 60 * 60 * 1000,
 }
 
-function computeNextRunAt(lastRunAt: string, interval: ScheduleInterval): string | null {
+export function computeNextRunAt(lastRunAt: string, interval: ScheduleInterval): string | null {
   if (interval === 'manual') return null
   const ms = INTERVAL_MS[interval]
   return new Date(new Date(lastRunAt).getTime() + ms).toISOString()
@@ -120,7 +134,9 @@ interface TaskStore {
   }
   selectedTaskId: string | null
   showCreateModal: boolean
+  activeExecutions: Record<string, ActiveExecution>
 
+  setActiveExecution: (taskId: string, data: ActiveExecution | null) => void
   loadTasks: () => Promise<void>
   addTask: (task: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'runs'>) => Promise<void>
   updateTask: (id: string, updates: Partial<Task>) => Promise<void>
@@ -138,6 +154,7 @@ interface TaskStore {
 
   triggerRun: (taskId: string, trigger: 'manual' | 'scheduled') => Promise<void>
   addRunResult: (taskId: string, run: TaskRun) => Promise<void>
+  runTaskWorkflow: (taskId: string) => Promise<void>
 }
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
@@ -149,6 +166,19 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   },
   selectedTaskId: null,
   showCreateModal: false,
+  activeExecutions: {},
+
+  setActiveExecution: (taskId, data) => {
+    set((s) => {
+      const next = { ...s.activeExecutions }
+      if (data) {
+        next[taskId] = data
+      } else {
+        delete next[taskId]
+      }
+      return { activeExecutions: next }
+    })
+  },
 
   loadTasks: async () => {
     try {
@@ -303,5 +333,185 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     })
     set({ tasks })
     await api.settings.set('v2_tasks', tasks)
+  },
+
+  runTaskWorkflow: async (taskId) => {
+    const task = get().tasks.find((t) => t.id === taskId)
+    if (!task?.workflow?.nodes?.length) return
+
+    const nodes = task.workflow.nodes
+    const edges = task.workflow.edges || []
+    const runId = crypto.randomUUID()
+    const startedAt = new Date().toISOString()
+
+    // Count executable nodes (dynamic — grows as loop iterations happen)
+    let totalSteps = nodes.filter((n) =>
+      n.data.type !== 'start' && n.data.type !== 'end' && n.data.type !== 'note'
+    ).length
+
+    // Mark task as running + create a run entry
+    const run: TaskRun = {
+      id: runId,
+      taskId,
+      startedAt,
+      completedAt: null,
+      duration: null,
+      status: 'success',
+      trigger: 'manual',
+      actions: [],
+      summary: 'Workflow running...',
+      logs: [],
+    }
+    await get().updateTask(taskId, { status: 'running', progress: 0 })
+    const allTasks = get().tasks.map((t) => {
+      if (t.id !== taskId) return t
+      return { ...t, runs: [run, ...t.runs].slice(0, MAX_RUNS_PER_TASK) }
+    })
+    set({ tasks: allTasks })
+    await api.settings.set('v2_tasks', allTasks)
+
+    // Set initial active execution
+    get().setActiveExecution(taskId, {
+      status: 'running',
+      currentStep: 0,
+      totalSteps,
+      currentNodeLabel: null,
+      logs: [],
+      stepResults: [],
+      startedAt,
+    })
+
+    let completedSteps = 0
+    const allStepResults: WorkflowStepResult[] = []
+    const allLogs: string[] = []
+
+    // Get working directory and jira project key
+    const { useProjectStore } = await import('./useProjectStore')
+    const { useWorkflowStore } = await import('./useWorkflowStore')
+    const workingDirectory = useProjectStore.getState().activeProjectPath || undefined
+    const jiraProjectKey = useWorkflowStore.getState().jiraProjectKey || undefined
+
+    executeWorkflow(nodes, edges, {
+      onNodeStart: (nodeId) => {
+        const nextStep = completedSteps + 1
+        // Dynamically grow totalSteps when loop iterations push past initial count
+        if (nextStep > totalSteps) totalSteps = nextStep
+        const label = nodes.find((n) => n.id === nodeId)?.data.label || null
+        get().setActiveExecution(taskId, {
+          status: 'running',
+          currentStep: nextStep,
+          totalSteps,
+          currentNodeLabel: label,
+          logs: allLogs.slice(-5),
+          stepResults: allStepResults,
+          startedAt,
+        })
+      },
+
+      onNodeComplete: (_nodeId, result) => {
+        completedSteps++
+        // Dynamically grow totalSteps when loop iterations push past initial count
+        if (completedSteps > totalSteps) totalSteps = completedSteps
+        allStepResults.push(result)
+        get().setActiveExecution(taskId, {
+          status: 'running',
+          currentStep: completedSteps,
+          totalSteps,
+          currentNodeLabel: null,
+          logs: allLogs.slice(-5),
+          stepResults: [...allStepResults],
+          startedAt,
+        })
+      },
+
+      onNodeFail: (_nodeId, result) => {
+        allStepResults.push(result)
+        get().setActiveExecution(taskId, {
+          status: 'running',
+          currentStep: completedSteps,
+          totalSteps,
+          currentNodeLabel: null,
+          logs: allLogs.slice(-5),
+          stepResults: [...allStepResults],
+          startedAt,
+        })
+      },
+
+      onLog: (message) => {
+        allLogs.push(message)
+        const exec = get().activeExecutions[taskId]
+        if (exec) {
+          get().setActiveExecution(taskId, {
+            ...exec,
+            logs: allLogs.slice(-5),
+          })
+        }
+      },
+
+      onComplete: () => {
+        const now = new Date().toISOString()
+        const duration = Date.now() - new Date(startedAt).getTime()
+        const hasFailed = allStepResults.some((r) => r.status === 'failed')
+
+        get().setActiveExecution(taskId, {
+          status: 'completed',
+          currentStep: completedSteps,
+          totalSteps,
+          currentNodeLabel: null,
+          logs: allLogs.slice(-5),
+          stepResults: allStepResults,
+          startedAt,
+        })
+
+        get().addRunResult(taskId, {
+          id: runId,
+          taskId,
+          startedAt,
+          completedAt: now,
+          duration,
+          status: hasFailed ? 'partial' : 'success',
+          trigger: 'manual',
+          actions: allStepResults.map((r) => ({
+            type: r.status === 'failed' ? 'error' as const : 'notification_sent' as const,
+            description: `${nodes.find((n) => n.id === r.nodeId)?.data.label || r.nodeId}: ${r.status}`,
+            metadata: { nodeId: r.nodeId, duration: r.duration },
+          })),
+          summary: `Workflow completed: ${allStepResults.filter((r) => r.status === 'completed').length}/${totalSteps} steps succeeded`,
+          logs: allLogs,
+          stepResults: allStepResults,
+        })
+      },
+
+      onFail: (error) => {
+        const now = new Date().toISOString()
+        get().setActiveExecution(taskId, {
+          status: 'failed',
+          currentStep: completedSteps,
+          totalSteps,
+          currentNodeLabel: null,
+          logs: [...allLogs.slice(-4), `[ERROR] ${error}`],
+          stepResults: allStepResults,
+          startedAt,
+        })
+
+        get().addRunResult(taskId, {
+          id: runId,
+          taskId,
+          startedAt,
+          completedAt: now,
+          duration: Date.now() - new Date(startedAt).getTime(),
+          status: 'failed',
+          trigger: 'manual',
+          actions: [{ type: 'error', description: error }],
+          summary: `Workflow failed: ${error}`,
+          logs: allLogs,
+          stepResults: allStepResults,
+        })
+      },
+
+      isAborted: () => {
+        return false // TODO: support aborting from task detail panel
+      },
+    }, workingDirectory, jiraProjectKey)
   },
 }))
