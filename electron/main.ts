@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url'
 import { registerIpcHandlers } from './ipc-handlers'
 import { SettingsStore } from './services/settings-store'
 import { MetricsCollector } from './services/metrics-collector'
+import { TrayManager } from './services/tray-manager'
+import { TaskScheduler } from './services/task-scheduler'
 import { Database } from './core/database'
 import { setupMenu } from './menu'
 import { ensureGlobalClaudeConfig } from './services/claude-config'
@@ -20,6 +22,9 @@ app.disableHardwareAcceleration()
 
 let mainWindow: BrowserWindow | null = null
 let metricsCollector: MetricsCollector | null = null
+let trayManager: TrayManager | null = null
+let taskScheduler: TaskScheduler | null = null
+let isQuitting = false
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -134,12 +139,39 @@ async function createWindow() {
     }
   })
 
+  // Hide-to-tray on close — keeps scheduler running in background (all platforms)
+  mainWindow.on('close', (event) => {
+    if (!isQuitting && settings.get('backgroundMode') !== false) {
+      event.preventDefault()
+      mainWindow!.hide()
+    }
+  })
+
   mainWindow.on('closed', () => {
     mainWindow = null
+  })
+
+  // Initialize tray (menu bar icon)
+  trayManager = new TrayManager(mainWindow, settings)
+  trayManager.init()
+
+  // Initialize task scheduler
+  taskScheduler = new TaskScheduler(mainWindow, settings, trayManager)
+  taskScheduler.start()
+
+  // Scheduler IPC: renderer reports task lifecycle events
+  ipcMain.on('scheduler:task-started', (_event, data: { taskId: string; taskTitle: string }) => {
+    taskScheduler?.onTaskStarted(data.taskId, data.taskTitle)
+  })
+  ipcMain.on('scheduler:task-completed', (_event, data: { taskId: string; status: string; summary: string; taskTitle: string }) => {
+    taskScheduler?.onTaskCompleted(data.taskId, data)
   })
 }
 
 app.on('before-quit', async () => {
+  isQuitting = true
+  taskScheduler?.stop()
+  trayManager?.destroy()
   if (metricsCollector) {
     await metricsCollector.shutdown()
   }
@@ -151,9 +183,15 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  // Don't quit when background mode is active (tray keeps the app alive)
+  if (process.platform !== 'darwin' && !trayManager) app.quit()
 })
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show()
+    mainWindow.focus()
+  } else if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow()
+  }
 })

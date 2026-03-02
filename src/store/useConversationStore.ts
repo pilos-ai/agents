@@ -424,7 +424,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
       case 'assistant': {
         // The CLI sends assistant events with accumulated content blocks per turn.
-        // Extract tool_use blocks as separate messages, text/thinking → streaming.
+        // Each assistant event replaces streaming text with this turn's text.
+        // If previous streaming text exists (from a prior turn), commit it as a
+        // message first so it doesn't get lost when we replace.
         const msg = event.message as { id?: string; content: ContentBlock[] }
         if (!msg?.content) break
 
@@ -440,6 +442,42 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
           .filter((b): b is { type: 'thinking'; thinking: string } => b.type === 'thinking')
           .map((b) => b.thinking)
           .join('')
+
+        // Commit previous streaming text as a message before replacing it
+        // This prevents message loss when Claude sends text → tool_use → more text
+        const prevText = get().streaming.text
+        if (textContent && prevText && prevText !== textContent) {
+          const prevAgent = get().streaming.currentAgentName
+          const agent = tab?.mode === 'team' && prevAgent
+            ? tab.agents.find((a) => a.name === prevAgent)
+            : null
+
+          if (tab?.mode === 'team' && tab.agents.length > 0) {
+            const segments = parseAgentSegments(prevText, tab.agents)
+            for (const seg of segments) {
+              get().addMessage({
+                role: 'assistant',
+                type: 'text',
+                content: seg.text,
+                agentId: seg.agentId,
+                agentName: seg.agentName || undefined,
+                agentIcon: seg.agentIcon,
+                agentColor: seg.agentColor,
+                timestamp: Date.now(),
+              })
+            }
+          } else {
+            get().addMessage({
+              role: 'assistant',
+              type: 'text',
+              content: prevText,
+              agentName: agent?.name,
+              agentIcon: agent?.icon,
+              agentColor: agent?.color,
+              timestamp: Date.now(),
+            })
+          }
+        }
 
         if (textContent || thinkingContent) {
           set((s) => {
@@ -462,7 +500,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
               streaming: {
                 ...s.streaming,
                 isStreaming: true,
-                text: textContent || s.streaming.text,
+                text: textContent,
                 thinking: thinkingContent || s.streaming.thinking,
                 currentAgentName,
               },

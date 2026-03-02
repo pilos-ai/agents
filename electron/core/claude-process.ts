@@ -192,18 +192,21 @@ export class ClaudeProcess {
       return
     }
 
-    // Build content: if images present, use content array format
+    // Build content: if images/documents present, use content array format
     let content: string | Array<Record<string, unknown>> = message
     if (images && images.length > 0) {
       content = [
-        ...images.map((img) => ({
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: img.mediaType,
-            data: img.data,
-          },
-        })),
+        ...images.map((img) => {
+          const isDocument = img.mediaType === 'application/pdf'
+          return {
+            type: isDocument ? 'document' : 'image',
+            source: {
+              type: 'base64',
+              media_type: img.mediaType,
+              data: img.data,
+            },
+          }
+        }),
         { type: 'text', text: message },
       ]
     }

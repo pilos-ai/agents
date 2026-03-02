@@ -106,6 +106,12 @@ const stubAPI: ElectronAPI = {
   shell: {
     openPath: () => Promise.resolve(''),
   },
+  scheduler: {
+    onTriggerTask: noopUnsub,
+    onNavigateToTask: noopUnsub,
+    reportTaskStarted: noop,
+    reportTaskCompleted: noop,
+  },
   jira: {
     setActiveProject: noopAsync,
     authorize: noopAsync as any,

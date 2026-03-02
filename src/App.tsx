@@ -3,6 +3,7 @@ import { V2Layout } from './components/v2/V2Layout'
 import { useProjectStore } from './store/useProjectStore'
 import { useConversationStore } from './store/useConversationStore'
 import { useAppStore } from './store/useAppStore'
+import { useTaskStore } from './store/useTaskStore'
 import { useLicenseStore } from './store/useLicenseStore'
 import { UpdateNotification } from './components/UpdateNotification'
 import { api } from './api'
@@ -11,6 +12,7 @@ import type { ClaudeEvent } from './types'
 
 const OnboardingPage = lazy(() => import('./components/v2/pages/OnboardingPage'))
 const LoginPage = lazy(() => import('./components/v2/pages/LoginPage'))
+const RoleWizardPage = lazy(() => import('./components/v2/pages/RoleWizardPage'))
 
 export default function App() {
   const loadRecentProjects = useProjectStore((s) => s.loadRecentProjects)
@@ -21,12 +23,15 @@ export default function App() {
   const checkDependencies = useAppStore((s) => s.checkDependencies)
   const isAuthenticated = useLicenseStore((s) => s.isAuthenticated)
   const authLoaded = useLicenseStore((s) => s.authLoaded)
+  const workspaceSetupLoaded = useAppStore((s) => s.workspaceSetupLoaded)
+  const workspaceSetupComplete = useAppStore((s) => s.workspaceSetupComplete)
 
   useEffect(() => {
     checkDependencies()
     loadSettings()
     loadRecentProjects()
     useLicenseStore.getState().loadAuthState()
+    useAppStore.getState().loadWorkspaceSetup()
 
     // Dynamically initialize PM module if available
     loadPmModule().then((pm) => {
@@ -106,6 +111,39 @@ export default function App() {
     })
   }, [])
 
+  // Listen for scheduled task triggers from main process (background scheduler)
+  useEffect(() => {
+    if (!api.scheduler) return
+
+    const unsubTrigger = api.scheduler.onTriggerTask(async ({ taskId }) => {
+      const store = useTaskStore.getState()
+      const task = store.tasks.find((t) => t.id === taskId)
+      if (!task || store.activeExecutions[taskId]) return
+
+      api.scheduler!.reportTaskStarted({ taskId, taskTitle: task.title })
+
+      try {
+        await store.runTaskWorkflow(taskId, 'scheduled')
+      } finally {
+        const updated = useTaskStore.getState().tasks.find((t) => t.id === taskId)
+        const latestRun = updated?.runs[0]
+        api.scheduler!.reportTaskCompleted({
+          taskId,
+          status: latestRun?.status || 'failed',
+          summary: latestRun?.summary || 'Unknown result',
+          taskTitle: task.title,
+        })
+      }
+    })
+
+    const unsubNav = api.scheduler.onNavigateToTask((taskId) => {
+      useAppStore.getState().setActiveView('tasks')
+      useTaskStore.getState().selectTask(taskId)
+    })
+
+    return () => { unsubTrigger(); unsubNav() }
+  }, [])
+
   return (
     <div className="h-screen w-screen bg-pilos-bg text-[#fafafa] font-sans flex flex-col overflow-hidden">
       {/* macOS drag region */}
@@ -120,6 +158,10 @@ export default function App() {
       ) : !isAuthenticated ? (
         <Suspense fallback={<div className="flex-1" />}>
           <LoginPage />
+        </Suspense>
+      ) : workspaceSetupLoaded && !workspaceSetupComplete ? (
+        <Suspense fallback={<div className="flex-1" />}>
+          <RoleWizardPage />
         </Suspense>
       ) : (
         <V2Layout />

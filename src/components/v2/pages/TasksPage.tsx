@@ -1,8 +1,9 @@
-import { useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Icon } from '../../common/Icon'
 import { StatusDot } from '../components/StatusDot'
 import { TaskDetailPanel } from '../components/TaskDetailPanel'
 import { CreateTaskModal } from '../components/CreateTaskModal'
+import { GenerateTaskModal } from '../components/GenerateTaskModal'
 import { WorkflowEditor } from '../workflow/WorkflowEditor'
 import { useTaskStore, type Task, type TaskStatus, type TaskPriority } from '../../../store/useTaskStore'
 import { useWorkflowStore } from '../../../store/useWorkflowStore'
@@ -109,6 +110,7 @@ export default function TasksPage() {
   const showCreateModal = useTaskStore((s) => s.showCreateModal)
   const setShowCreateModal = useTaskStore((s) => s.setShowCreateModal)
   const editingWorkflowTaskId = useWorkflowStore((s) => s.editingTaskId)
+  const [showGenerateModal, setShowGenerateModal] = useState(false)
 
   useEffect(() => {
     loadTasks()
@@ -172,6 +174,13 @@ export default function TasksPage() {
             </select>
           </div>
           <button
+            onClick={() => setShowGenerateModal(true)}
+            className="px-3 py-1.5 bg-pilos-card border border-pilos-border hover:border-zinc-600 text-zinc-300 hover:text-white text-xs font-medium rounded-lg transition-all flex items-center gap-1.5"
+          >
+            <Icon icon="lucide:sparkles" className="text-blue-400 text-xs" />
+            AI Generate
+          </button>
+          <button
             onClick={() => setShowCreateModal(true)}
             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-lg shadow-blue-600/20 transition-all flex items-center gap-1.5"
           >
@@ -222,6 +231,11 @@ export default function TasksPage() {
       {/* Create Task Modal */}
       {showCreateModal && (
         <CreateTaskModal onClose={() => setShowCreateModal(false)} />
+      )}
+
+      {/* Generate Task Modal */}
+      {showGenerateModal && (
+        <GenerateTaskModal onClose={() => setShowGenerateModal(false)} />
       )}
     </div>
   )

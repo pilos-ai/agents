@@ -207,10 +207,30 @@ function applyEventToSnapshot(
         .map((b) => b.thinking)
         .join('')
 
+      // Commit previous streaming text as a message before replacing it
+      // This prevents message loss when Claude sends text → tool_use → more text
+      const prevText = s.streaming.text
+      if (textContent && prevText && prevText !== textContent) {
+        const prevAgent = s.streaming.currentAgentName
+        const agent = tab.mode === 'team' && prevAgent
+          ? tab.agents.find((a: { name: string }) => a.name === prevAgent)
+          : null
+        messagesToPersist.push({
+          role: 'assistant',
+          type: 'text',
+          content: prevText,
+          agentName: agent?.name,
+          agentIcon: agent?.icon,
+          agentColor: agent?.color,
+          timestamp: Date.now(),
+        })
+        s.messages = [...s.messages, messagesToPersist[messagesToPersist.length - 1]]
+      }
+
       if (textContent || thinkingContent) {
         let currentAgentName = s.streaming.currentAgentName
         if (tab.mode === 'team' && tab.agents.length > 0 && textContent) {
-          const agentNameSet = new Set(tab.agents.map((a) => a.name))
+          const agentNameSet = new Set(tab.agents.map((a: { name: string }) => a.name))
           const lines = textContent.split('\n')
           for (let i = lines.length - 1; i >= 0; i--) {
             const m = lines[i].match(/^\[([A-Za-z_\s]+)\]\s*$/)
@@ -223,7 +243,7 @@ function applyEventToSnapshot(
         s.streaming = {
           ...s.streaming,
           isStreaming: true,
-          text: textContent || s.streaming.text,
+          text: textContent,
           thinking: thinkingContent || s.streaming.thinking,
           currentAgentName,
         }

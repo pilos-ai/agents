@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Icon } from '../../common/Icon'
 import { StatusDot } from '../components/StatusDot'
 import { GradientAvatar } from '../components/GradientAvatar'
@@ -9,6 +9,22 @@ import type { ImageAttachment } from '../../../types'
 // Reuse existing chat components
 import { MessageBubble } from '../../chat/MessageBubble'
 import { PermissionBanner } from '../../chat/PermissionBanner'
+
+const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf']
+const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
+
+function fileToBase64(file: File | Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      const base64 = result.split(',')[1]
+      resolve(base64)
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
 
 function ConversationSidebar() {
   const conversations = useConversationStore((s) => s.conversations)
@@ -82,17 +98,44 @@ function TerminalControls() {
 function TerminalInput() {
   const [text, setText] = useState('')
   const [images, setImages] = useState<ImageAttachment[]>([])
+  const [isDragging, setIsDragging] = useState(false)
   const sendMessage = useConversationStore((s) => s.sendMessage)
   const isStreaming = useConversationStore((s) => s.streaming.isStreaming)
   const abortSession = useConversationStore((s) => s.abortSession)
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const addFiles = useCallback(async (files: FileList | File[]) => {
+    const newImages: ImageAttachment[] = []
+    for (const file of Array.from(files)) {
+      if (!ACCEPTED_TYPES.includes(file.type)) continue
+      if (file.size > MAX_FILE_SIZE) continue
+      const data = await fileToBase64(file)
+      newImages.push({
+        data,
+        mediaType: file.type,
+        name: file.name || 'pasted-image',
+      })
+    }
+    if (newImages.length > 0) {
+      setImages((prev) => [...prev, ...newImages])
+    }
+  }, [])
+
+  const removeImage = useCallback((index: number) => {
+    setImages((prev) => prev.filter((_, i) => i !== index))
+  }, [])
 
   const handleSend = () => {
-    if (!text.trim() || !activeConversationId) return
-    sendMessage(text.trim(), images.length > 0 ? images : undefined)
+    const trimmed = text.trim()
+    if ((!trimmed && images.length === 0) || !activeConversationId) return
+    sendMessage(trimmed || 'What is in this image?', images.length > 0 ? images : undefined)
     setText('')
     setImages([])
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -103,15 +146,136 @@ function TerminalInput() {
     }
   }
 
+  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setText(e.target.value)
+    const el = e.target
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+  }
+
+  const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+
+    const imageFiles: File[] = []
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile()
+        if (file) imageFiles.push(file)
+      }
+    }
+
+    if (imageFiles.length > 0) {
+      e.preventDefault()
+      await addFiles(imageFiles)
+    }
+  }, [addFiles])
+
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) {
+      await addFiles(files)
+    }
+    e.target.value = ''
+  }, [addFiles])
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const files = e.dataTransfer.files
+    if (files.length > 0) {
+      await addFiles(files)
+    }
+  }, [addFiles])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback(() => {
+    setIsDragging(false)
+  }, [])
+
   return (
-    <div className="border-t border-pilos-border bg-[#0c0c0e] px-4 py-3 flex-shrink-0">
+    <div
+      className={`border-t border-pilos-border bg-[#0c0c0e] px-4 py-3 flex-shrink-0 transition-colors ${
+        isDragging ? 'bg-blue-500/5 border-blue-500/30' : ''
+      }`}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+    >
+      {/* Drag overlay hint */}
+      {isDragging && (
+        <div className="flex items-center justify-center gap-2 py-2 mb-2 rounded-lg border border-dashed border-blue-500/30 bg-blue-500/5">
+          <Icon icon="lucide:upload" className="text-blue-400 text-sm" />
+          <span className="text-xs text-blue-400">Drop file here</span>
+        </div>
+      )}
+
+      {/* File previews */}
+      {images.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {images.map((img, i) => (
+            <div key={i} className="relative group">
+              {img.mediaType === 'application/pdf' ? (
+                <div className="h-14 w-14 flex items-center justify-center rounded-lg border border-pilos-border bg-zinc-800">
+                  <Icon icon="lucide:file-text" className="text-red-400 text-lg" />
+                </div>
+              ) : (
+                <img
+                  src={`data:${img.mediaType};base64,${img.data}`}
+                  alt={img.name || 'attachment'}
+                  className="h-14 w-14 object-cover rounded-lg border border-pilos-border"
+                />
+              )}
+              <button
+                onClick={() => removeImage(i)}
+                className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-600 hover:bg-red-500 rounded-full flex items-center justify-center text-white text-[8px] opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Icon icon="lucide:x" className="text-[8px]" />
+              </button>
+              <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-zinc-300 text-center py-0.5 rounded-b-lg truncate px-1">
+                {img.name || 'file'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-end gap-3">
+        {/* File upload button */}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={!activeConversationId || isStreaming}
+          className="p-2 h-[32px] w-[32px] flex items-center justify-center text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 disabled:opacity-30 rounded-lg transition-colors flex-shrink-0"
+          title="Attach file (or paste / drag & drop)"
+        >
+          <Icon icon="lucide:paperclip" className="text-sm" />
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/gif,image/webp,application/pdf"
+          multiple
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+
         <textarea
           ref={textareaRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={handleInput}
           onKeyDown={handleKeyDown}
-          placeholder={activeConversationId ? "Send a message..." : "Create a conversation first..."}
+          onPaste={handlePaste}
+          placeholder={
+            images.length > 0
+              ? 'Add a message about the attachment...'
+              : activeConversationId
+                ? 'Send a message...'
+                : 'Create a conversation first...'
+          }
           disabled={!activeConversationId}
           rows={1}
           className="flex-1 bg-transparent text-sm text-white placeholder-zinc-600 outline-none resize-none font-mono leading-relaxed disabled:opacity-50"
@@ -128,7 +292,7 @@ function TerminalInput() {
         ) : (
           <button
             onClick={handleSend}
-            disabled={!text.trim() || !activeConversationId}
+            disabled={(!text.trim() && images.length === 0) || !activeConversationId}
             className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-xs font-bold rounded-lg shadow-lg shadow-blue-600/20 transition-all flex items-center gap-1.5"
           >
             <Icon icon="lucide:send" className="text-[10px]" />

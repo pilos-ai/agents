@@ -4,7 +4,7 @@ import { useProjectStore } from '../../store/useProjectStore'
 import { ReplyPreview } from './ReplyPreview'
 import type { ImageAttachment } from '../../types'
 
-const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
+const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf']
 const MAX_IMAGE_SIZE = 20 * 1024 * 1024 // 20MB
 
 function fileToBase64(file: File | Blob): Promise<string> {
@@ -141,16 +141,25 @@ export function InputBar() {
       {/* Reply preview */}
       <ReplyPreview />
 
-      {/* Image previews */}
+      {/* File previews */}
       {images.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-2">
           {images.map((img, i) => (
             <div key={i} className="relative group">
-              <img
-                src={`data:${img.mediaType};base64,${img.data}`}
-                alt={img.name || 'attachment'}
-                className="h-16 w-16 object-cover rounded-lg border border-neutral-700"
-              />
+              {img.mediaType === 'application/pdf' ? (
+                <div className="h-16 w-16 flex flex-col items-center justify-center rounded-lg border border-neutral-700 bg-neutral-800">
+                  <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                  </svg>
+                  <span className="text-[8px] text-neutral-500 mt-0.5">PDF</span>
+                </div>
+              ) : (
+                <img
+                  src={`data:${img.mediaType};base64,${img.data}`}
+                  alt={img.name || 'attachment'}
+                  className="h-16 w-16 object-cover rounded-lg border border-neutral-700"
+                />
+              )}
               <button
                 onClick={() => removeImage(i)}
                 className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-600 hover:bg-red-500 rounded-full flex items-center justify-center text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
@@ -168,7 +177,7 @@ export function InputBar() {
           onClick={() => fileInputRef.current?.click()}
           disabled={isLoading}
           className="p-2 h-[36px] w-[36px] flex items-center justify-center bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 text-neutral-400 hover:text-neutral-200 rounded-lg transition-colors shrink-0 cursor-pointer"
-          title="Attach image"
+          title="Attach file"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
@@ -177,7 +186,7 @@ export function InputBar() {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/png,image/jpeg,image/gif,image/webp"
+          accept="image/png,image/jpeg,image/gif,image/webp,application/pdf"
           multiple
           onChange={handleFileSelect}
           className="hidden"
@@ -189,7 +198,7 @@ export function InputBar() {
           onChange={handleInput}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder={images.length > 0 ? 'Add a message about the image...' : 'Send a message to Pilos...'}
+          placeholder={images.length > 0 ? 'Add a message about the attachment...' : 'Send a message to Pilos...'}
           rows={1}
           className="flex-1 min-w-0 bg-neutral-800 text-neutral-100 rounded-lg px-4 py-2 text-sm resize-none outline-none focus:ring-1 focus:ring-blue-500/50 placeholder-neutral-500"
           disabled={isLoading}

@@ -70,6 +70,26 @@ export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
     docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem',
   },
   {
+    id: 'slack',
+    name: 'Slack',
+    icon: '💬',
+    description: 'Team messaging and notifications',
+    category: 'Automation',
+    config: {
+      type: 'stdio',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-slack'],
+      env: { SLACK_BOT_TOKEN: '', SLACK_TEAM_ID: '' },
+    },
+    requiredEnvVars: ['SLACK_BOT_TOKEN', 'SLACK_TEAM_ID'],
+    setupSteps: [
+      'Go to api.slack.com/apps and create a new app',
+      'Add Bot Token Scopes: chat:write, channels:read, channels:history',
+      'Install app to workspace and copy Bot User OAuth Token',
+      'Find Team ID in Slack workspace settings',
+    ],
+  },
+  {
     id: 'computer-use',
     name: 'Computer Use',
     icon: '🖥️',

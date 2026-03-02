@@ -109,6 +109,25 @@ function AccountSection() {
         </div>
       </div>
 
+      {/* Workspace Setup */}
+      <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Workspace Setup</h3>
+            <p className="text-[10px] text-zinc-600 mt-1">Re-run the onboarding wizard to generate new role-based tasks and workflows</p>
+          </div>
+          <button
+            onClick={async () => {
+              await useAppStore.getState().resetWorkspaceSetup()
+            }}
+            className="px-3 py-1.5 text-xs text-blue-400 hover:text-blue-300 border border-blue-500/20 hover:border-blue-500/40 rounded-lg transition-colors flex items-center gap-1.5"
+          >
+            <Icon icon="lucide:refresh-cw" className="text-[10px]" />
+            Re-run Setup
+          </button>
+        </div>
+      </div>
+
       {/* License Management */}
       <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl space-y-4">
         <div className="flex items-center justify-between">
@@ -237,6 +256,14 @@ function GeneralSection() {
   const terminalFontSize = useAppStore((s) => s.terminalFontSize)
   const setTerminalFontSize = useAppStore((s) => s.setTerminalFontSize)
 
+  const [backgroundMode, setBackgroundMode] = useState(true)
+  const [notifications, setNotifications] = useState(true)
+
+  useEffect(() => {
+    api.settings.get('backgroundMode').then((v) => { if (v !== null && v !== undefined) setBackgroundMode(!!v) })
+    api.settings.get('notificationsEnabled').then((v) => { if (v !== null && v !== undefined) setNotifications(!!v) })
+  }, [])
+
   const model = activeTab?.model || 'sonnet'
   const permissionMode = activeTab?.permissionMode || 'default'
   const mode = activeTab?.mode || 'solo'
@@ -303,6 +330,42 @@ function GeneralSection() {
               value={terminalFontSize}
               onChange={(e) => setTerminalFontSize(Number(e.target.value))}
               className="w-32 h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-4">Background</h3>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-zinc-300">Run in background</p>
+              <p className="text-[10px] text-zinc-600">
+                Keep running in the menu bar when the window is closed. Scheduled tasks continue automatically.
+              </p>
+            </div>
+            <FormToggle
+              checked={backgroundMode}
+              onChange={(checked) => {
+                setBackgroundMode(checked)
+                api.settings.set('backgroundMode', checked)
+              }}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-zinc-300">Desktop notifications</p>
+              <p className="text-[10px] text-zinc-600">
+                Show notifications when scheduled tasks complete or fail
+              </p>
+            </div>
+            <FormToggle
+              checked={notifications}
+              onChange={(checked) => {
+                setNotifications(checked)
+                api.settings.set('notificationsEnabled', checked)
+              }}
             />
           </div>
         </div>

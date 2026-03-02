@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Icon } from '../../common/Icon'
 import { StatusDot } from './StatusDot'
 import { FormToggle } from './FormToggle'
 import { TaskRunCard } from './TaskRunCard'
 import { WorkflowResultsBoard } from './WorkflowResultsBoard'
 import { SCHEDULE_OPTIONS } from '../../../data/task-templates'
-import { useTaskStore, type Task, type TaskStatus } from '../../../store/useTaskStore'
+import { useTaskStore, type Task, type TaskStatus, type TaskPriority, type ScheduleInterval } from '../../../store/useTaskStore'
 import { useWorkflowStore } from '../../../store/useWorkflowStore'
 import type { Node } from '@xyflow/react'
 import type { WorkflowNodeData } from '../../../types/workflow'
@@ -40,6 +40,19 @@ function timeAgo(dateStr: string | null): string {
   return `${days}d ago`
 }
 
+function timeUntil(dateStr: string | null): string {
+  if (!dateStr) return '--'
+  const diff = new Date(dateStr).getTime() - Date.now()
+  if (diff <= 0) return 'overdue'
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'in <1m'
+  if (mins < 60) return `in ${mins}m`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `in ${hours}h`
+  const days = Math.floor(hours / 24)
+  return `in ${days}d`
+}
+
 const TABS = ['Overview', 'Results', 'Run History'] as const
 
 interface Props {
@@ -55,10 +68,44 @@ export function TaskDetailPanel({ task, onClose }: Props) {
   const runTaskWorkflow = useTaskStore((s) => s.runTaskWorkflow)
   const toggleSchedule = useTaskStore((s) => s.toggleSchedule)
   const removeTask = useTaskStore((s) => s.removeTask)
+  const updateTask = useTaskStore((s) => s.updateTask)
+  const updateSchedule = useTaskStore((s) => s.updateSchedule)
   const activeExecution = useTaskStore((s) => s.activeExecutions[task.id])
 
+  // Inline editing state
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState(task.title)
+  const [editingDesc, setEditingDesc] = useState(false)
+  const [descDraft, setDescDraft] = useState(task.description)
+  const titleInputRef = useRef<HTMLInputElement>(null)
+  const descTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Tick every 30s so relative times (timeAgo / timeUntil) stay current
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  // Sync drafts when task prop changes
+  useEffect(() => { setTitleDraft(task.title) }, [task.title])
+  useEffect(() => { setDescDraft(task.description) }, [task.description])
+  useEffect(() => { if (editingTitle) titleInputRef.current?.focus() }, [editingTitle])
+  useEffect(() => { if (editingDesc) descTextareaRef.current?.focus() }, [editingDesc])
+
+  const saveTitle = () => {
+    const trimmed = titleDraft.trim()
+    if (trimmed && trimmed !== task.title) updateTask(task.id, { title: trimmed })
+    else setTitleDraft(task.title)
+    setEditingTitle(false)
+  }
+
+  const saveDesc = () => {
+    if (descDraft !== task.description) updateTask(task.id, { description: descDraft })
+    setEditingDesc(false)
+  }
+
   const jiraIntegration = task.integrations.find((i) => i.config.type === 'jira')
-  const intervalLabel = SCHEDULE_OPTIONS.find((o) => o.value === task.schedule.interval)?.label || task.schedule.interval
 
   // Get step results: from live execution or latest persisted run
   const stepResults = activeExecution?.stepResults
@@ -67,13 +114,31 @@ export function TaskDetailPanel({ task, onClose }: Props) {
 
   // Get workflow nodes for labels
   const workflowNodes: Node<WorkflowNodeData>[] = task.workflow?.nodes || []
+  const nodeLabels = new Map(workflowNodes.map((n) => [n.id, n.data.label]))
 
   return (
     <div className="w-[360px] border-l border-pilos-border flex flex-col bg-pilos-bg flex-shrink-0">
       {/* Header */}
       <div className="px-4 py-3 border-b border-pilos-border flex-shrink-0">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-bold text-white truncate flex-1 mr-2">{task.title}</h3>
+          {editingTitle ? (
+            <input
+              ref={titleInputRef}
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setTitleDraft(task.title); setEditingTitle(false) } }}
+              className="text-sm font-bold text-white bg-zinc-800 border border-blue-500 rounded px-1.5 py-0.5 flex-1 mr-2 outline-none"
+            />
+          ) : (
+            <h3
+              onClick={() => setEditingTitle(true)}
+              className="text-sm font-bold text-white truncate flex-1 mr-2 cursor-pointer hover:text-blue-300 transition-colors"
+              title="Click to edit"
+            >
+              {task.title}
+            </h3>
+          )}
           <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors flex-shrink-0">
             <Icon icon="lucide:x" className="text-sm" />
           </button>
@@ -82,14 +147,21 @@ export function TaskDetailPanel({ task, onClose }: Props) {
         <div className="flex items-center gap-2 mb-3">
           <StatusDot color={statusColors[task.status]} pulse={task.status === 'running'} />
           <span className="text-xs text-zinc-400">{statusLabels[task.status]}</span>
-          <span className={`text-[10px] capitalize px-1.5 py-0.5 rounded ${
-            task.priority === 'critical' ? 'bg-red-500/10 text-red-400'
-            : task.priority === 'high' ? 'bg-orange-500/10 text-orange-400'
-            : task.priority === 'medium' ? 'bg-blue-500/10 text-blue-400'
-            : 'bg-zinc-800 text-zinc-500'
-          }`}>
-            {task.priority}
-          </span>
+          <select
+            value={task.priority}
+            onChange={(e) => updateTask(task.id, { priority: e.target.value as TaskPriority })}
+            className={`text-[10px] capitalize px-1.5 py-0.5 rounded outline-none cursor-pointer appearance-none pr-4 bg-no-repeat bg-[right_2px_center] bg-[length:10px] ${
+              task.priority === 'critical' ? 'bg-red-500/10 text-red-400'
+              : task.priority === 'high' ? 'bg-orange-500/10 text-orange-400'
+              : task.priority === 'medium' ? 'bg-blue-500/10 text-blue-400'
+              : 'bg-zinc-800 text-zinc-500'
+            }`}
+          >
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+            <option value="critical">critical</option>
+          </select>
         </div>
 
         {/* Run button */}
@@ -153,12 +225,27 @@ export function TaskDetailPanel({ task, onClose }: Props) {
         {tab === 'Overview' && (
           <>
             {/* Description */}
-            {task.description && (
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-1">Description</label>
-                <p className="text-xs text-zinc-400 leading-relaxed">{task.description}</p>
-              </div>
-            )}
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-1">Description</label>
+              {editingDesc ? (
+                <textarea
+                  ref={descTextareaRef}
+                  value={descDraft}
+                  onChange={(e) => setDescDraft(e.target.value)}
+                  onBlur={saveDesc}
+                  onKeyDown={(e) => { if (e.key === 'Escape') { setDescDraft(task.description); setEditingDesc(false) } }}
+                  rows={3}
+                  className="w-full text-xs text-zinc-300 bg-zinc-800 border border-blue-500 rounded px-2 py-1.5 outline-none resize-none leading-relaxed"
+                />
+              ) : (
+                <p
+                  onClick={() => setEditingDesc(true)}
+                  className={`text-xs leading-relaxed cursor-pointer hover:text-blue-300 transition-colors min-h-[20px] ${task.description ? 'text-zinc-400' : 'text-zinc-600 italic'}`}
+                >
+                  {task.description || '+ Add description'}
+                </p>
+              )}
+            </div>
 
             {/* Agent */}
             <div>
@@ -172,7 +259,15 @@ export function TaskDetailPanel({ task, onClose }: Props) {
               <div className="p-3 bg-pilos-card border border-pilos-border rounded-lg space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-zinc-500">Interval</span>
-                  <span className="text-xs text-white">{intervalLabel}</span>
+                  <select
+                    value={task.schedule.interval}
+                    onChange={(e) => updateSchedule(task.id, { interval: e.target.value as ScheduleInterval })}
+                    className="bg-zinc-800 border border-pilos-border rounded px-2 py-1 text-xs text-white outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    {SCHEDULE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
                 </div>
                 {task.schedule.interval !== 'manual' && (
                   <>
@@ -186,7 +281,7 @@ export function TaskDetailPanel({ task, onClose }: Props) {
                     {task.schedule.nextRunAt && (
                       <div className="flex justify-between">
                         <span className="text-xs text-zinc-500">Next run</span>
-                        <span className="text-xs text-zinc-300">{timeAgo(task.schedule.nextRunAt)}</span>
+                        <span className={`text-xs ${timeUntil(task.schedule.nextRunAt) === 'overdue' ? 'text-orange-400' : 'text-zinc-300'}`}>{timeUntil(task.schedule.nextRunAt)}</span>
                       </div>
                     )}
                   </>
@@ -283,7 +378,7 @@ export function TaskDetailPanel({ task, onClose }: Props) {
             {task.runs.length > 0 ? (
               <div className="space-y-2">
                 {task.runs.map((run, i) => (
-                  <TaskRunCard key={run.id} run={run} index={task.runs.length - 1 - i} />
+                  <TaskRunCard key={run.id} run={run} index={task.runs.length - 1 - i} nodeLabels={nodeLabels} />
                 ))}
               </div>
             ) : (

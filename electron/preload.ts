@@ -230,6 +230,26 @@ contextBridge.exposeInMainWorld('api', {
     },
   },
 
+  // Scheduler (background task execution)
+  scheduler: {
+    onTriggerTask: (callback: (data: { taskId: string; trigger: string }) => void) => {
+      const handler = (_event: unknown, data: { taskId: string; trigger: string }) => callback(data)
+      ipcRenderer.on('scheduler:trigger-task', handler)
+      return () => ipcRenderer.removeListener('scheduler:trigger-task', handler)
+    },
+    onNavigateToTask: (callback: (taskId: string) => void) => {
+      const handler = (_event: unknown, taskId: string) => callback(taskId)
+      ipcRenderer.on('scheduler:navigate-to-task', handler)
+      return () => ipcRenderer.removeListener('scheduler:navigate-to-task', handler)
+    },
+    reportTaskStarted: (data: { taskId: string; taskTitle: string }) => {
+      ipcRenderer.send('scheduler:task-started', data)
+    },
+    reportTaskCompleted: (data: { taskId: string; status: string; summary: string; taskTitle: string }) => {
+      ipcRenderer.send('scheduler:task-completed', data)
+    },
+  },
+
   // Stories
   stories: {
     list: (projectPath: string) => ipcRenderer.invoke('stories:list', projectPath),

@@ -89,6 +89,8 @@ export function ResultsDisplayNode({ data, selected }: ResultsDisplayNodeProps) 
           <p className="text-[10px] text-red-400 truncate">{data.executionError as string}</p>
         </div>
       )}
+
+      <Handle type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-cyan-500 !border-2 !border-pilos-bg" />
     </div>
   )
 }

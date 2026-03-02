@@ -154,7 +154,7 @@ interface TaskStore {
 
   triggerRun: (taskId: string, trigger: 'manual' | 'scheduled') => Promise<void>
   addRunResult: (taskId: string, run: TaskRun) => Promise<void>
-  runTaskWorkflow: (taskId: string) => Promise<void>
+  runTaskWorkflow: (taskId: string, trigger?: 'manual' | 'scheduled') => Promise<void>
 }
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
@@ -266,11 +266,22 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   },
 
   updateSchedule: async (taskId, schedule) => {
-    const tasks = get().tasks.map((t) =>
-      t.id === taskId
-        ? { ...t, schedule: { ...t.schedule, ...schedule }, updatedAt: new Date().toISOString() }
-        : t
-    )
+    const tasks = get().tasks.map((t) => {
+      if (t.id !== taskId) return t
+      const merged = { ...t.schedule, ...schedule }
+      // Recompute nextRunAt when interval changes
+      if (schedule.interval) {
+        if (schedule.interval === 'manual') {
+          merged.nextRunAt = null
+        } else if (merged.enabled) {
+          merged.nextRunAt = computeNextRunAt(
+            merged.lastRunAt || new Date().toISOString(),
+            merged.interval,
+          )
+        }
+      }
+      return { ...t, schedule: merged, updatedAt: new Date().toISOString() }
+    })
     set({ tasks })
     await api.settings.set('v2_tasks', tasks)
   },
@@ -335,7 +346,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     await api.settings.set('v2_tasks', tasks)
   },
 
-  runTaskWorkflow: async (taskId) => {
+  runTaskWorkflow: async (taskId, trigger = 'manual') => {
     const task = get().tasks.find((t) => t.id === taskId)
     if (!task?.workflow?.nodes?.length) return
 
@@ -357,7 +368,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       completedAt: null,
       duration: null,
       status: 'success',
-      trigger: 'manual',
+      trigger,
       actions: [],
       summary: 'Workflow running...',
       logs: [],
@@ -391,7 +402,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     const workingDirectory = useProjectStore.getState().activeProjectPath || undefined
     const jiraProjectKey = useWorkflowStore.getState().jiraProjectKey || undefined
 
-    executeWorkflow(nodes, edges, {
+    await executeWorkflow(nodes, edges, {
       onNodeStart: (nodeId) => {
         const nextStep = completedSteps + 1
         // Dynamically grow totalSteps when loop iterations push past initial count
@@ -470,7 +481,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
           completedAt: now,
           duration,
           status: hasFailed ? 'partial' : 'success',
-          trigger: 'manual',
+          trigger,
           actions: allStepResults.map((r) => ({
             type: r.status === 'failed' ? 'error' as const : 'notification_sent' as const,
             description: `${nodes.find((n) => n.id === r.nodeId)?.data.label || r.nodeId}: ${r.status}`,
@@ -480,6 +491,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
           logs: allLogs,
           stepResults: allStepResults,
         })
+
+        // Clear active execution after brief delay so UI shows completion state
+        setTimeout(() => get().setActiveExecution(taskId, null), 5_000)
       },
 
       onFail: (error) => {
@@ -501,12 +515,15 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
           completedAt: now,
           duration: Date.now() - new Date(startedAt).getTime(),
           status: 'failed',
-          trigger: 'manual',
+          trigger,
           actions: [{ type: 'error', description: error }],
           summary: `Workflow failed: ${error}`,
           logs: allLogs,
           stepResults: allStepResults,
         })
+
+        // Clear active execution after brief delay so UI shows failure state
+        setTimeout(() => get().setActiveExecution(taskId, null), 5_000)
       },
 
       isAborted: () => {

@@ -33,6 +33,10 @@ interface AppStore {
   // Global settings
   terminalFontSize: number
 
+  // Workspace setup (onboarding wizard)
+  workspaceSetupLoaded: boolean
+  workspaceSetupComplete: boolean
+
   // Actions
   setActiveView: (view: AppView) => void
   checkDependencies: () => Promise<void>
@@ -50,6 +54,9 @@ interface AppStore {
   setActiveRightTab: (tab: 'terminal' | 'session') => void
   setTerminalFontSize: (size: number) => void
   loadSettings: () => Promise<void>
+  loadWorkspaceSetup: () => Promise<void>
+  completeWorkspaceSetup: (role?: string) => Promise<void>
+  resetWorkspaceSetup: () => Promise<void>
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -59,6 +66,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
   cliStatus: 'checking',
   cliInstallLog: '',
   cliLoginLog: '',
+
+  workspaceSetupLoaded: false,
+  workspaceSetupComplete: false,
 
   activeView: 'dashboard',
   sidebarWidth: 220,
@@ -203,5 +213,25 @@ export const useAppStore = create<AppStore>((set, get) => ({
       sidebarWidth: (all.sidebarWidth as number) || 220,
       rightPanelWidth: (all.rightPanelWidth as number) || 350,
     })
+  },
+
+  loadWorkspaceSetup: async () => {
+    try {
+      const setup = await api.settings.get('v2_workspace_setup')
+      const complete = !!(setup && typeof setup === 'object' && (setup as Record<string, unknown>).completedAt)
+      set({ workspaceSetupLoaded: true, workspaceSetupComplete: complete })
+    } catch {
+      set({ workspaceSetupLoaded: true, workspaceSetupComplete: false })
+    }
+  },
+
+  completeWorkspaceSetup: async (role?: string) => {
+    await api.settings.set('v2_workspace_setup', { role: role || null, completedAt: new Date().toISOString() })
+    set({ workspaceSetupComplete: true })
+  },
+
+  resetWorkspaceSetup: async () => {
+    await api.settings.set('v2_workspace_setup', null)
+    set({ workspaceSetupComplete: false })
   },
 }))
