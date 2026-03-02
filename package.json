@@ -1,6 +1,6 @@
 {
   "name": "pilos-agents",
-  "version": "1.8.3",
+  "version": "1.9.0",
   "description": "Pilos Agents — AI-powered multi-agent desktop app",
   "author": "Vahe Saroyan <vahe.saroyan.web@gmail.com>",
   "license": "MIT",
