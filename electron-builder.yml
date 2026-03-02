@@ -7,7 +7,7 @@ afterPack: scripts/afterPack.cjs
 publish:
   provider: github
   owner: pilos-ai
-  repo: agents
+  repo: agents-v2
 
 directories:
   buildResources: resources
