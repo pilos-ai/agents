@@ -25,6 +25,9 @@ export function InputBar() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const sendMessage = useConversationStore((s) => s.sendMessage)
+  const queueMessage = useConversationStore((s) => s.queueMessage)
+  const messageQueue = useConversationStore((s) => s.messageQueue)
+  const clearMessageQueue = useConversationStore((s) => s.clearMessageQueue)
   const abortSession = useConversationStore((s) => s.abortSession)
   const isWaitingForResponse = useConversationStore((s) => s.isWaitingForResponse)
   const streaming = useConversationStore((s) => s.streaming)
@@ -70,14 +73,24 @@ export function InputBar() {
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim()
-    if ((!trimmed && images.length === 0) || isLoading) return
-    sendMessage(trimmed || 'What is in this image?', images.length > 0 ? images : undefined)
+    if (!trimmed && images.length === 0) return
+
+    const messageText = trimmed || 'What is in this image?'
+    const messageImages = images.length > 0 ? images : undefined
+
+    if (isLoading) {
+      // Queue the message while Claude is responding
+      queueMessage(messageText, messageImages)
+    } else {
+      sendMessage(messageText, messageImages)
+    }
+
     setDraftText('')
     setDraftImages([])
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
-  }, [text, images, isLoading, sendMessage, setDraftText, setDraftImages])
+  }, [text, images, isLoading, sendMessage, queueMessage, setDraftText, setDraftImages])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -171,12 +184,29 @@ export function InputBar() {
         </div>
       )}
 
+      {/* Queued messages indicator */}
+      {messageQueue.length > 0 && (
+        <div className="flex items-center gap-2 mb-2 px-2 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+          <svg className="w-3.5 h-3.5 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-xs text-amber-300">
+            {messageQueue.length} message{messageQueue.length > 1 ? 's' : ''} queued
+          </span>
+          <button
+            onClick={clearMessageQueue}
+            className="ml-auto text-xs text-amber-400/60 hover:text-amber-300 transition-colors cursor-pointer"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       <div className="flex items-end gap-2">
         {/* Upload button */}
         <button
           onClick={() => fileInputRef.current?.click()}
-          disabled={isLoading}
-          className="p-2 h-[36px] w-[36px] flex items-center justify-center bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 text-neutral-400 hover:text-neutral-200 rounded-lg transition-colors shrink-0 cursor-pointer"
+          className="p-2 h-[36px] w-[36px] flex items-center justify-center bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-neutral-200 rounded-lg transition-colors shrink-0 cursor-pointer"
           title="Attach file"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -198,10 +228,9 @@ export function InputBar() {
           onChange={handleInput}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder={images.length > 0 ? 'Add a message about the attachment...' : 'Send a message to Pilos...'}
+          placeholder={isLoading ? 'Type to queue a message...' : (images.length > 0 ? 'Add a message about the attachment...' : 'Send a message to Pilos...')}
           rows={1}
           className="flex-1 min-w-0 bg-neutral-800 text-neutral-100 rounded-lg px-4 py-2 text-sm resize-none outline-none focus:ring-1 focus:ring-blue-500/50 placeholder-neutral-500"
-          disabled={isLoading}
         />
 
         {/* Model selector */}
@@ -223,29 +252,42 @@ export function InputBar() {
           </div>
         )}
 
-        {/* Send / Stop button */}
-        {isLoading ? (
+        {/* Stop button (shown during loading) */}
+        {isLoading && (
           <button
             onClick={abortSession}
-            className="p-2 h-[36px] w-[36px] flex items-center justify-center bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors shrink-0"
+            className="p-2 h-[36px] w-[36px] flex items-center justify-center bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors shrink-0 cursor-pointer"
             title="Stop"
           >
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
               <rect x="6" y="6" width="12" height="12" rx="1" />
             </svg>
           </button>
-        ) : (
-          <button
-            onClick={handleSend}
-            disabled={!text.trim() && images.length === 0}
-            className="p-2 h-[36px] w-[36px] flex items-center justify-center bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 text-white rounded-lg transition-colors shrink-0"
-            title="Send"
-          >
+        )}
+
+        {/* Send / Queue button */}
+        <button
+          onClick={handleSend}
+          disabled={!text.trim() && images.length === 0}
+          className={`p-2 h-[36px] w-[36px] flex items-center justify-center ${
+            isLoading
+              ? 'bg-amber-600 hover:bg-amber-500'
+              : 'bg-blue-600 hover:bg-blue-500'
+          } disabled:bg-neutral-700 disabled:text-neutral-500 text-white rounded-lg transition-colors shrink-0 cursor-pointer`}
+          title={isLoading ? 'Queue message' : 'Send'}
+        >
+          {isLoading ? (
+            // Queue icon (plus in a list)
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+          ) : (
+            // Send icon (arrow up)
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-7 7m7-7l7 7" />
             </svg>
-          </button>
-        )}
+          )}
+        </button>
       </div>
     </div>
   )

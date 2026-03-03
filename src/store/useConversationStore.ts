@@ -28,6 +28,11 @@ interface StreamingState {
   _turnStartTime: number
 }
 
+export interface QueuedMessage {
+  text: string
+  images?: ImageAttachment[]
+}
+
 interface ConversationStore {
   // State
   conversations: Conversation[]
@@ -44,6 +49,7 @@ interface ConversationStore {
   exitPlanMode: ExitPlanModeData | null
   replyToMessage: ConversationMessage | null
   scrollToMessageId: number | null
+  messageQueue: QueuedMessage[]
 
   // Actions
   loadConversations: (projectPath?: string) => Promise<void>
@@ -52,6 +58,8 @@ interface ConversationStore {
   deleteConversation: (id: string) => Promise<void>
   renameConversation: (id: string, title: string) => Promise<void>
   sendMessage: (text: string, images?: ImageAttachment[]) => Promise<void>
+  queueMessage: (text: string, images?: ImageAttachment[]) => void
+  clearMessageQueue: () => void
   abortSession: () => void
   respondPermission: (allowed: boolean, always?: boolean) => void
   respondToQuestion: (answers: Record<string, string>) => void
@@ -137,6 +145,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   exitPlanMode: null,
   replyToMessage: null,
   scrollToMessageId: null,
+  messageQueue: [],
 
   loadConversations: async (projectPath?: string) => {
     const conversations = await api.conversations.list(projectPath)
@@ -152,7 +161,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       api.claude.abort(prevId)
     }
 
-    set({ activeConversationId: id, messages: [], streaming: { ...emptyStreaming }, hasActiveSession: false, permissionRequest: null, permissionQueue: [], askUserQuestion: null, exitPlanMode: null, replyToMessage: null, scrollToMessageId: null })
+    set({ activeConversationId: id, messages: [], streaming: { ...emptyStreaming }, hasActiveSession: false, permissionRequest: null, permissionQueue: [], askUserQuestion: null, exitPlanMode: null, replyToMessage: null, scrollToMessageId: null, messageQueue: [] })
 
     // Register the new conversation for event routing
     if (id) {
@@ -329,11 +338,21 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     }
   },
 
+  queueMessage: (text, images) => {
+    set((s) => ({
+      messageQueue: [...s.messageQueue, { text, images }],
+    }))
+  },
+
+  clearMessageQueue: () => {
+    set({ messageQueue: [] })
+  },
+
   abortSession: () => {
     const id = get().activeConversationId
     if (id) {
       api.claude.abort(id)
-      set({ isWaitingForResponse: false, streaming: { ...emptyStreaming } })
+      set({ isWaitingForResponse: false, streaming: { ...emptyStreaming }, messageQueue: [] })
     }
   },
 
@@ -848,6 +867,17 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
             get().loadConversations(projectPath)
           }
         }
+
+        // Process next queued message if any
+        const queue = get().messageQueue
+        if (queue.length > 0) {
+          const next = queue[0]
+          set({ messageQueue: queue.slice(1) })
+          // Send in next tick to let state settle
+          setTimeout(() => {
+            get().sendMessage(next.text, next.images)
+          }, 100)
+        }
         break
       }
 
@@ -856,6 +886,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
           isWaitingForResponse: false,
           hasActiveSession: false,
           streaming: { ...emptyStreaming },
+          messageQueue: [],
         })
         break
       }
@@ -872,6 +903,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
           isWaitingForResponse: false,
           hasActiveSession: false,
           streaming: { ...emptyStreaming },
+          messageQueue: [],
         })
         break
       }

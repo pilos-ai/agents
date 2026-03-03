@@ -14,6 +14,7 @@ const PAGE_SIZE = 100
 export function ChatPanel() {
   const messages = useConversationStore((s) => s.messages)
   const streaming = useConversationStore((s) => s.streaming)
+  const messageQueue = useConversationStore((s) => s.messageQueue)
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
   const scrollToMessageId = useConversationStore((s) => s.scrollToMessageId)
   const setScrollToMessageId = useConversationStore((s) => s.setScrollToMessageId)
@@ -72,7 +73,7 @@ export function ChatPanel() {
     if (isAtBottom.current) {
       scrollToBottom()
     }
-  }, [messages.length, streaming.isStreaming, streaming.text, streaming.thinking, streaming.contentBlocks, scrollToBottom])
+  }, [messages.length, streaming.isStreaming, streaming.text, streaming.thinking, streaming.contentBlocks, messageQueue.length, scrollToBottom])
 
   // Phase 1: When scrollToMessageId is set, expand the window if needed and queue the scroll
   useEffect(() => {
@@ -214,6 +215,30 @@ export function ChatPanel() {
               </div>
             )
           })()}
+
+          {/* Queued messages — shown as pending user bubbles */}
+          {messageQueue.length > 0 && messageQueue.map((qMsg, i) => (
+            <div key={`queued-${i}`} className="flex justify-end mt-3">
+              <div className="max-w-[85%] rounded-lg px-4 py-3 bg-blue-600/20 border border-blue-500/20 text-neutral-300 opacity-60">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <svg className="w-3 h-3 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-xs text-amber-400">Queued</span>
+                </div>
+                <div className="text-sm whitespace-pre-wrap">{qMsg.text}</div>
+                {qMsg.images && qMsg.images.length > 0 && (
+                  <div className="flex gap-1 mt-1">
+                    {qMsg.images.map((img, j) => (
+                      <div key={j} className="w-8 h-8 rounded bg-neutral-700/50 flex items-center justify-center text-xs text-neutral-500">
+                        {img.mediaType === 'application/pdf' ? 'PDF' : 'IMG'}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 

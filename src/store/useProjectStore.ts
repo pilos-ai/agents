@@ -64,6 +64,7 @@ export interface ConversationSnapshot {
   streaming: StreamingSnapshot
   isWaitingForResponse: boolean
   hasActiveSession: boolean
+  messageQueue: Array<{ text: string; images?: import('../types').ImageAttachment[] }>
 }
 
 export interface ProjectTab {
@@ -137,6 +138,7 @@ const emptySnapshot: ConversationSnapshot = {
   streaming: { ...emptyStreaming },
   isWaitingForResponse: false,
   hasActiveSession: false,
+  messageQueue: [],
 }
 
 function captureConversationSnapshot(): ConversationSnapshot {
@@ -148,6 +150,7 @@ function captureConversationSnapshot(): ConversationSnapshot {
     streaming: { ...s.streaming },
     isWaitingForResponse: s.isWaitingForResponse,
     hasActiveSession: s.hasActiveSession,
+    messageQueue: s.messageQueue,
   }
 }
 
@@ -159,6 +162,7 @@ function restoreConversationSnapshot(snapshot: ConversationSnapshot): void {
     streaming: snapshot.streaming,
     isWaitingForResponse: snapshot.isWaitingForResponse,
     hasActiveSession: snapshot.hasActiveSession,
+    messageQueue: snapshot.messageQueue || [],
     permissionRequest: null,
     askUserQuestion: null,
     exitPlanMode: null,
@@ -450,6 +454,7 @@ function applyEventToSnapshot(
       s.isWaitingForResponse = false
       s.hasActiveSession = false
       s.streaming = { ...emptyStreaming }
+      s.messageQueue = []
       break
     }
 
@@ -466,6 +471,7 @@ function applyEventToSnapshot(
       s.isWaitingForResponse = false
       s.hasActiveSession = false
       s.streaming = { ...emptyStreaming }
+      s.messageQueue = []
       break
     }
 
@@ -954,6 +960,19 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             agentColor: msg.agentColor,
           })
         }
+      }
+
+      // Process queue for background tabs on turn completion
+      if (event.type === 'result' && updatedSnapshot.messageQueue.length > 0 && convId) {
+        const next = updatedSnapshot.messageQueue[0]
+        updatedSnapshot.messageQueue = updatedSnapshot.messageQueue.slice(1)
+        // Update the snapshot again with the dequeued message
+        openProjects[tabIndex] = { ...openProjects[tabIndex], snapshot: updatedSnapshot }
+        set({ openProjects })
+        // Send the queued message to the existing session
+        setTimeout(() => {
+          api.claude.sendMessage(convId, next.text, next.images)
+        }, 100)
       }
     }
   },
