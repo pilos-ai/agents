@@ -38,6 +38,7 @@ interface ConversationStore {
   isWaitingForResponse: boolean
   hasActiveSession: boolean
   permissionRequest: { sessionId: string; toolName: string; toolInput: Record<string, unknown> } | null
+  permissionQueue: Array<{ sessionId: string; toolName: string; toolInput: Record<string, unknown> }>
   askUserQuestion: AskUserQuestionData | null
   answeredQuestionIds: Set<string>
   exitPlanMode: ExitPlanModeData | null
@@ -130,6 +131,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   isWaitingForResponse: false,
   hasActiveSession: false,
   permissionRequest: null,
+  permissionQueue: [],
   askUserQuestion: null,
   answeredQuestionIds: new Set(),
   exitPlanMode: null,
@@ -150,7 +152,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       api.claude.abort(prevId)
     }
 
-    set({ activeConversationId: id, messages: [], streaming: { ...emptyStreaming }, hasActiveSession: false, permissionRequest: null, askUserQuestion: null, exitPlanMode: null, replyToMessage: null, scrollToMessageId: null })
+    set({ activeConversationId: id, messages: [], streaming: { ...emptyStreaming }, hasActiveSession: false, permissionRequest: null, permissionQueue: [], askUserQuestion: null, exitPlanMode: null, replyToMessage: null, scrollToMessageId: null })
 
     // Register the new conversation for event routing
     if (id) {
@@ -339,7 +341,10 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     const perm = get().permissionRequest
     if (perm) {
       api.claude.respondPermission(perm.sessionId, allowed, always)
-      set({ permissionRequest: null })
+      // Pop next from queue, or null if empty
+      const queue = [...get().permissionQueue]
+      const next = queue.shift() || null
+      set({ permissionRequest: next, permissionQueue: queue })
     }
   },
 
@@ -565,13 +570,17 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
       case 'permission_request': {
         const tool = event.tool as { name?: string; input?: Record<string, unknown> } | undefined
-        set({
-          permissionRequest: {
-            sessionId: event.sessionId as string,
-            toolName: (tool?.name as string) || (event.tool_name as string) || 'unknown tool',
-            toolInput: (tool?.input || event.tool_input || event.command || '') as Record<string, unknown>,
-          },
-        })
+        const newPerm = {
+          sessionId: event.sessionId as string,
+          toolName: (tool?.name as string) || (event.tool_name as string) || 'unknown tool',
+          toolInput: (tool?.input || event.tool_input || event.command || '') as Record<string, unknown>,
+        }
+        // If no active permission, set it directly; otherwise queue it
+        if (!get().permissionRequest) {
+          set({ permissionRequest: newPerm })
+        } else {
+          set((s) => ({ permissionQueue: [...s.permissionQueue, newPerm] }))
+        }
         break
       }
 
@@ -879,13 +888,16 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         const eventType = String(event.type || '')
         if (eventType.includes('permission') || eventType.includes('tool_use_permission')) {
           const tool = event.tool as { name?: string; input?: Record<string, unknown> } | undefined
-          set({
-            permissionRequest: {
-              sessionId: event.sessionId as string,
-              toolName: (tool?.name as string) || (event.tool_name as string) || (event.name as string) || 'unknown tool',
-              toolInput: (tool?.input || event.tool_input || event.input || event.command || '') as Record<string, unknown>,
-            },
-          })
+          const newPerm = {
+            sessionId: event.sessionId as string,
+            toolName: (tool?.name as string) || (event.tool_name as string) || (event.name as string) || 'unknown tool',
+            toolInput: (tool?.input || event.tool_input || event.input || event.command || '') as Record<string, unknown>,
+          }
+          if (!get().permissionRequest) {
+            set({ permissionRequest: newPerm })
+          } else {
+            set((s) => ({ permissionQueue: [...s.permissionQueue, newPerm] }))
+          }
         } else {
           console.log('[ConversationStore] Unhandled event type:', eventType, JSON.stringify(event).slice(0, 300))
         }

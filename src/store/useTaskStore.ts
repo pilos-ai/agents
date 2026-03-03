@@ -99,6 +99,7 @@ export interface Task {
   schedule: TaskSchedule
   runs: TaskRun[]
   workflow?: WorkflowDefinition
+  sourceConversationId?: string
   createdAt: string
   updatedAt: string
 }

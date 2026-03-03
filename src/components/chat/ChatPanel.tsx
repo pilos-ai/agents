@@ -163,7 +163,7 @@ export function ChatPanel() {
                     highlightedId !== null && msg.id === highlightedId ? 'bg-blue-500/10' : ''
                   }`}
                 >
-                  <MessageBubble message={msg} messages={messages} isLast={isLastAssistant} />
+                  <MessageBubble message={msg} isLast={isLastAssistant} />
                 </div>
               )
             })}

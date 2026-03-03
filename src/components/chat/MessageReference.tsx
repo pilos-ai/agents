@@ -1,14 +1,13 @@
 import { memo } from 'react'
-import type { ConversationMessage } from '../../types'
 import { useConversationStore } from '../../store/useConversationStore'
 
 interface Props {
   replyToId: number
-  messages: ConversationMessage[]
 }
 
-export const MessageReference = memo(function MessageReference({ replyToId, messages }: Props) {
+export const MessageReference = memo(function MessageReference({ replyToId }: Props) {
   const setScrollToMessageId = useConversationStore((s) => s.setScrollToMessageId)
+  const messages = useConversationStore((s) => s.messages)
 
   const referenced = messages.find((m) => m.id === replyToId)
   if (!referenced) return null

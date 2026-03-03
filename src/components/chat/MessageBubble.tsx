@@ -35,7 +35,6 @@ function loadPmStory() {
 
 interface Props {
   message: ConversationMessage
-  messages: ConversationMessage[]
   isLast?: boolean
 }
 
@@ -55,7 +54,7 @@ function ReplyButton({ message }: { message: ConversationMessage }) {
   )
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, messages, isLast }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message, isLast }: Props) {
   const isUser = message.role === 'user'
   const [, forceUpdate] = useState(0)
 
@@ -84,7 +83,7 @@ export const MessageBubble = memo(function MessageBubble({ message, messages, is
 
     return (
       <div className="flex flex-col items-start">
-        {message.replyToId && <MessageReference replyToId={message.replyToId} messages={messages} />}
+        {message.replyToId && <MessageReference replyToId={message.replyToId} />}
         <div className="flex items-center gap-1.5 mb-1 ml-1">
           {message.agentIcon && <Icon icon={message.agentIcon} className="text-base" />}
           <span className={`text-xs font-semibold ${colors.text}`}>{message.agentName}</span>
@@ -124,7 +123,7 @@ export const MessageBubble = memo(function MessageBubble({ message, messages, is
   if (message.contentBlocks && message.contentBlocks.length > 0) {
     return (
       <div className="space-y-2">
-        {message.replyToId && <MessageReference replyToId={message.replyToId} messages={messages} />}
+        {message.replyToId && <MessageReference replyToId={message.replyToId} />}
         {message.contentBlocks.map((block, i) => renderContentBlock(block, i, isLast && i === message.contentBlocks!.length - 1))}
       </div>
     )
@@ -133,7 +132,7 @@ export const MessageBubble = memo(function MessageBubble({ message, messages, is
   // Simple text message
   return (
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
-      {message.replyToId && <MessageReference replyToId={message.replyToId} messages={messages} />}
+      {message.replyToId && <MessageReference replyToId={message.replyToId} />}
       <div
         className={`group/bubble relative max-w-[85%] rounded-lg px-4 py-2.5 ${
           isUser

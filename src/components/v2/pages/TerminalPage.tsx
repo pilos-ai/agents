@@ -4,6 +4,9 @@ import { StatusDot } from '../components/StatusDot'
 import { GradientAvatar } from '../components/GradientAvatar'
 import { useConversationStore } from '../../../store/useConversationStore'
 import { useProjectStore } from '../../../store/useProjectStore'
+import { useWorkflowDetection } from '../../../hooks/useWorkflowDetection'
+import { ConvertConversationModal } from '../components/ConvertConversationModal'
+import { WorkflowSuggestionBanner } from '../components/WorkflowSuggestionBanner'
 import type { ImageAttachment } from '../../../types'
 
 // Reuse existing chat components
@@ -184,7 +187,7 @@ function ConversationSidebar() {
   )
 }
 
-function TerminalControls() {
+function TerminalControls({ onSaveAsTask }: { onSaveAsTask: () => void }) {
   const messages = useConversationStore((s) => s.messages)
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
   const conversations = useConversationStore((s) => s.conversations)
@@ -244,6 +247,15 @@ function TerminalControls() {
       >
         <Icon icon="lucide:download" className="text-[10px]" />
         Export
+      </button>
+      <div className="w-px h-3 bg-pilos-border mx-1" />
+      <button
+        onClick={onSaveAsTask}
+        disabled={messages.length < 4}
+        className="px-2 py-1 text-[10px] text-zinc-500 hover:text-white hover:bg-zinc-800 disabled:opacity-30 rounded transition-colors flex items-center gap-1"
+      >
+        <Icon icon="lucide:workflow" className="text-[10px]" />
+        Save as Task
       </button>
     </div>
   )
@@ -472,21 +484,44 @@ export default function TerminalPage() {
   const currentAgent = agents.find((a) => a.name === streaming.currentAgentName)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const prevConversationId = useRef(activeConversationId)
   const switchedAt = useRef(0)
+  const userScrolledUp = useRef(false)
+
+  // Workflow detection
+  const { showSuggestion, dismiss: dismissSuggestion } = useWorkflowDetection()
+  const [showConvertModal, setShowConvertModal] = useState(false)
 
   // Track conversation switches
   useEffect(() => {
     if (prevConversationId.current !== activeConversationId) {
       prevConversationId.current = activeConversationId
       switchedAt.current = Date.now()
+      userScrolledUp.current = false
     }
   }, [activeConversationId])
 
-  // Scroll: instant after conversation switch, smooth for new messages during streaming
+  // Detect if user has scrolled up (wants to read history)
+  useEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const handleScroll = () => {
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+      userScrolledUp.current = distanceFromBottom > 150
+    }
+    el.addEventListener('scroll', handleScroll, { passive: true })
+    return () => el.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  // Smart scroll: instant on conversation switch, smooth for new messages, skip if user scrolled up
   useEffect(() => {
     const recentSwitch = Date.now() - switchedAt.current < 500
-    messagesEndRef.current?.scrollIntoView({ behavior: recentSwitch ? 'instant' : 'smooth' })
+    if (recentSwitch) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
+    } else if (!userScrolledUp.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [messages.length, activeConversationId])
 
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -527,16 +562,23 @@ export default function TerminalPage() {
           </div>
         </div>
 
-        <TerminalControls />
+        <TerminalControls onSaveAsTask={() => setShowConvertModal(true)} />
+
+        {/* Workflow suggestion banner */}
+        {showSuggestion && !showConvertModal && (
+          <WorkflowSuggestionBanner
+            onConvert={() => { setShowConvertModal(true); dismissSuggestion() }}
+            onDismiss={dismissSuggestion}
+          />
+        )}
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#0c0c0e]">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto custom-scrollbar bg-[#0c0c0e]">
           <div className="p-4 space-y-1">
             {messages.map((msg, i) => (
               <MessageBubble
-                key={msg.id || i}
+                key={msg.id || `msg-${i}`}
                 message={msg}
-                messages={messages}
                 isLast={i === messages.length - 1}
               />
             ))}
@@ -570,6 +612,15 @@ export default function TerminalPage() {
         {/* Input */}
         <TerminalInput />
       </div>
+
+      {/* Convert to workflow modal */}
+      {showConvertModal && (
+        <ConvertConversationModal
+          messages={messages}
+          conversationId={activeConversationId}
+          onClose={() => setShowConvertModal(false)}
+        />
+      )}
     </div>
   )
 }

@@ -17,6 +17,7 @@ function formatToolInfo(toolName: string, toolInput: Record<string, unknown> | s
 
 export function PermissionBanner() {
   const permissionRequest = useConversationStore((s) => s.permissionRequest)
+  const queueLength = useConversationStore((s) => s.permissionQueue.length)
   const respondPermission = useConversationStore((s) => s.respondPermission)
 
   if (!permissionRequest) return null
@@ -33,9 +34,16 @@ export function PermissionBanner() {
           </svg>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-yellow-200">
-            Pilos wants to {isBash ? 'run' : 'use'}: <span className="text-white">{permissionRequest.toolName}</span>
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium text-yellow-200">
+              Pilos wants to {isBash ? 'run' : 'use'}: <span className="text-white">{permissionRequest.toolName}</span>
+            </p>
+            {queueLength > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
+                +{queueLength} queued
+              </span>
+            )}
+          </div>
           {displayInfo && (
             <pre className={`mt-1.5 text-xs rounded px-2 py-1.5 overflow-x-auto max-h-40 whitespace-pre-wrap ${
               isBash
