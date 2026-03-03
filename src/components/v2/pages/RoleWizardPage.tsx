@@ -789,6 +789,13 @@ export default function RoleWizardPage() {
   }, [])
 
   const handleApply = useCallback(async (tasks: GeneratedTask[]) => {
+    // Prompt user to select a working directory for their project
+    const dir = await api.dialog.openDirectory()
+    if (dir) {
+      // Open the project first, which also triggers loadTasks
+      await useProjectStore.getState().openProject(dir)
+    }
+
     const taskStore = useTaskStore.getState()
 
     if (taskStore.currentProjectPath) {
@@ -809,8 +816,8 @@ export default function RoleWizardPage() {
         })
       }
     } else {
-      // No project open yet (wizard runs before project selection)
-      // Store tasks in a pending key — they'll be migrated when the first project opens
+      // User skipped directory selection — store tasks as pending
+      // They'll be migrated when the first project opens
       const pending = tasks.map((task) => ({
         id: crypto.randomUUID(),
         projectPath: '',
