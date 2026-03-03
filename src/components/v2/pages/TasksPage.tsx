@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Icon } from '../../common/Icon'
 import { StatusDot } from '../components/StatusDot'
 import { TaskDetailPanel } from '../components/TaskDetailPanel'
@@ -8,6 +8,8 @@ import { WorkflowEditor } from '../workflow/WorkflowEditor'
 import { useTaskStore, type Task, type TaskStatus, type TaskPriority } from '../../../store/useTaskStore'
 import { useProjectStore } from '../../../store/useProjectStore'
 import { useWorkflowStore } from '../../../store/useWorkflowStore'
+import { parseExportFile, decodeFromClipboard, importedFileToTask, isPilosClipboardString } from '../../../utils/task-sharing'
+import { api } from '../../../api'
 
 const statusColors: Record<TaskStatus, 'green' | 'orange' | 'blue' | 'gray'> = {
   idle: 'gray',
@@ -111,14 +113,59 @@ export default function TasksPage() {
   const showCreateModal = useTaskStore((s) => s.showCreateModal)
   const setShowCreateModal = useTaskStore((s) => s.setShowCreateModal)
   const editingWorkflowTaskId = useWorkflowStore((s) => s.editingTaskId)
+  const addTask = useTaskStore((s) => s.addTask)
   const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
   const [showGenerateModal, setShowGenerateModal] = useState(false)
+  const [showImportMenu, setShowImportMenu] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
+
+  const handleImportFile = useCallback(async () => {
+    setShowImportMenu(false)
+    setImportError(null)
+    try {
+      const filePath = await api.dialog.openFile({
+        filters: [{ name: 'Pilos Task', extensions: ['pilos'] }],
+      })
+      if (!filePath) return
+      const content = await api.files.readFile(filePath)
+      const exportData = parseExportFile(content)
+      const taskData = importedFileToTask(exportData)
+      await addTask(taskData)
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Failed to import file')
+    }
+  }, [addTask])
+
+  const handleImportClipboard = useCallback(async () => {
+    setShowImportMenu(false)
+    setImportError(null)
+    try {
+      const text = await navigator.clipboard.readText()
+      if (!isPilosClipboardString(text)) {
+        setImportError('Clipboard does not contain a valid Pilos task')
+        return
+      }
+      const exportData = decodeFromClipboard(text)
+      const taskData = importedFileToTask(exportData)
+      await addTask(taskData)
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Failed to import from clipboard')
+    }
+  }, [addTask])
 
   useEffect(() => {
     if (activeProjectPath) {
       loadTasks(activeProjectPath)
     }
   }, [activeProjectPath])
+
+  // Close import menu on outside click
+  useEffect(() => {
+    if (!showImportMenu) return
+    const handler = () => setShowImportMenu(false)
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [showImportMenu])
 
   // Listen for header "New Task" button
   useEffect(() => {
@@ -184,6 +231,33 @@ export default function TasksPage() {
               <option value="low">Low</option>
             </select>
           </div>
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setShowImportMenu(!showImportMenu)}
+              className="px-3 py-1.5 bg-pilos-card border border-pilos-border hover:border-zinc-600 text-zinc-300 hover:text-white text-xs font-medium rounded-lg transition-all flex items-center gap-1.5"
+            >
+              <Icon icon="lucide:upload" className="text-blue-400 text-xs" />
+              Import
+            </button>
+            {showImportMenu && (
+              <div className="absolute top-full right-0 mt-1 bg-zinc-800 border border-pilos-border rounded-lg shadow-xl z-10 overflow-hidden w-52">
+                <button
+                  onClick={handleImportFile}
+                  className="w-full flex items-center gap-2 px-3 py-2 hover:bg-zinc-700 transition-colors text-left"
+                >
+                  <Icon icon="lucide:file-up" className="text-blue-400 text-xs" />
+                  <span className="text-xs text-white">Import from .pilos file</span>
+                </button>
+                <button
+                  onClick={handleImportClipboard}
+                  className="w-full flex items-center gap-2 px-3 py-2 hover:bg-zinc-700 transition-colors text-left border-t border-pilos-border"
+                >
+                  <Icon icon="lucide:clipboard-paste" className="text-blue-400 text-xs" />
+                  <span className="text-xs text-white">Import from clipboard</span>
+                </button>
+              </div>
+            )}
+          </div>
           <button
             onClick={() => setShowGenerateModal(true)}
             className="px-3 py-1.5 bg-pilos-card border border-pilos-border hover:border-zinc-600 text-zinc-300 hover:text-white text-xs font-medium rounded-lg transition-all flex items-center gap-1.5"
@@ -192,6 +266,17 @@ export default function TasksPage() {
             AI Generate
           </button>
         </div>
+
+        {/* Import Error Banner */}
+        {importError && (
+          <div className="flex items-center gap-2 px-6 py-2 bg-red-500/5 border-b border-red-500/20 flex-shrink-0">
+            <Icon icon="lucide:alert-circle" className="text-red-400 text-xs flex-shrink-0" />
+            <span className="text-xs text-red-400 flex-1">{importError}</span>
+            <button onClick={() => setImportError(null)} className="text-red-400/60 hover:text-red-400">
+              <Icon icon="lucide:x" className="text-xs" />
+            </button>
+          </div>
+        )}
 
         {/* Table Header */}
         <div className="flex items-center gap-4 px-4 py-2 border-b border-pilos-border bg-pilos-card/30 flex-shrink-0">

@@ -81,11 +81,14 @@ const stubAPI: ElectronAPI = {
     revertEdit: () => Promise.resolve({ success: false, error: 'stub' }),
     readFile: () => Promise.resolve(''),
     readDir: () => Promise.resolve([]),
+    writeFile: noopAsync,
   },
   dialog: {
     openDirectory: () => Promise.resolve(null),
     openPath: () => Promise.resolve(null),
     openExternal: noopAsync,
+    saveFile: () => Promise.resolve(null),
+    openFile: () => Promise.resolve(null),
   },
   menu: {
     setActiveProject: noop,

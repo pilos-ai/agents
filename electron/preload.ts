@@ -139,6 +139,8 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('files:readFile', filePath),
     readDir: (dirPath: string, recursive?: boolean) =>
       ipcRenderer.invoke('files:readDir', dirPath, recursive),
+    writeFile: (filePath: string, content: string) =>
+      ipcRenderer.invoke('files:writeFile', filePath, content),
   },
 
   // Dialogs
@@ -146,6 +148,10 @@ contextBridge.exposeInMainWorld('api', {
     openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
     openPath: (options?: { directory?: boolean }) => ipcRenderer.invoke('dialog:openPath', options),
     openExternal: (url: string) => ipcRenderer.invoke('dialog:openExternal', url),
+    saveFile: (options?: { defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) =>
+      ipcRenderer.invoke('dialog:saveFile', options),
+    openFile: (options?: { filters?: Array<{ name: string; extensions: string[] }> }) =>
+      ipcRenderer.invoke('dialog:openFile', options),
   },
 
   // Menu

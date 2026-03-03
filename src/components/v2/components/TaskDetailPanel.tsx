@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Icon } from '../../common/Icon'
 import { StatusDot } from './StatusDot'
 import { FormToggle } from './FormToggle'
@@ -8,6 +8,8 @@ import { useTaskStore, type Task, type TaskStatus, type TaskPriority, type Sched
 import { useWorkflowStore } from '../../../store/useWorkflowStore'
 import type { Node } from '@xyflow/react'
 import type { WorkflowNodeData } from '../../../types/workflow'
+import { prepareTaskForExport, serializeExport, encodeForClipboard, canShareTask } from '../../../utils/task-sharing'
+import { api } from '../../../api'
 
 const statusColors: Record<TaskStatus, 'green' | 'orange' | 'blue' | 'gray'> = {
   idle: 'gray',
@@ -78,6 +80,33 @@ export function TaskDetailPanel({ task, onClose }: Props) {
   const [descDraft, setDescDraft] = useState(task.description)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const descTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Share state
+  const [copied, setCopied] = useState(false)
+  const [exportSuccess, setExportSuccess] = useState(false)
+
+  const handleExportFile = useCallback(async () => {
+    const exportData = prepareTaskForExport(task)
+    const json = serializeExport(exportData)
+    const sanitizedTitle = task.title.replace(/[^a-zA-Z0-9-_ ]/g, '').trim().replace(/\s+/g, '-') || 'task'
+    const filePath = await api.dialog.saveFile({
+      defaultPath: `${sanitizedTitle}.pilos`,
+      filters: [{ name: 'Pilos Task', extensions: ['pilos'] }],
+    })
+    if (filePath) {
+      await api.files.writeFile(filePath, json)
+      setExportSuccess(true)
+      setTimeout(() => setExportSuccess(false), 2000)
+    }
+  }, [task])
+
+  const handleCopyClipboard = useCallback(async () => {
+    const exportData = prepareTaskForExport(task)
+    const encoded = encodeForClipboard(exportData)
+    await navigator.clipboard.writeText(encoded)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }, [task])
 
   // Tick every 30s so relative times (timeAgo / timeUntil) stay current
   const [, setTick] = useState(0)
@@ -348,6 +377,37 @@ export function TaskDetailPanel({ task, onClose }: Props) {
                   </span>
                 )}
               </button>
+            </div>
+
+            {/* Share */}
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2">Share</label>
+              {canShareTask(task) ? (
+                <div className="space-y-2">
+                  <button
+                    onClick={handleExportFile}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-pilos-card border border-pilos-border rounded-lg text-xs text-zinc-300 hover:text-white hover:border-zinc-600 transition-colors"
+                  >
+                    <Icon icon="lucide:download" className="text-blue-400 text-sm" />
+                    {exportSuccess ? 'Exported!' : 'Export as .pilos file'}
+                  </button>
+                  <button
+                    onClick={handleCopyClipboard}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-pilos-card border border-pilos-border rounded-lg text-xs text-zinc-300 hover:text-white hover:border-zinc-600 transition-colors"
+                  >
+                    <Icon icon="lucide:clipboard-copy" className="text-blue-400 text-sm" />
+                    {copied ? 'Copied!' : 'Copy to clipboard'}
+                  </button>
+                </div>
+              ) : (
+                <div className="p-3 bg-pilos-card border border-pilos-border rounded-lg flex items-start gap-2">
+                  <Icon icon="lucide:lock" className="text-zinc-500 text-sm mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs text-zinc-400">Marketplace purchase</p>
+                    <p className="text-[10px] text-zinc-600 mt-0.5">This workflow was purchased from the marketplace and cannot be reshared.</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Danger zone */}

@@ -394,6 +394,11 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
     return content
   })
 
+  ipcMain.handle('files:writeFile', async (_event, filePath: string, content: string) => {
+    const fs = await import('fs/promises')
+    await fs.writeFile(filePath, content, 'utf-8')
+  })
+
   ipcMain.handle('files:readDir', async (_event, dirPath: string, recursive?: boolean) => {
     const fs = await import('fs/promises')
     const path = await import('path')
@@ -437,6 +442,22 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
   ipcMain.handle('dialog:openExternal', async (_event, url: string) => {
     const { shell } = await import('electron')
     await shell.openExternal(url)
+  })
+
+  ipcMain.handle('dialog:saveFile', async (_event, options?: { defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: options?.defaultPath,
+      filters: options?.filters || [{ name: 'Pilos Task', extensions: ['pilos'] }],
+    })
+    return result.canceled ? null : result.filePath
+  })
+
+  ipcMain.handle('dialog:openFile', async (_event, options?: { filters?: Array<{ name: string; extensions: string[] }> }) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: options?.filters || [{ name: 'Pilos Task', extensions: ['pilos'] }],
+    })
+    return result.canceled ? null : result.filePaths[0]
   })
 
   // ── Shell ──

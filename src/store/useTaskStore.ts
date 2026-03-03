@@ -84,6 +84,11 @@ export type TaskTemplate = 'client_review' | 'sprint_sync' | 'standup_report' | 
 export type TaskStatus = 'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'paused'
 export type TaskPriority = 'low' | 'medium' | 'high' | 'critical'
 
+// License determines sharing rights for a task/workflow.
+// 'free' = user-created, can share freely
+// 'marketplace' = purchased from marketplace, cannot reshare
+export type TaskLicense = 'free' | 'marketplace'
+
 export interface Task {
   id: string
   projectPath: string
@@ -100,6 +105,7 @@ export interface Task {
   runs: TaskRun[]
   workflow?: WorkflowDefinition
   sourceConversationId?: string
+  license?: TaskLicense
   createdAt: string
   updatedAt: string
 }

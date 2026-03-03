@@ -544,11 +544,14 @@ export interface ElectronAPI {
     readFile: (filePath: string) => Promise<string>
     readDir: (dirPath: string, recursive?: boolean) =>
       Promise<{ name: string; path: string; isDirectory: boolean }[]>
+    writeFile: (filePath: string, content: string) => Promise<void>
   }
   dialog: {
     openDirectory: () => Promise<string | null>
     openPath: (options?: { directory?: boolean }) => Promise<string | null>
     openExternal: (url: string) => Promise<void>
+    saveFile: (options?: { defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => Promise<string | null>
+    openFile: (options?: { filters?: Array<{ name: string; extensions: string[] }> }) => Promise<string | null>
   }
   menu: {
     setActiveProject: (project: { path: string; name: string } | null) => void
