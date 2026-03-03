@@ -608,6 +608,8 @@ export interface ElectronAPI {
     onDeviceApproved: (callback: (data: { deviceId: string; deviceName: string }) => void) => () => void
     onDeviceRevoked: (callback: (data: { deviceId: string }) => void) => () => void
     onStatus: (callback: (data: { connected: boolean; mobileCount: number }) => void) => () => void
+    onNewMessage: (callback: (data: { conversationId: string; message: string; images?: Array<{ data: string; mediaType: string }> }) => void) => () => void
+    broadcastUserMessage: (conversationId: string, message: string, images?: Array<{ data: string; mediaType: string }>) => Promise<void>
   }
   scheduler?: {
     onTriggerTask: (callback: (data: { taskId: string; trigger: string; projectPath?: string }) => void) => () => void

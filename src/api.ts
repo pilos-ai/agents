@@ -113,6 +113,8 @@ const stubAPI: ElectronAPI = {
     onDeviceApproved: noopUnsub,
     onDeviceRevoked: noopUnsub,
     onStatus: noopUnsub,
+    onNewMessage: noopUnsub,
+    broadcastUserMessage: noopAsync,
   },
   metrics: {
     setLicenseKey: noopAsync,

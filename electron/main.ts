@@ -99,6 +99,9 @@ async function createWindow() {
   ipcMain.handle('mobile:denyPairing', (_event, requestId: string) => relayClient?.denyPairing(requestId))
   ipcMain.handle('mobile:listPairedDevices', () => relayClient?.listPairedDevices())
   ipcMain.handle('mobile:revokeDevice', (_event, deviceId: string) => relayClient?.revokeDevice(deviceId))
+  ipcMain.handle('mobile:broadcastUserMessage', (_event, conversationId: string, message: string, images?: Array<{ data: string; mediaType: string }>) => {
+    relayClient?.broadcastUserMessage(conversationId, message, images)
+  })
 
   // IPC: forward license key to metrics collector (and reconnect relay)
   ipcMain.handle('metrics:setLicenseKey', (_event, key: string) => {

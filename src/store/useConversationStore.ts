@@ -65,6 +65,7 @@ interface ConversationStore {
   respondToQuestion: (answers: Record<string, string>) => void
   respondToPlanExit: (approved: boolean, feedback?: string) => void
   handleClaudeEvent: (event: ClaudeEvent) => void
+  handleMobileMessage: (conversationId: string, message: string, images?: Array<{ data: string; mediaType: string }>) => void
   addMessage: (message: ConversationMessage) => void
   resetStreaming: () => void
   setReplyTo: (msg: ConversationMessage | null) => void
@@ -260,6 +261,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       timestamp: Date.now(),
     }
     set((s) => ({ messages: [...s.messages, userMsg] }))
+
+    // Broadcast user message to mobile clients
+    api.mobile?.broadcastUserMessage(conversationId, text, images)
 
     // Start or send to Claude
     set({ isWaitingForResponse: true, streaming: { ...emptyStreaming, isStreaming: true, _turnStartTime: Date.now() } })
@@ -849,10 +853,27 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
           })
         }
 
-        set({
-          isWaitingForResponse: false,
-          streaming: { ...emptyStreaming },
-        })
+        // Process next queued message if any
+        const queue = get().messageQueue
+        if (queue.length > 0) {
+          const next = queue[0]
+          // Keep isWaitingForResponse true to prevent UI flicker between queue items
+          set({ messageQueue: queue.slice(1), streaming: { ...emptyStreaming } })
+          // Send in next tick to let state settle
+          setTimeout(async () => {
+            try {
+              await get().sendMessage(next.text, next.images)
+            } catch (err) {
+              console.error('[Queue] Failed to send queued message:', err)
+              set({ isWaitingForResponse: false, streaming: { ...emptyStreaming } })
+            }
+          }, 100)
+        } else {
+          set({
+            isWaitingForResponse: false,
+            streaming: { ...emptyStreaming },
+          })
+        }
 
         // Auto-generate title from first assistant response
         const userMsgCount = get().messages.filter((m) => m.role === 'user').length
@@ -866,17 +887,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
             const projectPath = useProjectStore.getState().activeProjectPath || ''
             get().loadConversations(projectPath)
           }
-        }
-
-        // Process next queued message if any
-        const queue = get().messageQueue
-        if (queue.length > 0) {
-          const next = queue[0]
-          set({ messageQueue: queue.slice(1) })
-          // Send in next tick to let state settle
-          setTimeout(() => {
-            get().sendMessage(next.text, next.images)
-          }, 100)
         }
         break
       }
@@ -936,6 +946,24 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         break
       }
     }
+  },
+
+  handleMobileMessage: (conversationId, message, images) => {
+    // Only inject if this conversation is currently active
+    if (get().activeConversationId !== conversationId) return
+
+    // Add the user message to the UI (already persisted to DB by relay-client)
+    set((s) => ({
+      messages: [...s.messages, {
+        role: 'user' as const,
+        type: 'text' as const,
+        content: message,
+        images: images?.map((img) => ({ data: img.data, mediaType: img.mediaType, name: 'mobile-image' })),
+        timestamp: Date.now(),
+      }],
+      isWaitingForResponse: true,
+      streaming: { ...emptyStreaming, isStreaming: true, _turnStartTime: Date.now() },
+    }))
   },
 
   addMessage: (message) => {

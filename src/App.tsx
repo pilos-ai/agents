@@ -62,7 +62,12 @@ export default function App() {
       routeClaudeEvent(event)
     })
 
-    return unsub
+    // Listen for messages sent from mobile app — inject into active conversation
+    const unsubMobile = api.mobile.onNewMessage(({ conversationId, message, images }) => {
+      useConversationStore.getState().handleMobileMessage(conversationId, message, images)
+    })
+
+    return () => { unsub(); unsubMobile() }
   }, [])
 
   // Sync active project to menu

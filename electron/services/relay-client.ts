@@ -147,6 +147,16 @@ export class RelayClient {
     })
   }
 
+  /** Broadcast a user message sent from desktop to mobile clients */
+  broadcastUserMessage(conversationId: string, message: string, images?: Array<{ data: string; mediaType: string }>): void {
+    if (!this.isConnected()) return
+    this.safeSend({
+      jsonrpc: '2.0',
+      method: 'event',
+      params: { type: 'user:message', data: { conversationId, message, images } },
+    })
+  }
+
   // ── Pairing API ──
 
   requestPairingToken(): Promise<{ token: string; expiresAt: number }> {
@@ -382,9 +392,9 @@ export class RelayClient {
           content: message,
         })
 
-        // Notify desktop renderer to refresh messages
+        // Notify desktop renderer about the new user message
         if (!this.mainWindow.isDestroyed()) {
-          this.mainWindow.webContents.send('mobile:newMessage', { conversationId: sessionId })
+          this.mainWindow.webContents.send('mobile:newMessage', { conversationId: sessionId, message, images })
         }
 
         // Auto-start a session if none is active (mobile doesn't call startSession separately)

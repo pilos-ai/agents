@@ -252,6 +252,13 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.on('mobile:status', handler)
       return () => ipcRenderer.removeListener('mobile:status', handler)
     },
+    onNewMessage: (callback: (data: { conversationId: string; message: string; images?: Array<{ data: string; mediaType: string }> }) => void) => {
+      const handler = (_event: unknown, data: { conversationId: string; message: string; images?: Array<{ data: string; mediaType: string }> }) => callback(data)
+      ipcRenderer.on('mobile:newMessage', handler)
+      return () => ipcRenderer.removeListener('mobile:newMessage', handler)
+    },
+    broadcastUserMessage: (conversationId: string, message: string, images?: Array<{ data: string; mediaType: string }>) =>
+      ipcRenderer.invoke('mobile:broadcastUserMessage', conversationId, message, images),
   },
 
   // Metrics

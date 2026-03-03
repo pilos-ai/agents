@@ -445,7 +445,9 @@ function applyEventToSnapshot(
         messagesToPersist.push(textMsg)
       }
 
-      s.isWaitingForResponse = false
+      // Only clear isWaitingForResponse if no queued messages remain
+      // (the queue will be processed in routeClaudeEvent)
+      s.isWaitingForResponse = s.messageQueue.length > 0
       s.streaming = { ...emptyStreaming }
       break
     }
@@ -966,9 +968,26 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       if (event.type === 'result' && updatedSnapshot.messageQueue.length > 0 && convId) {
         const next = updatedSnapshot.messageQueue[0]
         updatedSnapshot.messageQueue = updatedSnapshot.messageQueue.slice(1)
-        // Update the snapshot again with the dequeued message
+        // Add the queued user message to the snapshot so it's visible when switching tabs
+        const userMsg: ConversationMessage = {
+          role: 'user',
+          type: 'text',
+          content: next.text,
+          images: next.images,
+          timestamp: Date.now(),
+        }
+        updatedSnapshot.messages = [...updatedSnapshot.messages, userMsg]
+        // Keep isWaitingForResponse true to prevent UI flicker
+        updatedSnapshot.isWaitingForResponse = true
+        // Update the snapshot with dequeued message and user message
         openProjects[tabIndex] = { ...openProjects[tabIndex], snapshot: updatedSnapshot }
         set({ openProjects })
+        // Persist user message to DB
+        api.conversations.saveMessage(convId, {
+          role: 'user',
+          type: 'text',
+          content: next.text,
+        })
         // Send the queued message to the existing session
         setTimeout(() => {
           api.claude.sendMessage(convId, next.text, next.images)

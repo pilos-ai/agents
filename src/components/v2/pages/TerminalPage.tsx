@@ -266,9 +266,16 @@ function TerminalInput() {
   const [images, setImages] = useState<ImageAttachment[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const sendMessage = useConversationStore((s) => s.sendMessage)
+  const queueMessage = useConversationStore((s) => s.queueMessage)
+  const messageQueue = useConversationStore((s) => s.messageQueue)
+  const clearMessageQueue = useConversationStore((s) => s.clearMessageQueue)
+  const isWaitingForResponse = useConversationStore((s) => s.isWaitingForResponse)
   const isStreaming = useConversationStore((s) => s.streaming.isStreaming)
   const abortSession = useConversationStore((s) => s.abortSession)
+  const permissionRequest = useConversationStore((s) => s.permissionRequest)
+  const respondPermission = useConversationStore((s) => s.respondPermission)
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
+  const isLoading = isWaitingForResponse || isStreaming
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -296,7 +303,13 @@ function TerminalInput() {
   const handleSend = () => {
     const trimmed = text.trim()
     if ((!trimmed && images.length === 0) || !activeConversationId) return
-    sendMessage(trimmed || 'What is in this image?', images.length > 0 ? images : undefined)
+    const messageText = trimmed || 'What is in this image?'
+    const messageImages = images.length > 0 ? images : undefined
+    if (isLoading) {
+      queueMessage(messageText, messageImages)
+    } else {
+      sendMessage(messageText, messageImages)
+    }
     setText('')
     setImages([])
     if (textareaRef.current) {
@@ -307,7 +320,11 @@ function TerminalInput() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      if (isStreaming) return
+      // If there's a pending permission request and no text, approve it
+      if (permissionRequest && !text.trim()) {
+        respondPermission(true)
+        return
+      }
       handleSend()
     }
   }
@@ -410,11 +427,27 @@ function TerminalInput() {
         </div>
       )}
 
+      {/* Queued messages indicator */}
+      {messageQueue.length > 0 && (
+        <div className="flex items-center gap-2 mb-2 px-2 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+          <Icon icon="lucide:clock" className="text-amber-400 text-xs" />
+          <span className="text-xs text-amber-300">
+            {messageQueue.length} message{messageQueue.length > 1 ? 's' : ''} queued
+          </span>
+          <button
+            onClick={clearMessageQueue}
+            className="ml-auto text-xs text-amber-400/60 hover:text-amber-300 transition-colors cursor-pointer"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       <div className="flex items-end gap-3">
         {/* File upload button */}
         <button
           onClick={() => fileInputRef.current?.click()}
-          disabled={!activeConversationId || isStreaming}
+          disabled={!activeConversationId}
           className="p-2 h-[32px] w-[32px] flex items-center justify-center text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 disabled:opacity-30 rounded-lg transition-colors flex-shrink-0"
           title="Attach file (or paste / drag & drop)"
         >
@@ -436,33 +469,36 @@ function TerminalInput() {
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={
-            images.length > 0
-              ? 'Add a message about the attachment...'
-              : activeConversationId
-                ? 'Send a message...'
-                : 'Create a conversation first...'
+            isLoading
+              ? 'Type to queue a message...'
+              : images.length > 0
+                ? 'Add a message about the attachment...'
+                : activeConversationId
+                  ? 'Send a message...'
+                  : 'Create a conversation first...'
           }
           disabled={!activeConversationId}
           rows={1}
           className="flex-1 bg-transparent text-sm text-white placeholder-zinc-600 outline-none resize-none font-mono leading-relaxed disabled:opacity-50"
           style={{ maxHeight: 120 }}
         />
-        {isStreaming ? (
+        {/* Send / Queue button */}
+        <button
+          onClick={handleSend}
+          disabled={(!text.trim() && images.length === 0) || !activeConversationId}
+          className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-600/20 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5"
+        >
+          <Icon icon="lucide:send" className="text-[10px]" />
+          {isLoading ? 'Queue' : 'Send'}
+        </button>
+        {/* Stop button */}
+        {isLoading && (
           <button
             onClick={abortSession}
             className="px-4 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
           >
             <Icon icon="lucide:square" className="text-[10px]" />
             Stop
-          </button>
-        ) : (
-          <button
-            onClick={handleSend}
-            disabled={(!text.trim() && images.length === 0) || !activeConversationId}
-            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-xs font-bold rounded-lg shadow-lg shadow-blue-600/20 transition-all flex items-center gap-1.5"
-          >
-            <Icon icon="lucide:send" className="text-[10px]" />
-            Send
           </button>
         )}
       </div>
@@ -473,6 +509,7 @@ function TerminalInput() {
 export default function TerminalPage() {
   const messages = useConversationStore((s) => s.messages)
   const streaming = useConversationStore((s) => s.streaming)
+  const messageQueue = useConversationStore((s) => s.messageQueue)
   const permissionRequest = useConversationStore((s) => s.permissionRequest)
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
 
@@ -592,6 +629,19 @@ export default function TerminalPage() {
                 </div>
               </div>
             )}
+
+            {/* Queued messages — shown as pending user bubbles */}
+            {messageQueue.length > 0 && messageQueue.map((qMsg, i) => (
+              <div key={`queued-${i}`} className="py-2 opacity-50">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Icon icon="lucide:clock" className="text-amber-400 text-[10px]" />
+                  <span className="text-[10px] text-amber-400 font-medium">Queued</span>
+                </div>
+                <div className="text-sm text-blue-300 whitespace-pre-wrap font-mono leading-relaxed">
+                  {qMsg.text}
+                </div>
+              </div>
+            ))}
 
             {/* Permission request */}
             {permissionRequest && <PermissionBanner />}

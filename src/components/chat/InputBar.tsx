@@ -29,6 +29,8 @@ export function InputBar() {
   const messageQueue = useConversationStore((s) => s.messageQueue)
   const clearMessageQueue = useConversationStore((s) => s.clearMessageQueue)
   const abortSession = useConversationStore((s) => s.abortSession)
+  const permissionRequest = useConversationStore((s) => s.permissionRequest)
+  const respondPermission = useConversationStore((s) => s.respondPermission)
   const isWaitingForResponse = useConversationStore((s) => s.isWaitingForResponse)
   const streaming = useConversationStore((s) => s.streaming)
   const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
@@ -95,6 +97,11 @@ export function InputBar() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
+      // If there's a pending permission request and no text, approve it
+      if (permissionRequest && !text.trim()) {
+        respondPermission(true)
+        return
+      }
       handleSend()
     }
   }
@@ -233,24 +240,38 @@ export function InputBar() {
           className="flex-1 min-w-0 bg-neutral-800 text-neutral-100 rounded-lg px-4 py-2 text-sm resize-none outline-none focus:ring-1 focus:ring-blue-500/50 placeholder-neutral-500"
         />
 
-        {/* Model selector */}
-        <select
-          value={model}
-          onChange={(e) => setProjectModel(e.target.value)}
-          className="bg-neutral-800 text-neutral-300 text-xs rounded-md px-2 py-2 h-[36px] outline-none border border-neutral-700 cursor-pointer shrink-0"
-        >
-          <option value="sonnet">Sonnet</option>
-          <option value="opus">Opus</option>
-          <option value="haiku">Haiku</option>
-        </select>
+        {/* Model selector — hidden during loading to save space */}
+        {!isLoading && (
+          <select
+            value={model}
+            onChange={(e) => setProjectModel(e.target.value)}
+            className="bg-neutral-800 text-neutral-300 text-xs rounded-md px-2 py-2 h-[36px] outline-none border border-neutral-700 cursor-pointer shrink-0"
+          >
+            <option value="sonnet">Sonnet</option>
+            <option value="opus">Opus</option>
+            <option value="haiku">Haiku</option>
+          </select>
+        )}
 
-        {/* MCP badge */}
-        {mcpCount > 0 && (
+        {/* MCP badge — hidden during loading to save space */}
+        {mcpCount > 0 && !isLoading && (
           <div className="flex items-center gap-1 px-2 py-1 h-[36px] bg-neutral-800 border border-green-500/30 rounded-md text-green-400 text-xs shrink-0">
             <span>MCP</span>
             <span className="font-medium">{mcpCount}</span>
           </div>
         )}
+
+        {/* Send / Queue button — placed before Stop so it's always visible */}
+        <button
+          onClick={handleSend}
+          disabled={!text.trim() && images.length === 0}
+          className="p-2 h-[36px] w-[36px] flex items-center justify-center bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 text-white rounded-lg transition-colors shrink-0 cursor-pointer"
+          title={isLoading ? 'Queue message (Enter)' : 'Send (Enter)'}
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-7 7m7-7l7 7" />
+          </svg>
+        </button>
 
         {/* Stop button (shown during loading) */}
         {isLoading && (
@@ -264,30 +285,6 @@ export function InputBar() {
             </svg>
           </button>
         )}
-
-        {/* Send / Queue button */}
-        <button
-          onClick={handleSend}
-          disabled={!text.trim() && images.length === 0}
-          className={`p-2 h-[36px] w-[36px] flex items-center justify-center ${
-            isLoading
-              ? 'bg-amber-600 hover:bg-amber-500'
-              : 'bg-blue-600 hover:bg-blue-500'
-          } disabled:bg-neutral-700 disabled:text-neutral-500 text-white rounded-lg transition-colors shrink-0 cursor-pointer`}
-          title={isLoading ? 'Queue message' : 'Send'}
-        >
-          {isLoading ? (
-            // Queue icon (plus in a list)
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-          ) : (
-            // Send icon (arrow up)
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-7 7m7-7l7 7" />
-            </svg>
-          )}
-        </button>
       </div>
     </div>
   )
