@@ -2,7 +2,6 @@ import { Icon } from '../common/Icon'
 import { useAppStore, type AppView } from '../../store/useAppStore'
 import { useProjectStore } from '../../store/useProjectStore'
 import { useLicenseStore } from '../../store/useLicenseStore'
-import { api } from '../../api'
 
 interface NavItem {
   id: AppView
@@ -126,9 +125,9 @@ export function NavigationSidebar() {
     { id: 'settings', label: 'Settings', icon: 'lucide:settings' },
   ]
 
-  const handleOpenProject = async () => {
-    const dir = await api.dialog.openDirectory()
-    if (dir) openProject(dir)
+  const handleOpenProject = () => {
+    useProjectStore.setState({ activeProjectPath: null })
+    setActiveView('dashboard')
   }
 
   return (
