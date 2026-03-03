@@ -572,7 +572,7 @@ export interface ElectronAPI {
     getBoardConfig: (projectPath: string) => Promise<{ projectKey: string; boardId: number; boardName: string } | null>
   }
   scheduler?: {
-    onTriggerTask: (callback: (data: { taskId: string; trigger: string }) => void) => () => void
+    onTriggerTask: (callback: (data: { taskId: string; trigger: string; projectPath?: string }) => void) => () => void
     onNavigateToTask: (callback: (taskId: string) => void) => () => void
     reportTaskStarted: (data: { taskId: string; taskTitle: string }) => void
     reportTaskCompleted: (data: { taskId: string; status: string; summary: string; taskTitle: string }) => void

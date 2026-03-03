@@ -232,8 +232,8 @@ contextBridge.exposeInMainWorld('api', {
 
   // Scheduler (background task execution)
   scheduler: {
-    onTriggerTask: (callback: (data: { taskId: string; trigger: string }) => void) => {
-      const handler = (_event: unknown, data: { taskId: string; trigger: string }) => callback(data)
+    onTriggerTask: (callback: (data: { taskId: string; trigger: string; projectPath?: string }) => void) => {
+      const handler = (_event: unknown, data: { taskId: string; trigger: string; projectPath?: string }) => callback(data)
       ipcRenderer.on('scheduler:trigger-task', handler)
       return () => ipcRenderer.removeListener('scheduler:trigger-task', handler)
     },

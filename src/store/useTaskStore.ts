@@ -86,6 +86,7 @@ export type TaskPriority = 'low' | 'medium' | 'high' | 'critical'
 
 export interface Task {
   id: string
+  projectPath: string
   title: string
   description: string
   template: TaskTemplate
@@ -123,10 +124,15 @@ export function computeNextRunAt(lastRunAt: string, interval: ScheduleInterval):
   return new Date(new Date(lastRunAt).getTime() + ms).toISOString()
 }
 
+function taskStorageKey(projectPath: string): string {
+  return `v2_tasks:${projectPath}`
+}
+
 // ── Store ──
 
 interface TaskStore {
   tasks: Task[]
+  currentProjectPath: string | null
   filter: {
     status: TaskStatus | 'all'
     priority: TaskPriority | 'all'
@@ -137,8 +143,8 @@ interface TaskStore {
   activeExecutions: Record<string, ActiveExecution>
 
   setActiveExecution: (taskId: string, data: ActiveExecution | null) => void
-  loadTasks: () => Promise<void>
-  addTask: (task: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'runs'>) => Promise<void>
+  loadTasks: (projectPath: string) => Promise<void>
+  addTask: (task: Omit<Task, 'id' | 'projectPath' | 'createdAt' | 'updatedAt' | 'runs'>) => Promise<void>
   updateTask: (id: string, updates: Partial<Task>) => Promise<void>
   removeTask: (id: string) => Promise<void>
   setFilter: (filter: Partial<TaskStore['filter']>) => void
@@ -159,6 +165,7 @@ interface TaskStore {
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
   tasks: [],
+  currentProjectPath: null,
   filter: {
     status: 'all',
     priority: 'all',
@@ -180,13 +187,36 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     })
   },
 
-  loadTasks: async () => {
+  loadTasks: async (projectPath) => {
+    set({ currentProjectPath: projectPath, selectedTaskId: null })
     try {
-      const stored = await api.settings.get('v2_tasks')
+      const key = taskStorageKey(projectPath)
+      let stored = await api.settings.get(key)
+
+      // One-time migration: move global v2_tasks to this project
+      if (!stored || (Array.isArray(stored) && stored.length === 0)) {
+        const globalTasks = await api.settings.get('v2_tasks')
+        if (Array.isArray(globalTasks) && globalTasks.length > 0) {
+          stored = (globalTasks as Record<string, unknown>[]).map((t) => ({ ...t, projectPath }))
+          await api.settings.set(key, stored)
+          await api.settings.set('v2_tasks', null)
+        }
+      }
+
+      // Migrate pending wizard tasks (created before any project was open)
+      const pendingTasks = await api.settings.get('v2_tasks_pending')
+      if (Array.isArray(pendingTasks) && pendingTasks.length > 0) {
+        const migrated = (pendingTasks as Record<string, unknown>[]).map((t) => ({ ...t, projectPath }))
+        const current = Array.isArray(stored) ? stored : []
+        stored = [...(current as unknown[]), ...migrated]
+        await api.settings.set(key, stored)
+        await api.settings.set('v2_tasks_pending', null)
+      }
+
       if (Array.isArray(stored)) {
-        // Migrate old tasks to new shape
         const tasks = (stored as Record<string, unknown>[]).map((t) => ({
           ...t,
+          projectPath: (t.projectPath as string) || projectPath,
           template: (t.template as string) || 'custom',
           integrations: (t.integrations as unknown[]) || [],
           schedule: (t.schedule as TaskSchedule) || { interval: 'manual', enabled: false, nextRunAt: null, lastRunAt: null },
@@ -194,15 +224,20 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
           status: t.status === 'queued' && !(t.runs as unknown[] | undefined)?.length ? 'idle' : t.status,
         })) as Task[]
         set({ tasks })
+      } else {
+        set({ tasks: [] })
       }
     } catch {
-      // No tasks stored yet
+      set({ tasks: [] })
     }
   },
 
   addTask: async (taskData) => {
+    const projectPath = get().currentProjectPath
+    if (!projectPath) return
     const task: Task = {
       ...taskData,
+      projectPath,
       id: crypto.randomUUID(),
       runs: [],
       createdAt: new Date().toISOString(),
@@ -210,7 +245,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     }
     const tasks = [...get().tasks, task]
     set({ tasks })
-    await api.settings.set('v2_tasks', tasks)
+    await api.settings.set(taskStorageKey(projectPath), tasks)
   },
 
   updateTask: async (id, updates) => {
@@ -218,13 +253,13 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t
     )
     set({ tasks })
-    await api.settings.set('v2_tasks', tasks)
+    await api.settings.set(taskStorageKey(get().currentProjectPath!), tasks)
   },
 
   removeTask: async (id) => {
     const tasks = get().tasks.filter((t) => t.id !== id)
     set({ tasks })
-    await api.settings.set('v2_tasks', tasks)
+    await api.settings.set(taskStorageKey(get().currentProjectPath!), tasks)
     if (get().selectedTaskId === id) {
       set({ selectedTaskId: null })
     }
@@ -252,7 +287,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       t.id === taskId ? { ...t, integrations: [...t.integrations, integration], updatedAt: new Date().toISOString() } : t
     )
     set({ tasks })
-    await api.settings.set('v2_tasks', tasks)
+    await api.settings.set(taskStorageKey(get().currentProjectPath!), tasks)
   },
 
   removeIntegration: async (taskId, integrationId) => {
@@ -262,7 +297,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
         : t
     )
     set({ tasks })
-    await api.settings.set('v2_tasks', tasks)
+    await api.settings.set(taskStorageKey(get().currentProjectPath!), tasks)
   },
 
   updateSchedule: async (taskId, schedule) => {
@@ -283,7 +318,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       return { ...t, schedule: merged, updatedAt: new Date().toISOString() }
     })
     set({ tasks })
-    await api.settings.set('v2_tasks', tasks)
+    await api.settings.set(taskStorageKey(get().currentProjectPath!), tasks)
   },
 
   toggleSchedule: async (taskId) => {
@@ -299,7 +334,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
         : t
     )
     set({ tasks })
-    await api.settings.set('v2_tasks', tasks)
+    await api.settings.set(taskStorageKey(get().currentProjectPath!), tasks)
   },
 
   triggerRun: async (taskId, trigger) => {
@@ -322,7 +357,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       return { ...t, status: 'running' as TaskStatus, progress: 0, runs, updatedAt: now }
     })
     set({ tasks })
-    await api.settings.set('v2_tasks', tasks)
+    await api.settings.set(taskStorageKey(get().currentProjectPath!), tasks)
   },
 
   addRunResult: async (taskId, run) => {
@@ -343,7 +378,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       }
     })
     set({ tasks })
-    await api.settings.set('v2_tasks', tasks)
+    await api.settings.set(taskStorageKey(get().currentProjectPath!), tasks)
   },
 
   runTaskWorkflow: async (taskId, trigger = 'manual') => {
@@ -379,7 +414,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       return { ...t, runs: [run, ...t.runs].slice(0, MAX_RUNS_PER_TASK) }
     })
     set({ tasks: allTasks })
-    await api.settings.set('v2_tasks', allTasks)
+    await api.settings.set(taskStorageKey(get().currentProjectPath!), allTasks)
 
     // Set initial active execution
     get().setActiveExecution(taskId, {
@@ -396,10 +431,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     const allStepResults: WorkflowStepResult[] = []
     const allLogs: string[] = []
 
-    // Get working directory and jira project key
-    const { useProjectStore } = await import('./useProjectStore')
+    // Get working directory from task's projectPath (not active project — task may belong to a different project)
     const { useWorkflowStore } = await import('./useWorkflowStore')
-    const workingDirectory = useProjectStore.getState().activeProjectPath || undefined
+    const workingDirectory = task.projectPath || get().currentProjectPath || undefined
     const jiraProjectKey = useWorkflowStore.getState().jiraProjectKey || undefined
 
     await executeWorkflow(nodes, edges, {

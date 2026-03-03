@@ -791,8 +791,29 @@ export default function RoleWizardPage() {
   const handleApply = useCallback(async (tasks: GeneratedTask[]) => {
     const taskStore = useTaskStore.getState()
 
-    for (const task of tasks) {
-      await taskStore.addTask({
+    if (taskStore.currentProjectPath) {
+      // Project is open — save tasks directly
+      for (const task of tasks) {
+        await taskStore.addTask({
+          title: task.title,
+          description: task.description,
+          template: 'custom',
+          status: 'idle',
+          priority: task.priority,
+          agentId: null,
+          agentName: null,
+          progress: 0,
+          integrations: [],
+          schedule: { interval: 'manual', enabled: false, nextRunAt: null, lastRunAt: null },
+          workflow: { nodes: task.workflow.nodes, edges: task.workflow.edges },
+        })
+      }
+    } else {
+      // No project open yet (wizard runs before project selection)
+      // Store tasks in a pending key — they'll be migrated when the first project opens
+      const pending = tasks.map((task) => ({
+        id: crypto.randomUUID(),
+        projectPath: '',
         title: task.title,
         description: task.description,
         template: 'custom',
@@ -804,7 +825,11 @@ export default function RoleWizardPage() {
         integrations: [],
         schedule: { interval: 'manual', enabled: false, nextRunAt: null, lastRunAt: null },
         workflow: { nodes: task.workflow.nodes, edges: task.workflow.edges },
-      })
+        runs: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }))
+      await api.settings.set('v2_tasks_pending', pending)
     }
 
     await useAppStore.getState().completeWorkspaceSetup(selectedRole?.id)

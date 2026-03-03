@@ -571,6 +571,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     // Load conversations for this project into the conversation store
     await useConversationStore.getState().loadConversations(dirPath)
 
+    // Load tasks for this project
+    const { useTaskStore } = await import('./useTaskStore')
+    await useTaskStore.getState().loadTasks(dirPath)
+
     // Add to recent projects
     await api.projects.addRecent(dirPath)
     await get().loadRecentProjects()
@@ -610,6 +614,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
         // Phase 3: Restore the tab's active view
         useAppStore.getState().setActiveView(nextTab.activeView || 'chat')
+
+        // Load tasks for the next project
+        import('./useTaskStore').then(({ useTaskStore }) => {
+          useTaskStore.getState().loadTasks(nextTab.projectPath)
+        })
       } else {
         activeProjectPath = null
         // Clear conversation store
@@ -621,6 +630,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           isWaitingForResponse: false,
           hasActiveSession: false,
           permissionRequest: null,
+        })
+
+        // Clear tasks (no project open)
+        import('./useTaskStore').then(({ useTaskStore }) => {
+          useTaskStore.setState({ tasks: [], currentProjectPath: null, selectedTaskId: null })
         })
       }
     }
@@ -679,6 +693,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
     // Phase 3: Restore the tab's active view
     useAppStore.getState().setActiveView(tab?.activeView || 'chat')
+
+    // Load tasks for the new project
+    const { useTaskStore } = await import('./useTaskStore')
+    await useTaskStore.getState().loadTasks(dirPath)
   },
 
   setProjectModel: (model: string) => {

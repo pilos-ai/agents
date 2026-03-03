@@ -6,6 +6,7 @@ import { CreateTaskModal } from '../components/CreateTaskModal'
 import { GenerateTaskModal } from '../components/GenerateTaskModal'
 import { WorkflowEditor } from '../workflow/WorkflowEditor'
 import { useTaskStore, type Task, type TaskStatus, type TaskPriority } from '../../../store/useTaskStore'
+import { useProjectStore } from '../../../store/useProjectStore'
 import { useWorkflowStore } from '../../../store/useWorkflowStore'
 
 const statusColors: Record<TaskStatus, 'green' | 'orange' | 'blue' | 'gray'> = {
@@ -110,11 +111,14 @@ export default function TasksPage() {
   const showCreateModal = useTaskStore((s) => s.showCreateModal)
   const setShowCreateModal = useTaskStore((s) => s.setShowCreateModal)
   const editingWorkflowTaskId = useWorkflowStore((s) => s.editingTaskId)
+  const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
   const [showGenerateModal, setShowGenerateModal] = useState(false)
 
   useEffect(() => {
-    loadTasks()
-  }, [])
+    if (activeProjectPath) {
+      loadTasks(activeProjectPath)
+    }
+  }, [activeProjectPath])
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {

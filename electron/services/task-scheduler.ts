@@ -5,6 +5,7 @@ import type { TrayManager } from './tray-manager'
 interface ScheduledTask {
   id: string
   title: string
+  projectPath: string
   schedule: {
     interval: string
     enabled: boolean
@@ -44,13 +45,25 @@ export class TaskScheduler {
     console.log('[TaskScheduler] Stopped')
   }
 
+  /** Collect tasks from all per-project storage keys */
+  private getAllTasks(): ScheduledTask[] {
+    const all = this.settings.getAll()
+    const tasks: ScheduledTask[] = []
+    for (const [key, value] of Object.entries(all)) {
+      if (key.startsWith('v2_tasks:') && Array.isArray(value)) {
+        tasks.push(...(value as ScheduledTask[]))
+      }
+    }
+    return tasks
+  }
+
   private static PENDING_TIMEOUT = 120_000 // 2 minutes — clear stale pending triggers
 
   private tick(): void {
     // Skip if all schedules are paused
     if (this.settings.get('schedulerPausedAll')) return
 
-    const tasks = (this.settings.get('v2_tasks') as ScheduledTask[] | null) || []
+    const tasks = this.getAllTasks()
     const now = Date.now()
     let scheduledCount = 0
 
@@ -77,7 +90,7 @@ export class TaskScheduler {
 
         console.log(`[TaskScheduler] Triggering task "${task.title}" (${task.id}) — was due ${Math.round((now - nextRun) / 1000)}s ago`)
         this.pendingTriggers.set(task.id, now)
-        this.send('scheduler:trigger-task', { taskId: task.id, trigger: 'scheduled' })
+        this.send('scheduler:trigger-task', { taskId: task.id, trigger: 'scheduled', projectPath: task.projectPath })
       }
     }
 
@@ -110,7 +123,7 @@ export class TaskScheduler {
   }
 
   private updateTrayRunning(): void {
-    const tasks = (this.settings.get('v2_tasks') as ScheduledTask[] | null) || []
+    const tasks = this.getAllTasks()
     const names = [...this.runningTaskIds].map((id) => {
       return tasks.find((t) => t.id === id)?.title || id
     })

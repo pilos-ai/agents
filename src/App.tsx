@@ -115,8 +115,14 @@ export default function App() {
   useEffect(() => {
     if (!api.scheduler) return
 
-    const unsubTrigger = api.scheduler.onTriggerTask(async ({ taskId }) => {
+    const unsubTrigger = api.scheduler.onTriggerTask(async ({ taskId, projectPath }) => {
       const store = useTaskStore.getState()
+
+      // If the task belongs to a different project, load that project's tasks first
+      if (projectPath && store.currentProjectPath !== projectPath) {
+        await store.loadTasks(projectPath)
+      }
+
       const task = store.tasks.find((t) => t.id === taskId)
       if (!task || store.activeExecutions[taskId]) return
 
