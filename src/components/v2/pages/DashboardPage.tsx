@@ -204,7 +204,7 @@ export default function DashboardPage() {
     if (dir) openProject(dir)
   }
 
-  const hasProject = openProjects.length > 0
+  const hasProject = !!activeProjectPath
 
   const getAgentStatus = (agent: AgentDefinition, idx: number): AgentStatus => {
     if (isStreaming && currentAgentName === agent.name) return 'busy'
