@@ -265,11 +265,15 @@ export class ClaudeProcess {
   }
 
   /** User approved or rejected a plan from ExitPlanMode */
-  respondToPlanExit(sessionId: string, approved: boolean): void {
-    if (approved) {
+  respondToPlanExit(sessionId: string, approved: boolean, feedback?: string): void {
+    if (approved && feedback) {
+      this.sendMessage(sessionId, `Plan approved with suggestions. Please proceed with the implementation, incorporating these changes:\n\n${feedback}`)
+    } else if (approved) {
       this.sendMessage(sessionId, 'Plan approved. Please proceed with the implementation.')
+    } else if (feedback) {
+      this.sendMessage(sessionId, `Plan not approved. Please revise the plan based on these suggestions:\n\n${feedback}`)
     } else {
-      this.sendMessage(sessionId, 'Plan not approved. Please revise the plan based on the feedback above.')
+      this.sendMessage(sessionId, 'Plan not approved. Please revise the plan.')
     }
   }
 

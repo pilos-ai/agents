@@ -84,6 +84,12 @@ export function V2Layout() {
             window.dispatchEvent(new CustomEvent('pilos:new-agent'))
           },
         }
+      case 'results':
+        return {
+          actionLabel: 'View Tasks',
+          actionIcon: 'lucide:list-checks',
+          onAction: () => setActiveView('tasks'),
+        }
       default:
         return {}
     }

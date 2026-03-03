@@ -2,8 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Icon } from '../../common/Icon'
 import { StatusDot } from './StatusDot'
 import { FormToggle } from './FormToggle'
-import { TaskRunCard } from './TaskRunCard'
-import { WorkflowResultsBoard } from './WorkflowResultsBoard'
+import { TaskRunCard, StepResultCard, actionIcons, formatDuration as fmtDuration, timeAgo as fmtTimeAgo, runStatusColors } from './TaskRunCard'
 import { SCHEDULE_OPTIONS } from '../../../data/task-templates'
 import { useTaskStore, type Task, type TaskStatus, type TaskPriority, type ScheduleInterval } from '../../../store/useTaskStore'
 import { useWorkflowStore } from '../../../store/useWorkflowStore'
@@ -365,12 +364,109 @@ export function TaskDetailPanel({ task, onClose }: Props) {
         )}
 
         {tab === 'Results' && (
-          <WorkflowResultsBoard
-            stepResults={stepResults}
-            nodes={workflowNodes}
-            onAiFix={() => useWorkflowStore.getState().aiFixWorkflow()}
-            isFixing={useWorkflowStore.getState().isFixing}
-          />
+          <>
+            {/* Latest Run Summary Banner */}
+            {task.runs[0] ? (
+              <>
+                <div className={`p-3 rounded-xl border mb-4 ${
+                  task.runs[0].status === 'success' ? 'bg-emerald-500/5 border-emerald-500/20'
+                  : task.runs[0].status === 'partial' ? 'bg-orange-500/5 border-orange-500/20'
+                  : 'bg-red-500/5 border-red-500/20'
+                }`}>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <StatusDot color={runStatusColors[task.runs[0].status] || 'gray'} />
+                    <span className="text-xs font-bold text-white">Latest Run</span>
+                    <span className="text-[10px] text-zinc-600 ml-auto">{fmtTimeAgo(task.runs[0].startedAt)}</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-400 leading-relaxed">{task.runs[0].summary}</p>
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className="text-[10px] text-zinc-500 font-mono">{fmtDuration(task.runs[0].duration)}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                      task.runs[0].trigger === 'scheduled' ? 'bg-blue-500/10 text-blue-400' : 'bg-zinc-800 text-zinc-500'
+                    }`}>
+                      {task.runs[0].trigger}
+                    </span>
+                    {task.runs[0].stepResults && task.runs[0].stepResults.length > 0 && (
+                      <span className="text-[10px] text-zinc-600">
+                        {task.runs[0].stepResults.filter((r) => r.status === 'completed').length}/{task.runs[0].stepResults.length} steps
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Step Results */}
+                {stepResults.length > 0 && (
+                  <div className="mb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Step Results</span>
+                      <span className="text-[9px] text-emerald-500">
+                        {stepResults.filter((r) => r.status === 'completed').length} passed
+                      </span>
+                      {stepResults.filter((r) => r.status === 'failed').length > 0 && (
+                        <span className="text-[9px] text-red-400">
+                          {stepResults.filter((r) => r.status === 'failed').length} failed
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      {stepResults.map((result, i) => (
+                        <StepResultCard
+                          key={`${result.nodeId}-${i}`}
+                          result={result}
+                          label={nodeLabels.get(result.nodeId) || result.nodeId}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions */}
+                {task.runs[0].actions.length > 0 && (
+                  <div className="mb-4">
+                    <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest block mb-2">
+                      Actions ({task.runs[0].actions.length})
+                    </span>
+                    <div className="space-y-1.5">
+                      {task.runs[0].actions.map((action, i) => {
+                        const iconCfg = actionIcons[action.type] || actionIcons.error
+                        return (
+                          <div key={i} className="flex items-start gap-2 p-2 bg-pilos-card border border-pilos-border rounded-lg">
+                            <Icon icon={iconCfg.icon} className={`${iconCfg.color} text-xs mt-0.5 flex-shrink-0`} />
+                            <div className="min-w-0">
+                              <span className="text-[11px] text-zinc-300">{action.description}</span>
+                              {action.metadata && Object.keys(action.metadata).length > 0 && (
+                                <div className="mt-0.5 text-[10px] text-zinc-600 font-mono truncate">
+                                  {Object.entries(action.metadata).map(([k, v]) => `${k}: ${String(v)}`).join(' · ')}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Logs */}
+                {task.runs[0].logs && task.runs[0].logs.length > 0 && (
+                  <details className="pt-2 border-t border-pilos-border">
+                    <summary className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest cursor-pointer hover:text-zinc-400">
+                      Logs ({task.runs[0].logs.length})
+                    </summary>
+                    <pre className="mt-1.5 text-[10px] text-zinc-500 leading-relaxed whitespace-pre-wrap break-words max-h-48 overflow-y-auto custom-scrollbar">
+                      {task.runs[0].logs.join('\n')}
+                    </pre>
+                  </details>
+                )}
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <Icon icon="lucide:file-check-2" className="text-zinc-800 text-2xl mb-2" />
+                <p className="text-xs text-zinc-600">No results yet</p>
+                <p className="text-[10px] text-zinc-700 mt-0.5">Run the task to see results here</p>
+              </div>
+            )}
+          </>
         )}
 
         {tab === 'Run History' && (

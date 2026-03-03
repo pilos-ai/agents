@@ -7,6 +7,7 @@ const TasksPage = lazy(() => import('./pages/TasksPage'))
 const ConfigPage = lazy(() => import('./pages/ConfigPage'))
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'))
 const McpPage = lazy(() => import('./pages/McpPage'))
+const ResultsPage = lazy(() => import('./pages/ResultsPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 
 function ViewLoading() {
@@ -23,6 +24,7 @@ export function ViewRouter({ view }: { view: AppView }) {
       {view === 'dashboard' && <DashboardPage />}
       {view === 'terminal' && <TerminalPage />}
       {view === 'tasks' && <TasksPage />}
+      {view === 'results' && <ResultsPage />}
       {view === 'config' && <ConfigPage />}
       {view === 'analytics' && <AnalyticsPage />}
       {view === 'mcp' && <McpPage />}

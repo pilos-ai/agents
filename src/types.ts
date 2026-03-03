@@ -495,7 +495,7 @@ export interface ElectronAPI {
     sendMessage: (sessionId: string, message: string, images?: ImageAttachment[]) => Promise<void>
     respondPermission: (sessionId: string, allowed: boolean, always?: boolean) => Promise<void>
     respondToQuestion: (sessionId: string, answers: Record<string, string>) => Promise<void>
-    respondToPlanExit: (sessionId: string, approved: boolean) => Promise<void>
+    respondToPlanExit: (sessionId: string, approved: boolean, feedback?: string) => Promise<void>
     abort: (sessionId: string) => Promise<void>
     onEvent: (callback: (data: ClaudeEvent) => void) => () => void
   }

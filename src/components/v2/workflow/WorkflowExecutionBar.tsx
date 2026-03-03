@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Icon } from '../../common/Icon'
 import { StatusDot } from '../components/StatusDot'
 import { useWorkflowStore } from '../../../store/useWorkflowStore'
+import { useTaskStore } from '../../../store/useTaskStore'
+import type { WorkflowExecution, WorkflowExecutionStatus } from '../../../types/workflow'
 
 const statusColors: Record<string, 'green' | 'orange' | 'blue' | 'gray'> = {
   idle: 'gray',
@@ -45,6 +47,64 @@ export function WorkflowExecutionBar({ onShowResults }: { onShowResults?: () => 
   const edges = useWorkflowStore((s) => s.edges)
 
   useEffect(() => { loadJiraProjects() }, [loadJiraProjects])
+
+  // Sync scheduler-driven execution into the workflow store so the bar reflects it
+  const editingTaskId = useWorkflowStore((s) => s.editingTaskId)
+  const activeExec = useTaskStore((s) => editingTaskId ? s.activeExecutions[editingTaskId] : undefined)
+  useEffect(() => {
+    // Only sync if the workflow store doesn't already have its OWN execution (from the editor's Run button)
+    const current = useWorkflowStore.getState().execution
+    const isEditorExecution = current && !current.id.startsWith('sched-')
+    if (isEditorExecution) return // Editor-owned execution takes priority
+
+    if (activeExec && (activeExec.status === 'running' || activeExec.status === 'completed' || activeExec.status === 'failed')) {
+      // Build a map of nodeId → status from stepResults
+      const statusMap = new Map<string, 'completed' | 'failed' | 'skipped'>()
+      for (const sr of activeExec.stepResults || []) {
+        statusMap.set(sr.nodeId, sr.status)
+      }
+
+      // Find the currently running node by matching label
+      const currentNodes = useWorkflowStore.getState().nodes
+      let runningNodeId: string | null = null
+      if (activeExec.currentNodeLabel) {
+        const match = currentNodes.find((n) => n.data.label === activeExec.currentNodeLabel)
+        if (match) runningNodeId = match.id
+      }
+
+      // Update node execution statuses to reflect scheduler progress
+      const updatedNodes = currentNodes.map((n) => {
+        const stepStatus = statusMap.get(n.id)
+        if (stepStatus) {
+          return { ...n, data: { ...n.data, executionStatus: stepStatus } }
+        }
+        if (n.id === runningNodeId) {
+          return { ...n, data: { ...n.data, executionStatus: 'running' as const } }
+        }
+        return n
+      })
+
+      const synced: WorkflowExecution = {
+        id: `sched-${editingTaskId}`,
+        taskId: editingTaskId!,
+        status: activeExec.status as WorkflowExecutionStatus,
+        currentNodeId: runningNodeId,
+        currentStep: activeExec.currentStep,
+        totalSteps: activeExec.totalSteps,
+        stepResults: activeExec.stepResults || [],
+        startedAt: activeExec.startedAt,
+        logs: activeExec.logs || [],
+      }
+      useWorkflowStore.setState({ execution: synced, nodes: updatedNodes })
+    } else if (!activeExec && current?.id.startsWith('sched-')) {
+      // Scheduler execution cleared — reset node statuses
+      const currentNodes = useWorkflowStore.getState().nodes
+      const cleaned = currentNodes.map((n) =>
+        n.data.executionStatus ? { ...n, data: { ...n.data, executionStatus: undefined } } : n
+      )
+      useWorkflowStore.setState({ execution: null, nodes: cleaned })
+    }
+  }, [activeExec, editingTaskId])
 
   // Auto-save with 2s debounce
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')

@@ -257,7 +257,22 @@ export function resolveTemplates(text: string, ctx: ExecutionContext): string {
 
 // ── Direct Tool Executor (bypasses AI, calls API directly) ──
 
+const DIRECT_TOOL_TIMEOUT_MS = 60_000
+
 async function executeDirectTool(
+  node: Node<WorkflowNodeData>,
+  ctx: ExecutionContext,
+  callbacks: ExecutionCallbacks,
+): Promise<unknown> {
+  return Promise.race([
+    executeDirectToolInner(node, ctx, callbacks),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Direct tool "${node.data.label || node.data.toolId}" timed out after ${DIRECT_TOOL_TIMEOUT_MS / 1000}s`)), DIRECT_TOOL_TIMEOUT_MS)
+    ),
+  ])
+}
+
+async function executeDirectToolInner(
   node: Node<WorkflowNodeData>,
   ctx: ExecutionContext,
   callbacks: ExecutionCallbacks,

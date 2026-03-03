@@ -186,8 +186,8 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
     return claudeProcess.respondToQuestion(sessionId, answers)
   })
 
-  ipcMain.handle('claude:respondToPlanExit', async (_event, sessionId: string, approved: boolean) => {
-    return claudeProcess.respondToPlanExit(sessionId, approved)
+  ipcMain.handle('claude:respondToPlanExit', async (_event, sessionId: string, approved: boolean, feedback?: string) => {
+    return claudeProcess.respondToPlanExit(sessionId, approved, feedback)
   })
 
   ipcMain.handle('claude:abort', async (_event, sessionId: string) => {

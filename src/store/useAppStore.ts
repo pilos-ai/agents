@@ -5,7 +5,7 @@ import type { DependencyCheckResult, DependencyName } from '../types'
 export type CliStatus = 'checking' | 'ready' | 'missing' | 'installing' | 'install_failed' | 'error' | 'needs_login' | 'logging_in'
 export type SetupStatus = 'checking_deps' | 'deps_missing' | 'checking_cli' | 'ready' | 'missing' | 'installing' | 'install_failed' | 'error' | 'needs_login' | 'logging_in'
 export type SettingsSection = 'project' | 'agents' | 'mcp' | 'integrations' | 'license' | 'general'
-export type AppView = 'dashboard' | 'terminal' | 'tasks' | 'config' | 'analytics' | 'settings' | (string & {})
+export type AppView = 'dashboard' | 'terminal' | 'tasks' | 'results' | 'config' | 'analytics' | 'settings' | (string & {})
 
 interface AppStore {
   // Setup / Dependencies
@@ -33,6 +33,9 @@ interface AppStore {
   // Global settings
   terminalFontSize: number
 
+  // Results tracking
+  resultsLastViewedAt: string | null
+
   // Workspace setup (onboarding wizard)
   workspaceSetupLoaded: boolean
   workspaceSetupComplete: boolean
@@ -53,6 +56,7 @@ interface AppStore {
   setActiveSettingsSection: (section: SettingsSection) => void
   setActiveRightTab: (tab: 'terminal' | 'session') => void
   setTerminalFontSize: (size: number) => void
+  markResultsViewed: () => void
   loadSettings: () => Promise<void>
   loadWorkspaceSetup: () => Promise<void>
   completeWorkspaceSetup: (role?: string) => Promise<void>
@@ -66,6 +70,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   cliStatus: 'checking',
   cliInstallLog: '',
   cliLoginLog: '',
+
+  resultsLastViewedAt: null,
 
   workspaceSetupLoaded: false,
   workspaceSetupComplete: false,
@@ -201,6 +207,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   setActiveRightTab: (tab) => set({ activeRightTab: tab }),
 
+  markResultsViewed: () => {
+    const ts = new Date().toISOString()
+    set({ resultsLastViewedAt: ts })
+    api.settings.set('resultsLastViewedAt', ts)
+  },
+
   setTerminalFontSize: (size) => {
     set({ terminalFontSize: size })
     api.settings.set('terminalFontSize', size)
@@ -212,6 +224,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       terminalFontSize: (all.terminalFontSize as number) || 13,
       sidebarWidth: (all.sidebarWidth as number) || 220,
       rightPanelWidth: (all.rightPanelWidth as number) || 350,
+      resultsLastViewedAt: (all.resultsLastViewedAt as string) || null,
     })
   },
 

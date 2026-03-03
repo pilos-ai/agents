@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { Icon } from '../common/Icon'
 import { useAppStore, type AppView } from '../../store/useAppStore'
 import { useProjectStore } from '../../store/useProjectStore'
 import { useLicenseStore } from '../../store/useLicenseStore'
+import { useTaskStore } from '../../store/useTaskStore'
 
 interface NavItem {
   id: AppView
@@ -183,11 +184,30 @@ export function NavigationSidebar() {
   const activeProject = openProjects.find((p) => p.projectPath === activeProjectPath)
   const agentCount = activeProject?.agents.length || 0
   const mcpCount = (activeProject?.mcpServers || []).filter((s) => s.enabled).length
+  const tasks = useTaskStore((s) => s.tasks)
+  const resultsLastViewedAt = useAppStore((s) => s.resultsLastViewedAt)
+
+  const unseenRunCount = useMemo(() => {
+    if (!resultsLastViewedAt) {
+      // Never viewed — show today's runs as a sensible default
+      const startOfDay = new Date()
+      startOfDay.setHours(0, 0, 0, 0)
+      const startMs = startOfDay.getTime()
+      return tasks.reduce((count, task) =>
+        count + task.runs.filter((r) => new Date(r.startedAt).getTime() >= startMs).length, 0
+      )
+    }
+    const lastViewedMs = new Date(resultsLastViewedAt).getTime()
+    return tasks.reduce((count, task) =>
+      count + task.runs.filter((r) => new Date(r.startedAt).getTime() > lastViewedMs).length, 0
+    )
+  }, [tasks, resultsLastViewedAt])
 
   const workspaceItems: NavItem[] = [
     { id: 'dashboard', label: 'Command Center', icon: 'lucide:layout-dashboard' },
     { id: 'config', label: 'Agent Swarm', icon: 'lucide:bot', badge: agentCount },
     { id: 'tasks', label: 'Tasks', icon: 'lucide:list-checks' },
+    { id: 'results', label: 'Results', icon: 'lucide:file-check-2', badge: unseenRunCount },
     { id: 'terminal', label: 'Terminal', icon: 'lucide:terminal' },
   ]
 

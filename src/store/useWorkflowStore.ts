@@ -309,6 +309,24 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     const edges = workflow?.edges || []
     // Auto-open AI chat for empty workflows (only start node)
     const isEmptyWorkflow = nodes.length <= 1
+
+    // Restore execution state if the task is currently running (e.g. from scheduler)
+    const activeExec = useTaskStore.getState().activeExecutions[taskId]
+    let execution: WorkflowExecution | null = null
+    if (activeExec && (activeExec.status === 'running' || activeExec.status === 'completed' || activeExec.status === 'failed')) {
+      execution = {
+        id: `sched-${taskId}`,
+        taskId,
+        status: activeExec.status as WorkflowExecutionStatus,
+        currentNodeId: null,
+        currentStep: activeExec.currentStep,
+        totalSteps: activeExec.totalSteps,
+        stepResults: activeExec.stepResults || [],
+        startedAt: activeExec.startedAt,
+        logs: activeExec.logs || [],
+      }
+    }
+
     set({
       editingTaskId: taskId,
       nodes,
@@ -316,7 +334,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       selectedNodeId: null,
       history: [{ nodes, edges }],
       historyIndex: 0,
-      execution: null,
+      execution,
       resultsCanvasOpen: false,
       chatMode: isEmptyWorkflow,
       chatMessages: [],
@@ -445,7 +463,17 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
   startExecution: (options) => {
     const { nodes, edges, editingTaskId } = get()
-    if (!editingTaskId) return
+    if (!editingTaskId) {
+      console.warn('[Workflow] Cannot start execution: no task is being edited')
+      return
+    }
+
+    // Prevent double execution if already running (e.g. from scheduler)
+    const activeExec = useTaskStore.getState().activeExecutions[editingTaskId]
+    if (activeExec?.status === 'running') {
+      console.warn('[Workflow] Task is already running (scheduler execution in progress)')
+      return
+    }
     const dryRun = options?.dryRun || false
     const debugMode = options?.debugMode || false
 
@@ -482,6 +510,31 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         data: { ...n.data, executionStatus: 'pending' as const, executionError: undefined },
       })),
     }))
+
+    // Sync with task store: create initial TaskRun entry and set task status to running
+    const taskStore = useTaskStore.getState()
+    const initialRun = {
+      id: execution.id,
+      taskId: editingTaskId,
+      startedAt: execution.startedAt,
+      completedAt: null,
+      duration: null,
+      status: 'success' as const,
+      trigger: 'manual' as const,
+      actions: [],
+      summary: 'Workflow running...',
+      logs: [] as string[],
+    }
+    const currentTasks = taskStore.tasks.map((t) => {
+      if (t.id !== editingTaskId) return t
+      const runs = [initialRun, ...t.runs].slice(0, 100)
+      return { ...t, status: 'running' as const, progress: 0, runs, updatedAt: execution.startedAt }
+    })
+    useTaskStore.setState({ tasks: currentTasks })
+    const projectPath = taskStore.currentProjectPath
+    if (projectPath) {
+      api.settings.set(`v2_tasks:${projectPath}`, currentTasks)
+    }
 
     const workingDirectory = useProjectStore.getState().activeProjectPath || undefined
     let completedSteps = 0
@@ -629,6 +682,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             logs: exec.logs,
             stepResults: exec.stepResults,
           })
+          // Clear active execution after brief delay so UI shows completion state
+          setTimeout(() => useTaskStore.getState().setActiveExecution(editingTaskId, null), 5_000)
         }
       },
 
@@ -660,6 +715,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             logs: exec.logs,
             stepResults: exec.stepResults,
           })
+          // Clear active execution after brief delay so UI shows failure state
+          setTimeout(() => useTaskStore.getState().setActiveExecution(editingTaskId, null), 5_000)
         }
       },
 
@@ -683,6 +740,40 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         })
       } : undefined,
     }, workingDirectory, get().jiraProjectKey || undefined)
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : 'Unknown execution error'
+        console.error('[Workflow] Unhandled execution error:', msg)
+        // Flush any pending logs and mark execution as failed
+        flushLogs()
+        set((s) => ({
+          execution: s.execution ? {
+            ...s.execution,
+            status: 'failed' as WorkflowExecutionStatus,
+            completedAt: new Date().toISOString(),
+            logs: [...(s.execution?.logs || []), `[ERROR] ${msg}`],
+          } : null,
+        }))
+        broadcastExecution(true)
+        // Persist failed run
+        const exec = get().execution
+        if (exec && editingTaskId) {
+          const now = new Date().toISOString()
+          useTaskStore.getState().addRunResult(editingTaskId, {
+            id: exec.id,
+            taskId: editingTaskId,
+            startedAt: exec.startedAt,
+            completedAt: now,
+            duration: exec.startedAt ? Date.now() - new Date(exec.startedAt).getTime() : null,
+            status: 'failed',
+            trigger: 'manual',
+            actions: [{ type: 'error', description: msg }],
+            summary: `Workflow failed: ${msg}`,
+            logs: exec.logs,
+            stepResults: exec.stepResults,
+          })
+          setTimeout(() => useTaskStore.getState().setActiveExecution(editingTaskId, null), 5_000)
+        }
+      })
   },
 
   retryNode: async (nodeId) => {

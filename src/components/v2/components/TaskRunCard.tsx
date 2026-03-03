@@ -1,16 +1,17 @@
 import { useState } from 'react'
 import { Icon } from '../../common/Icon'
 import { StatusDot } from './StatusDot'
+import { SmartDataRenderer } from './SmartDataRenderer'
 import type { TaskRun, RunAction } from '../../../store/useTaskStore'
 import type { WorkflowStepResult } from '../../../types/workflow'
 
-const runStatusColors: Record<string, 'green' | 'orange' | 'gray'> = {
+export const runStatusColors: Record<string, 'green' | 'orange' | 'gray'> = {
   success: 'green',
   partial: 'orange',
   failed: 'gray',
 }
 
-const actionIcons: Record<RunAction['type'], { icon: string; color: string }> = {
+export const actionIcons: Record<RunAction['type'], { icon: string; color: string }> = {
   ticket_created: { icon: 'lucide:plus-circle', color: 'text-green-400' },
   ticket_assigned: { icon: 'lucide:user-check', color: 'text-blue-400' },
   comment_analyzed: { icon: 'lucide:message-circle', color: 'text-zinc-400' },
@@ -18,14 +19,14 @@ const actionIcons: Record<RunAction['type'], { icon: string; color: string }> = 
   error: { icon: 'lucide:alert-circle', color: 'text-red-400' },
 }
 
-function formatDuration(ms: number | null): string {
+export function formatDuration(ms: number | null): string {
   if (ms === null) return '--'
   if (ms < 1000) return `${ms}ms`
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
   return `${Math.round(ms / 60000)}m`
 }
 
-function timeAgo(dateStr: string): string {
+export function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime()
   const mins = Math.floor(diff / 60000)
   if (mins < 1) return 'just now'
@@ -36,7 +37,7 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`
 }
 
-function formatOutput(output: unknown): string {
+export function formatOutput(output: unknown): string {
   if (output === undefined || output === null) return ''
   if (typeof output === 'string') return output
   try {
@@ -46,12 +47,11 @@ function formatOutput(output: unknown): string {
   }
 }
 
-function StepResultCard({ result, label }: { result: WorkflowStepResult; label: string }) {
+export function StepResultCard({ result, label }: { result: WorkflowStepResult; label: string }) {
   const [showOutput, setShowOutput] = useState(false)
   const isCompleted = result.status === 'completed'
   const isFailed = result.status === 'failed'
-  const output = isFailed ? result.error : formatOutput(result.output)
-  const hasOutput = !!output
+  const hasOutput = isFailed ? !!result.error : result.output != null
 
   return (
     <div className={`rounded-lg border ${
@@ -77,13 +77,15 @@ function StepResultCard({ result, label }: { result: WorkflowStepResult; label: 
         )}
       </button>
 
-      {showOutput && output && (
-        <div className="border-t border-pilos-border px-2.5 py-2">
-          <pre className={`text-[10px] leading-relaxed whitespace-pre-wrap break-words max-h-48 overflow-y-auto custom-scrollbar ${
-            isFailed ? 'text-red-400/80' : 'text-zinc-400'
-          }`}>
-            {output}
-          </pre>
+      {showOutput && hasOutput && (
+        <div className="border-t border-pilos-border px-2.5 py-2 max-h-64 overflow-y-auto custom-scrollbar">
+          {isFailed ? (
+            <pre className="text-[10px] text-red-400/80 leading-relaxed whitespace-pre-wrap break-words">
+              {result.error || 'Unknown error'}
+            </pre>
+          ) : (
+            <SmartDataRenderer data={result.output} />
+          )}
         </div>
       )}
     </div>

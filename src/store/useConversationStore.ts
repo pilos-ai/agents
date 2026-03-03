@@ -54,7 +54,7 @@ interface ConversationStore {
   abortSession: () => void
   respondPermission: (allowed: boolean, always?: boolean) => void
   respondToQuestion: (answers: Record<string, string>) => void
-  respondToPlanExit: (approved: boolean) => void
+  respondToPlanExit: (approved: boolean, feedback?: string) => void
   handleClaudeEvent: (event: ClaudeEvent) => void
   addMessage: (message: ConversationMessage) => void
   resetStreaming: () => void
@@ -360,10 +360,10 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     }
   },
 
-  respondToPlanExit: (approved) => {
+  respondToPlanExit: (approved, feedback) => {
     const p = get().exitPlanMode
     if (p) {
-      api.claude.respondToPlanExit(p.sessionId, approved)
+      api.claude.respondToPlanExit(p.sessionId, approved, feedback)
       set({
         exitPlanMode: null,
         isWaitingForResponse: true,

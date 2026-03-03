@@ -47,8 +47,8 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('claude:respondPermission', sessionId, allowed, always),
     respondToQuestion: (sessionId: string, answers: Record<string, string>) =>
       ipcRenderer.invoke('claude:respondToQuestion', sessionId, answers),
-    respondToPlanExit: (sessionId: string, approved: boolean) =>
-      ipcRenderer.invoke('claude:respondToPlanExit', sessionId, approved),
+    respondToPlanExit: (sessionId: string, approved: boolean, feedback?: string) =>
+      ipcRenderer.invoke('claude:respondToPlanExit', sessionId, approved, feedback),
     abort: (sessionId: string) =>
       ipcRenderer.invoke('claude:abort', sessionId),
     onEvent: (callback: (data: unknown) => void) => {
