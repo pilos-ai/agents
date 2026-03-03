@@ -60,6 +60,61 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
     return cliChecker.login()
   })
 
+  // ── CLI Usage Stats ──
+  ipcMain.handle('cli:getUsageStats', async () => {
+    const os = await import('os')
+    const fs = await import('fs/promises')
+    const path = await import('path')
+    const statsPath = path.join(os.homedir(), '.claude', 'stats-cache.json')
+    try {
+      const raw = await fs.readFile(statsPath, 'utf-8')
+      return JSON.parse(raw)
+    } catch {
+      return null
+    }
+  })
+
+  // ── Claude Usage (rate limits from Anthropic API) ──
+  ipcMain.handle('cli:getClaudeUsage', async () => {
+    try {
+      const { execSync } = await import('child_process')
+      const os = await import('os')
+
+      // Read OAuth credentials from macOS Keychain
+      const username = os.userInfo().username
+      let credJson: string
+      try {
+        credJson = execSync(
+          `security find-generic-password -a "${username}" -w -s "Claude Code-credentials"`,
+          { encoding: 'utf-8', timeout: 5000 }
+        ).trim()
+      } catch {
+        // Keychain not available or no credentials stored
+        return null
+      }
+
+      const creds = JSON.parse(credJson)
+      const accessToken = creds?.claudeAiOauth?.accessToken
+      if (!accessToken) return null
+
+      // Call Anthropic usage API
+      const resp = await fetch('https://api.anthropic.com/api/oauth/usage', {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          'anthropic-beta': 'oauth-2025-04-20',
+          'User-Agent': 'claude-code/2.0.15',
+        },
+        signal: AbortSignal.timeout(5000),
+      })
+
+      if (!resp.ok) return null
+      return await resp.json()
+    } catch {
+      return null
+    }
+  })
+
   // ── Dependency Checker ──
   ipcMain.handle('deps:checkAll', async () => {
     return dependencyChecker.checkAll()

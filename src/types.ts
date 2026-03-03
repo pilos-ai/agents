@@ -415,6 +415,25 @@ export interface DependencyInstallInfo {
   instructions: string
 }
 
+// ── CLI Usage Stats ──
+
+export interface ClaudeUsageStats {
+  version: number
+  lastComputedDate: string
+  dailyActivity: Array<{
+    date: string
+    messageCount: number
+    sessionCount: number
+    toolCallCount: number
+  }>
+}
+
+export interface ClaudeUsageLimits {
+  five_hour: { utilization: number | null; resets_at?: string } | null
+  seven_day: { utilization: number | null; resets_at?: string } | null
+  seven_day_opus: { utilization: number | null; resets_at?: string } | null
+}
+
 // ── CLI Check Types ──
 
 export interface CliCheckResult {
@@ -459,6 +478,8 @@ export interface ElectronAPI {
     login: () => Promise<boolean>
     onInstallOutput: (callback: (data: CliInstallOutput) => void) => () => void
     onLoginOutput: (callback: (data: string) => void) => () => void
+    getUsageStats: () => Promise<ClaudeUsageStats | null>
+    getClaudeUsage: () => Promise<ClaudeUsageLimits | null>
   }
   deps: {
     checkAll: () => Promise<DependencyCheckResult>

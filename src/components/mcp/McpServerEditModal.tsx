@@ -13,7 +13,7 @@ export function McpServerEditModal({ server, onSave, onClose }: Props) {
   const template = server ? MCP_SERVER_TEMPLATES.find((t) => t.id === server.id) : null
 
   const [name, setName] = useState(server?.name || '')
-  const [icon, setIcon] = useState(server?.icon || '🔌')
+  const [icon, setIcon] = useState(server?.icon || 'lucide:plug')
   const [description, setDescription] = useState(server?.description || '')
   const [serverType, setServerType] = useState<McpServerType>(server?.config.type || 'stdio')
   const [command, setCommand] = useState(
@@ -172,12 +172,13 @@ export function McpServerEditModal({ server, onSave, onClose }: Props) {
                 className="w-full bg-neutral-800 text-neutral-100 text-sm rounded-md px-3 py-2 outline-none border border-neutral-700 focus:border-blue-500"
               />
             </div>
-            <div className="w-16">
+            <div className="w-40">
               <label className="block text-xs font-medium text-neutral-400 mb-1">Icon</label>
               <input
                 value={icon}
                 onChange={(e) => setIcon(e.target.value)}
-                className="w-full bg-neutral-800 text-neutral-100 text-sm rounded-md px-3 py-2 outline-none border border-neutral-700 focus:border-blue-500 text-center"
+                placeholder="lucide:plug"
+                className="w-full bg-neutral-800 text-neutral-100 text-xs rounded-md px-3 py-2 outline-none border border-neutral-700 focus:border-blue-500 font-mono"
               />
             </div>
           </div>

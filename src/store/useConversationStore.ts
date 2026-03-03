@@ -49,6 +49,7 @@ interface ConversationStore {
   setActiveConversation: (id: string | null) => Promise<void>
   createConversation: (title?: string) => Promise<string>
   deleteConversation: (id: string) => Promise<void>
+  renameConversation: (id: string, title: string) => Promise<void>
   sendMessage: (text: string, images?: ImageAttachment[]) => Promise<void>
   abortSession: () => void
   respondPermission: (allowed: boolean, always?: boolean) => void
@@ -205,6 +206,12 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     if (get().activeConversationId === id) {
       set({ activeConversationId: null, messages: [] })
     }
+    const projectPath = useProjectStore.getState().activeProjectPath || ''
+    await get().loadConversations(projectPath)
+  },
+
+  renameConversation: async (id, title) => {
+    await api.conversations.updateTitle(id, title)
     const projectPath = useProjectStore.getState().activeProjectPath || ''
     await get().loadConversations(projectPath)
   },

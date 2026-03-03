@@ -120,6 +120,13 @@ export default function TasksPage() {
     }
   }, [activeProjectPath])
 
+  // Listen for header "New Task" button
+  useEffect(() => {
+    const handler = () => setShowCreateModal(true)
+    window.addEventListener('pilos:new-task', handler)
+    return () => window.removeEventListener('pilos:new-task', handler)
+  }, [setShowCreateModal])
+
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
       if (filter.status !== 'all' && t.status !== filter.status) return false
@@ -183,13 +190,6 @@ export default function TasksPage() {
           >
             <Icon icon="lucide:sparkles" className="text-blue-400 text-xs" />
             AI Generate
-          </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-lg shadow-blue-600/20 transition-all flex items-center gap-1.5"
-          >
-            <Icon icon="lucide:plus" className="text-xs" />
-            New Task
           </button>
         </div>
 

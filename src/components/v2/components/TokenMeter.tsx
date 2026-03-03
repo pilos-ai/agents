@@ -37,7 +37,7 @@ export function TokenMeter({ used, total, size = 64, color = '#3b82f6', label }:
           className="transition-all duration-700"
         />
       </svg>
-      <span className="text-xs font-bold text-white z-10">
+      <span className="text-[9px] font-bold text-white z-10">
         {label ?? `${Math.round(percent * 100)}%`}
       </span>
     </div>

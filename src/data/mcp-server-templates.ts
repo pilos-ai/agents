@@ -10,7 +10,7 @@ export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
   {
     id: 'github',
     name: 'GitHub',
-    icon: '🐙',
+    icon: 'mdi:github',
     description: 'Issues, PRs, repos, and code search',
     category: 'Development',
     config: {
@@ -31,7 +31,7 @@ export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
   {
     id: 'supabase',
     name: 'Supabase',
-    icon: '⚡',
+    icon: 'simple-icons:supabase',
     description: 'Database queries, auth, and storage',
     category: 'Database',
     config: {
@@ -53,7 +53,7 @@ export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
   {
     id: 'filesystem',
     name: 'Filesystem',
-    icon: '📁',
+    icon: 'lucide:folder-open',
     description: 'Read, write, and search files',
     category: 'Development',
     config: {
@@ -72,7 +72,7 @@ export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
   {
     id: 'slack',
     name: 'Slack',
-    icon: '💬',
+    icon: 'simple-icons:slack',
     description: 'Team messaging and notifications',
     category: 'Automation',
     config: {
@@ -92,7 +92,7 @@ export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
   {
     id: 'computer-use',
     name: 'Computer Use',
-    icon: '🖥️',
+    icon: 'lucide:monitor',
     description: 'Desktop automation: screenshots, mouse, keyboard, and window management (macOS)',
     category: 'Automation',
     config: {

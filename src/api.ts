@@ -12,6 +12,8 @@ const stubAPI: ElectronAPI = {
     login: () => Promise.resolve(true),
     onInstallOutput: noopUnsub,
     onLoginOutput: noopUnsub,
+    getUsageStats: () => Promise.resolve(null),
+    getClaudeUsage: () => Promise.resolve(null),
   },
   deps: {
     checkAll: () => Promise.resolve({

@@ -68,6 +68,16 @@
 * {
   scrollbar-width: thin;
   scrollbar-color: #27272a transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Allow selection in inputs, textareas, code blocks, and terminal */
+input, textarea, [contenteditable="true"],
+pre, code, .xterm, .markdown-content,
+.selectable {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 body {

@@ -5,6 +5,7 @@ import { McpServerEditModal } from './McpServerEditModal'
 import { useLicenseStore } from '../../store/useLicenseStore'
 import { ProBadge } from '../common/ProBadge'
 import { loadProModule } from '../../lib/pro'
+import { Icon } from '../common/Icon'
 
 interface Props {
   servers: McpServer[]
@@ -94,7 +95,9 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
                   : 'border-neutral-800 bg-neutral-900/50 opacity-50'
               }`}
             >
-              <span className="text-lg shrink-0">{server.icon}</span>
+              <div className="w-8 h-8 rounded-lg bg-neutral-700/50 flex items-center justify-center shrink-0">
+                <Icon icon={server.icon} className="text-base text-neutral-300" />
+              </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-neutral-200">{server.name}</span>
@@ -161,7 +164,9 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
                       onClick={() => handleTemplateAdd(template.id)}
                       className="flex items-center gap-2 p-2 rounded-lg border border-neutral-700 bg-neutral-800/50 hover:border-blue-500/50 hover:bg-blue-500/5 transition-colors text-left"
                     >
-                      <span className="text-base">{template.icon}</span>
+                      <div className="w-7 h-7 rounded-md bg-neutral-700/50 flex items-center justify-center shrink-0">
+                        <Icon icon={template.icon} className="text-sm text-neutral-300" />
+                      </div>
                       <div className="min-w-0">
                         <div className="text-xs font-medium text-neutral-200">{template.name}</div>
                         <div className="text-[10px] text-neutral-500 truncate">{template.description}</div>

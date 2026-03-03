@@ -31,6 +31,52 @@ function ConversationSidebar() {
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
   const setActiveConversation = useConversationStore((s) => s.setActiveConversation)
   const createConversation = useConversationStore((s) => s.createConversation)
+  const deleteConversation = useConversationStore((s) => s.deleteConversation)
+  const renameConversation = useConversationStore((s) => s.renameConversation)
+
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null)
+  const editInputRef = useRef<HTMLInputElement>(null)
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (editingId && editInputRef.current) {
+      editInputRef.current.focus()
+      editInputRef.current.select()
+    }
+  }, [editingId])
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!contextMenu) return
+    const handler = () => setContextMenu(null)
+    window.addEventListener('click', handler)
+    return () => window.removeEventListener('click', handler)
+  }, [contextMenu])
+
+  const startRename = (id: string, currentTitle: string) => {
+    setEditingId(id)
+    setEditTitle(currentTitle || 'New Conversation')
+    setContextMenu(null)
+  }
+
+  const commitRename = async () => {
+    if (editingId && editTitle.trim()) {
+      await renameConversation(editingId, editTitle.trim())
+    }
+    setEditingId(null)
+  }
+
+  const handleDelete = async (id: string) => {
+    setContextMenu(null)
+    await deleteConversation(id)
+  }
+
+  const handleContextMenu = (e: React.MouseEvent, id: string) => {
+    e.preventDefault()
+    setContextMenu({ id, x: e.clientX, y: e.clientY })
+  }
 
   return (
     <div className="w-56 border-r border-pilos-border bg-pilos-bg flex flex-col flex-shrink-0">
@@ -45,20 +91,61 @@ function ConversationSidebar() {
       </div>
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {conversations.map((conv) => (
-          <button
+          <div
             key={conv.id}
-            onClick={() => setActiveConversation(conv.id)}
-            className={`w-full text-left px-3 py-2.5 text-xs transition-colors border-b border-pilos-border/50 ${
-              activeConversationId === conv.id
-                ? 'bg-blue-500/10 text-blue-400'
-                : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-white'
-            }`}
+            onContextMenu={(e) => handleContextMenu(e, conv.id)}
+            className="group relative"
           >
-            <p className="truncate font-medium">{conv.title || 'New Conversation'}</p>
-            <p className="text-[10px] text-zinc-600 mt-0.5">
-              {new Date(conv.updated_at).toLocaleDateString()}
-            </p>
-          </button>
+            {editingId === conv.id ? (
+              <div className="px-3 py-2.5 border-b border-pilos-border/50">
+                <input
+                  ref={editInputRef}
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitRename()
+                    if (e.key === 'Escape') setEditingId(null)
+                  }}
+                  className="w-full bg-zinc-800 border border-blue-500/50 rounded px-2 py-1 text-xs text-white outline-none"
+                />
+              </div>
+            ) : (
+              <button
+                onClick={() => setActiveConversation(conv.id)}
+                onDoubleClick={() => startRename(conv.id, conv.title)}
+                className={`w-full text-left px-3 py-2.5 text-xs transition-colors border-b border-pilos-border/50 ${
+                  activeConversationId === conv.id
+                    ? 'bg-blue-500/10 text-blue-400'
+                    : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-white'
+                }`}
+              >
+                <p className="truncate font-medium pr-6">{conv.title || 'New Conversation'}</p>
+                <p className="text-[10px] text-zinc-600 mt-0.5">
+                  {new Date(conv.updated_at).toLocaleDateString()}
+                </p>
+              </button>
+            )}
+            {/* Hover actions */}
+            {editingId !== conv.id && (
+              <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={(e) => { e.stopPropagation(); startRename(conv.id, conv.title) }}
+                  className="p-1 text-zinc-600 hover:text-zinc-300 hover:bg-zinc-700 rounded transition-colors"
+                  title="Rename"
+                >
+                  <Icon icon="lucide:pencil" className="text-[10px]" />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDelete(conv.id) }}
+                  className="p-1 text-zinc-600 hover:text-red-400 hover:bg-zinc-700 rounded transition-colors"
+                  title="Delete"
+                >
+                  <Icon icon="lucide:trash-2" className="text-[10px]" />
+                </button>
+              </div>
+            )}
+          </div>
         ))}
         {conversations.length === 0 && (
           <div className="p-4 text-center">
@@ -66,12 +153,42 @@ function ConversationSidebar() {
           </div>
         )}
       </div>
+
+      {/* Context menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl py-1 min-w-[140px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => {
+              const conv = conversations.find((c) => c.id === contextMenu.id)
+              if (conv) startRename(conv.id, conv.title)
+            }}
+            className="w-full text-left px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700 flex items-center gap-2"
+          >
+            <Icon icon="lucide:pencil" className="text-[10px]" />
+            Rename
+          </button>
+          <button
+            onClick={() => handleDelete(contextMenu.id)}
+            className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-zinc-700 flex items-center gap-2"
+          >
+            <Icon icon="lucide:trash-2" className="text-[10px]" />
+            Delete
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
 function TerminalControls() {
   const messages = useConversationStore((s) => s.messages)
+  const activeConversationId = useConversationStore((s) => s.activeConversationId)
+  const conversations = useConversationStore((s) => s.conversations)
+  const [copied, setCopied] = useState(false)
 
   const handleCopyAll = () => {
     const text = messages
@@ -79,15 +196,52 @@ function TerminalControls() {
       .map((m) => `${m.role === 'user' ? '> ' : ''}${m.content}`)
       .join('\n\n')
     navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleExport = () => {
+    const conv = conversations.find((c) => c.id === activeConversationId)
+    const title = conv?.title || 'conversation'
+
+    const lines: string[] = [`# ${title}`, '']
+    for (const msg of messages) {
+      if (msg.type === 'text') {
+        if (msg.role === 'user') {
+          lines.push(`**User:**`, '', msg.content, '')
+        } else {
+          const agent = msg.agentName ? `**${msg.agentName}:**` : '**Assistant:**'
+          lines.push(agent, '', msg.content, '')
+        }
+      } else if (msg.type === 'tool_use' && msg.toolName) {
+        lines.push(`> Tool: \`${msg.toolName}\``, '')
+      }
+    }
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${title.replace(/[^a-zA-Z0-9_-]/g, '_')}.md`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   return (
     <div className="flex items-center gap-1 px-4 py-1.5 border-b border-pilos-border bg-pilos-card/30 flex-shrink-0">
-      <button onClick={handleCopyAll} className="px-2 py-1 text-[10px] text-zinc-500 hover:text-white hover:bg-zinc-800 rounded transition-colors flex items-center gap-1">
-        <Icon icon="lucide:copy" className="text-[10px]" />
-        Copy All
+      <button
+        onClick={handleCopyAll}
+        disabled={messages.length === 0}
+        className="px-2 py-1 text-[10px] text-zinc-500 hover:text-white hover:bg-zinc-800 disabled:opacity-30 rounded transition-colors flex items-center gap-1"
+      >
+        <Icon icon={copied ? 'lucide:check' : 'lucide:copy'} className="text-[10px]" />
+        {copied ? 'Copied' : 'Copy All'}
       </button>
-      <button className="px-2 py-1 text-[10px] text-zinc-500 hover:text-white hover:bg-zinc-800 rounded transition-colors flex items-center gap-1">
+      <button
+        onClick={handleExport}
+        disabled={messages.length === 0}
+        className="px-2 py-1 text-[10px] text-zinc-500 hover:text-white hover:bg-zinc-800 disabled:opacity-30 rounded transition-colors flex items-center gap-1"
+      >
         <Icon icon="lucide:download" className="text-[10px]" />
         Export
       </button>
@@ -318,10 +472,22 @@ export default function TerminalPage() {
   const currentAgent = agents.find((a) => a.name === streaming.currentAgentName)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const prevConversationId = useRef(activeConversationId)
+  const switchedAt = useRef(0)
 
+  // Track conversation switches
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages.length, streaming.text])
+    if (prevConversationId.current !== activeConversationId) {
+      prevConversationId.current = activeConversationId
+      switchedAt.current = Date.now()
+    }
+  }, [activeConversationId])
+
+  // Scroll: instant after conversation switch, smooth for new messages during streaming
+  useEffect(() => {
+    const recentSwitch = Date.now() - switchedAt.current < 500
+    messagesEndRef.current?.scrollIntoView({ behavior: recentSwitch ? 'instant' : 'smooth' })
+  }, [messages.length, activeConversationId])
 
   const [sidebarOpen, setSidebarOpen] = useState(true)
 

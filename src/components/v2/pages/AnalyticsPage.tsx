@@ -18,22 +18,25 @@ function BarChart({ data }: { data: { date: string; tokens: number; cost: number
   const maxTokens = Math.max(...data.map((d) => d.tokens), 1)
 
   return (
-    <div className="h-48 flex items-end gap-1 px-2">
+    <div className="h-48 flex gap-1 px-2">
       {data.map((d) => {
         const height = (d.tokens / maxTokens) * 100
         return (
-          <div key={d.date} className="flex-1 flex flex-col items-center gap-1 group relative">
-            <div
-              className="w-full bg-gradient-to-t from-blue-600/60 to-blue-400/20 rounded-t transition-all duration-300 hover:from-blue-500/80 hover:to-blue-400/40 min-h-[2px]"
-              style={{ height: `${Math.max(height, 2)}%` }}
-            />
-            <span className="text-[8px] text-zinc-700 truncate w-full text-center">
+          <div key={d.date} className="flex-1 flex flex-col items-center group relative">
+            {/* Bar area — flex-1 gives it a definite height so % works */}
+            <div className="flex-1 w-full flex items-end">
+              <div
+                className="w-full bg-gradient-to-t from-blue-600/60 to-blue-400/20 rounded-t transition-all duration-300 hover:from-blue-500/80 hover:to-blue-400/40 min-h-[2px]"
+                style={{ height: `${Math.max(height, 2)}%` }}
+              />
+            </div>
+            <span className="text-[8px] text-zinc-700 truncate w-full text-center mt-1">
               {d.date.slice(5)}
             </span>
             {/* Tooltip */}
-            <div className="absolute bottom-full mb-2 hidden group-hover:block bg-zinc-800 border border-pilos-border rounded-lg px-2 py-1 whitespace-nowrap z-10">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full hidden group-hover:block bg-zinc-800 border border-pilos-border rounded-lg px-2 py-1 whitespace-nowrap z-10">
               <p className="text-[10px] text-white font-bold">{d.tokens.toLocaleString()} tokens</p>
-              <p className="text-[10px] text-zinc-400">${d.cost.toFixed(4)}</p>
+              <p className="text-[10px] text-zinc-400">{d.date}</p>
             </div>
           </div>
         )
@@ -58,7 +61,6 @@ function ActivityTable({ entries }: { entries: ReturnType<typeof useAnalyticsSto
         <div className="w-32 text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Time</div>
         <div className="flex-1 text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Agent</div>
         <div className="w-24 text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Tokens</div>
-        <div className="w-20 text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Cost</div>
         <div className="w-20 text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Duration</div>
         <div className="w-16 text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Status</div>
       </div>
@@ -69,7 +71,6 @@ function ActivityTable({ entries }: { entries: ReturnType<typeof useAnalyticsSto
           </div>
           <div className="flex-1 text-xs text-zinc-300">{entry.agentName || 'Claude'}</div>
           <div className="w-24 text-xs text-white font-mono">{entry.tokens.toLocaleString()}</div>
-          <div className="w-20 text-xs text-zinc-400">${entry.cost.toFixed(4)}</div>
           <div className="w-20 text-xs text-zinc-400">{(entry.durationMs / 1000).toFixed(1)}s</div>
           <div className="w-16">
             <span className={`text-[10px] font-medium ${entry.success ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -103,9 +104,9 @@ export default function AnalyticsPage() {
             icon="lucide:hash"
           />
           <StatCard
-            label="Total Cost"
-            value={`$${summary.totalCost.toFixed(2)}`}
-            icon="lucide:dollar-sign"
+            label="Total Sessions"
+            value={summary.totalSessions}
+            icon="lucide:messages-square"
           />
           <StatCard
             label="Avg Response"

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Icon } from '../../common/Icon'
 import { IconPicker } from '../../common/IconPicker'
 import { GradientAvatar } from '../components/GradientAvatar'
@@ -8,11 +8,13 @@ import { FormInput } from '../components/FormInput'
 import { FormSelect } from '../components/FormSelect'
 import { FormTextarea } from '../components/FormTextarea'
 import { FormToggle } from '../components/FormToggle'
+import { AddAgentDialog } from '../AddAgentDialog'
 import { useProjectStore } from '../../../store/useProjectStore'
 import { useLicenseStore } from '../../../store/useLicenseStore'
 import type { AgentDefinition, AgentCapabilities, ResponseFormat, McpServer } from '../../../types'
-import { AGENT_TEMPLATES, AVAILABLE_TOOLS, DEFAULT_CAPABILITIES } from '../../../data/agent-templates'
+import { AVAILABLE_TOOLS, DEFAULT_CAPABILITIES } from '../../../data/agent-templates'
 import { MCP_SERVER_TEMPLATES } from '../../../data/mcp-server-templates'
+import { useAnalyticsStore } from '../../../store/useAnalyticsStore'
 
 const CONFIG_TABS = ['Basic Settings', 'Capabilities', 'Integrations', 'Memory & Context', 'Advanced'] as const
 
@@ -36,7 +38,7 @@ function AgentListItem({ agent, isSelected, onClick }: { agent: AgentDefinition;
   )
 }
 
-function AgentForm({ agent, onUpdate, mcpServers }: { agent: AgentDefinition; onUpdate: (updates: Partial<AgentDefinition>) => void; mcpServers: McpServer[] }) {
+function AgentForm({ agent, onUpdate, onDelete, mcpServers }: { agent: AgentDefinition; onUpdate: (updates: Partial<AgentDefinition>) => void; onDelete: () => void; mcpServers: McpServer[] }) {
   const [activeTab, setActiveTab] = useState<typeof CONFIG_TABS[number]>('Basic Settings')
 
   return (
@@ -663,17 +665,16 @@ function AgentForm({ agent, onUpdate, mcpServers }: { agent: AgentDefinition; on
 
       {/* Footer Actions */}
       <div className="flex items-center justify-between px-6 py-3 border-t border-pilos-border flex-shrink-0">
-        <button className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5">
+        <button
+          onClick={onDelete}
+          className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5"
+        >
           <Icon icon="lucide:trash-2" className="text-xs" />
           Delete Agent
         </button>
-        <div className="flex items-center gap-2">
-          <button className="px-4 py-2 text-zinc-500 hover:text-white text-xs font-medium transition-colors">
-            Discard Changes
-          </button>
-          <button className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-lg shadow-blue-600/20 transition-all">
-            Save Configuration
-          </button>
+        <div className="flex items-center gap-1.5 text-zinc-600">
+          <Icon icon="lucide:check-circle" className="text-xs text-emerald-500/60" />
+          <span className="text-[10px]">Changes saved automatically</span>
         </div>
       </div>
     </div>
@@ -694,20 +695,42 @@ export default function ConfigPage() {
   const agents = activeTab?.agents || []
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(agents[0]?.id || null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [addDialogOpen, setAddDialogOpen] = useState(false)
 
   const selectedAgent = agents.find((a) => a.id === selectedAgentId)
   const filteredAgents = agents.filter((a) =>
     a.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  const nextTemplate = AGENT_TEMPLATES.find((t) => !agents.some((a) => a.id === t.id))
-  const atLimit = Number.isFinite(flags.maxAgents) && agents.length >= flags.maxAgents
-  const canAddAgent = !!activeTab && !!nextTemplate && !atLimit
+  // Per-agent analytics
+  const allEntries = useAnalyticsStore((s) => s.entries)
+  const agentStats = useMemo(() => {
+    if (!selectedAgent) return null
+    const entries = allEntries.filter((e) => e.agentName === selectedAgent.name)
+    if (entries.length === 0) return null
+    const successCount = entries.filter((e) => e.success).length
+    const successRate = Math.round((successCount / entries.length) * 100)
+    const avgTime = entries.reduce((sum, e) => sum + e.durationMs, 0) / entries.length
+    const totalTokens = entries.reduce((sum, e) => sum + e.tokens, 0)
+    return { sessions: entries.length, successRate, avgTime, totalTokens }
+  }, [selectedAgent, allEntries])
 
-  const handleAddAgent = () => {
-    if (!canAddAgent || !nextTemplate) return
-    addAgent({ ...nextTemplate })
-    setSelectedAgentId(nextTemplate.id)
+  const atLimit = Number.isFinite(flags.maxAgents) && agents.length >= flags.maxAgents
+  const canAddAgent = !!activeTab && !atLimit
+
+  // Listen for header "New Agent" button
+  const openAddDialog = useCallback(() => {
+    if (canAddAgent) setAddDialogOpen(true)
+  }, [canAddAgent])
+
+  useEffect(() => {
+    window.addEventListener('pilos:new-agent', openAddDialog)
+    return () => window.removeEventListener('pilos:new-agent', openAddDialog)
+  }, [openAddDialog])
+
+  const handleAddAgent = (agent: AgentDefinition) => {
+    addAgent(agent)
+    setSelectedAgentId(agent.id)
   }
 
   const handleUpdateAgent = (updates: Partial<AgentDefinition>) => {
@@ -744,7 +767,7 @@ export default function ConfigPage() {
             />
           </div>
           <button
-            onClick={handleAddAgent}
+            onClick={() => setAddDialogOpen(true)}
             disabled={!canAddAgent}
             className={`w-full flex items-center justify-center gap-2 px-3 py-2 bg-pilos-card border border-pilos-border rounded-lg text-xs font-medium transition-colors ${
               canAddAgent ? 'hover:border-zinc-600 text-zinc-300' : 'opacity-50 cursor-not-allowed text-zinc-600'
@@ -755,9 +778,6 @@ export default function ConfigPage() {
           </button>
           {atLimit && (
             <p className="text-[10px] text-zinc-600 text-center mt-1">Agent limit reached ({flags.maxAgents})</p>
-          )}
-          {!nextTemplate && !atLimit && agents.length > 0 && (
-            <p className="text-[10px] text-zinc-600 text-center mt-1">All templates added</p>
           )}
         </div>
         <div className="flex-1 overflow-y-auto custom-scrollbar px-2 space-y-0.5">
@@ -779,7 +799,15 @@ export default function ConfigPage() {
 
       {/* Config Form */}
       {selectedAgent ? (
-        <AgentForm agent={selectedAgent} onUpdate={handleUpdateAgent} mcpServers={activeTab?.mcpServers || []} />
+        <AgentForm
+          agent={selectedAgent}
+          onUpdate={handleUpdateAgent}
+          onDelete={() => {
+            removeAgent(selectedAgent.id)
+            setSelectedAgentId(agents.find((a) => a.id !== selectedAgent.id)?.id || null)
+          }}
+          mcpServers={activeTab?.mcpServers || []}
+        />
       ) : (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
@@ -795,27 +823,34 @@ export default function ConfigPage() {
         <div className="w-64 border-l border-pilos-border bg-pilos-bg p-4 overflow-y-auto custom-scrollbar flex-shrink-0">
           <h3 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-4">Performance</h3>
           <div className="flex flex-col items-center p-4 bg-pilos-card border border-pilos-border rounded-xl mb-4">
-            <TokenMeter used={75} total={100} size={64} label="75%" />
-            <p className="text-[10px] text-zinc-500 mt-2">Token Efficiency</p>
+            <TokenMeter
+              used={agentStats?.successRate ?? 0}
+              total={100}
+              size={64}
+              color={agentStats ? (agentStats.successRate >= 90 ? '#10b981' : agentStats.successRate >= 70 ? '#f59e0b' : '#ef4444') : '#3b82f6'}
+              label={agentStats ? `${agentStats.successRate}%` : '--'}
+            />
+            <p className="text-[10px] text-zinc-500 mt-2">Success Rate</p>
           </div>
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-zinc-500">Success Rate</span>
-              <span className="text-xs font-bold text-emerald-400">98%</span>
-            </div>
-            <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-500 rounded-full" style={{ width: '98%' }} />
-            </div>
-
-            <div className="flex items-center justify-between mt-3">
-              <span className="text-[10px] text-zinc-500">Tasks Done</span>
-              <span className="text-xs font-bold text-white">--</span>
+              <span className="text-[10px] text-zinc-500">Sessions</span>
+              <span className="text-xs font-bold text-white">{agentStats?.sessions ?? '--'}</span>
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-zinc-500">Avg Time</span>
-              <span className="text-xs font-bold text-white">--</span>
+              <span className="text-[10px] text-zinc-500">Total Tokens</span>
+              <span className="text-xs font-bold text-white">
+                {agentStats ? (agentStats.totalTokens > 1000 ? `${(agentStats.totalTokens / 1000).toFixed(1)}k` : agentStats.totalTokens) : '--'}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-zinc-500">Avg Response</span>
+              <span className="text-xs font-bold text-white">
+                {agentStats ? `${(agentStats.avgTime / 1000).toFixed(1)}s` : '--'}
+              </span>
             </div>
           </div>
 
@@ -880,6 +915,13 @@ export default function ConfigPage() {
           </div>
         </div>
       )}
+
+      <AddAgentDialog
+        open={addDialogOpen}
+        onClose={() => setAddDialogOpen(false)}
+        onAdd={handleAddAgent}
+        existingIds={agents.map((a) => a.id)}
+      />
     </div>
   )
 }

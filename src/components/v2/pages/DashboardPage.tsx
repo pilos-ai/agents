@@ -6,10 +6,12 @@ import { ActiveTaskCard } from '../components/ActiveTaskCard'
 import { useProjectStore } from '../../../store/useProjectStore'
 import { useConversationStore } from '../../../store/useConversationStore'
 import { useAppStore } from '../../../store/useAppStore'
-import { useAnalyticsStore, computeSummary } from '../../../store/useAnalyticsStore'
+import { useAnalyticsStore, computeSummary, computeRecentEntries } from '../../../store/useAnalyticsStore'
+import { useUsageStore } from '../../../store/useUsageStore'
 import { useTaskStore } from '../../../store/useTaskStore'
 import { api } from '../../../api'
-import type { AgentDefinition } from '../../../types'
+import { AVAILABLE_TOOLS } from '../../../data/agent-templates'
+import type { AgentDefinition, ConversationMessage } from '../../../types'
 
 // ── Agent Status Helpers ──
 
@@ -21,19 +23,9 @@ const statusConfig: Record<AgentStatus, { label: string; bg: string; text: strin
   idle: { label: 'IDLE', bg: 'bg-zinc-700/30', text: 'text-zinc-500', dot: 'gray' },
 }
 
-const agentModels = ['Claude 3.5 Sonnet', 'Claude 3 Haiku', 'Claude 3 Opus', 'Claude 3.5 Sonnet']
-const agentTasks = [
-  '"Optimizing the database query layer for the core microservice..."',
-  '"Running integration tests for PR #492. Found 2 potential memory leaks."',
-  'No active tasks. Last active 2 hours ago.',
-  '"Composing visual design tokens for the landing page refresh..."',
-]
-
-function AgentCard({ agent, index, status }: { agent: AgentDefinition; index: number; status: AgentStatus }) {
+function AgentCard({ agent, status }: { agent: AgentDefinition; status: AgentStatus }) {
   const setActiveView = useAppStore((s) => s.setActiveView)
   const cfg = statusConfig[status]
-  const model = agentModels[index % agentModels.length]
-  const task = agentTasks[index % agentTasks.length]
 
   return (
     <button
@@ -45,7 +37,7 @@ function AgentCard({ agent, index, status }: { agent: AgentDefinition; index: nu
           <GradientAvatar gradient={agent.color} icon={agent.icon} size="md" />
           <div>
             <h4 className="text-sm font-bold text-white">{agent.name}</h4>
-            <p className="text-[10px] text-zinc-600">{model}</p>
+            <p className="text-[10px] text-zinc-600">{agent.role}</p>
           </div>
         </div>
         <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text}`}>
@@ -53,13 +45,22 @@ function AgentCard({ agent, index, status }: { agent: AgentDefinition; index: nu
         </span>
       </div>
 
-      <p className="text-xs text-zinc-400 italic leading-relaxed mb-3 line-clamp-2">{task}</p>
+      <div className="flex flex-wrap gap-1 mb-3">
+        {agent.expertise.slice(0, 3).map((e) => (
+          <span key={e} className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-500">{e}</span>
+        ))}
+      </div>
 
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <div className="w-5 h-5 rounded bg-zinc-800 flex items-center justify-center">
-            <Icon icon="lucide:plug" className="text-zinc-600 text-[10px]" />
-          </div>
+        <div className="flex items-center gap-1">
+          {(agent.capabilities?.tools || []).slice(0, 4).map((toolId) => {
+            const tool = AVAILABLE_TOOLS.find((t) => t.id === toolId)
+            return (
+              <div key={toolId} className="w-5 h-5 rounded bg-zinc-800 flex items-center justify-center" title={tool?.name || toolId}>
+                <Icon icon={tool?.icon || 'lucide:plug'} className="text-zinc-500 text-[10px]" />
+              </div>
+            )
+          })}
         </div>
         <Icon icon="lucide:chevron-right" className="text-zinc-700 text-xs" />
       </div>
@@ -69,87 +70,260 @@ function AgentCard({ agent, index, status }: { agent: AgentDefinition; index: nu
 
 // ── Mini Bar Chart ──
 
-function MiniBarChart() {
-  const bars = [40, 65, 55, 80, 70, 90, 75]
+function MiniBarChart({ values }: { values: number[] }) {
+  const maxVal = Math.max(...values, 1)
   return (
     <div className="flex items-end gap-1 h-10">
-      {bars.map((h, i) => (
-        <div
-          key={i}
-          className="w-3 bg-blue-500/30 rounded-sm transition-all"
-          style={{ height: `${h}%` }}
-        >
+      {values.map((v, i) => {
+        const pct = Math.max(5, (v / maxVal) * 100)
+        return (
           <div
-            className="w-full bg-blue-500 rounded-sm"
-            style={{ height: `${Math.max(30, h - 20)}%`, marginTop: 'auto' }}
-          />
-        </div>
-      ))}
+            key={i}
+            className="flex-1 bg-blue-500/20 rounded-sm transition-all"
+            style={{ height: `${pct}%` }}
+          >
+            <div
+              className="w-full bg-blue-500 rounded-sm"
+              style={{ height: '100%' }}
+            />
+          </div>
+        )
+      })}
     </div>
   )
+}
+
+// ── Live Monitoring ──
+
+function LiveMonitoring() {
+  const analyticsEntries = useAnalyticsStore((s) => s.entries)
+  const limits = useUsageStore((s) => s.limits)
+  const messages = useConversationStore((s) => s.messages)
+  const isStreaming = useConversationStore((s) => s.streaming.isStreaming)
+
+  const recent = useMemo(() => computeRecentEntries(analyticsEntries, 10), [analyticsEntries])
+  const summary = useMemo(() => computeSummary(analyticsEntries), [analyticsEntries])
+
+  // Bar chart: tokens per recent entry (last 7)
+  const barValues = useMemo(() => {
+    const vals = recent.slice(0, 7).reverse().map((e) => e.tokens)
+    return vals.length > 0 ? vals : [0, 0, 0, 0, 0, 0, 0]
+  }, [recent])
+
+  const sessionUsage = limits?.five_hour?.utilization ?? null
+  const weekUsage = limits?.seven_day?.utilization ?? null
+  const totalMessages = messages.length
+  const avgTokensPerTurn = summary.totalSessions > 0
+    ? Math.round(summary.totalTokens / summary.totalSessions)
+    : 0
+
+  return (
+    <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Icon icon="lucide:activity" className={`text-sm ${isStreaming ? 'text-orange-400 animate-pulse' : 'text-orange-400'}`} />
+          <h3 className="text-xs font-bold text-white">Live Monitoring</h3>
+        </div>
+        {isStreaming && (
+          <span className="text-[9px] font-bold text-orange-400 uppercase tracking-wider animate-pulse">Live</span>
+        )}
+      </div>
+
+      {/* Token Throughput */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] text-zinc-500">Tokens / Turn</span>
+          <span className="text-xs font-bold text-white font-mono">
+            {avgTokensPerTurn > 0 ? `${(avgTokensPerTurn / 1000).toFixed(1)}k` : '--'}
+          </span>
+        </div>
+        <MiniBarChart values={barValues} />
+      </div>
+
+      {/* Metrics */}
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+            <span className="text-xs text-zinc-400">Session Usage</span>
+          </div>
+          <span className="text-xs font-mono text-white">
+            {sessionUsage !== null ? `${Math.round(sessionUsage)}` : '--'}<span className="text-zinc-600">%</span>
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+            <span className="text-xs text-zinc-400">Weekly Usage</span>
+          </div>
+          <span className="text-xs font-mono text-white">
+            {weekUsage !== null ? `${Math.round(weekUsage)}` : '--'}<span className="text-zinc-600">%</span>
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <span className="text-xs text-zinc-400">Messages</span>
+          </div>
+          <span className="text-xs font-mono text-white">{totalMessages}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+            <span className="text-xs text-zinc-400">Avg Latency</span>
+          </div>
+          <span className="text-xs font-mono text-white">
+            {summary.avgResponseTime > 0 ? Math.round(summary.avgResponseTime) : '--'}<span className="text-zinc-600">ms</span>
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-cyan-500" />
+            <span className="text-xs text-zinc-400">Total Tokens</span>
+          </div>
+          <span className="text-xs font-mono text-white">
+            {summary.totalTokens > 0 ? `${(summary.totalTokens / 1000).toFixed(1)}` : '--'}<span className="text-zinc-600">k</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Helpers ──
+
+/** Rough token estimate: ~4 chars per token */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4)
+}
+
+function analyzeContext(messages: ConversationMessage[]) {
+  let userTokens = 0
+  let assistantTokens = 0
+  let toolTokens = 0
+  let userMsgs = 0
+  let assistantMsgs = 0
+  let toolCalls = 0
+
+  for (const m of messages) {
+    const tokens = estimateTokens(m.content || '')
+    if (m.role === 'user') {
+      userTokens += tokens
+      userMsgs++
+    } else if (m.type === 'tool_use' || m.type === 'tool_result') {
+      toolTokens += tokens
+      toolCalls++
+    } else {
+      assistantTokens += tokens
+      assistantMsgs++
+    }
+  }
+
+  const totalTokens = userTokens + assistantTokens + toolTokens
+  const contextWindow = 200_000 // Claude context window
+  const fillPercent = Math.min((totalTokens / contextWindow) * 100, 100)
+
+  return {
+    userTokens, assistantTokens, toolTokens, totalTokens,
+    userMsgs, assistantMsgs, toolCalls,
+    fillPercent, contextWindow,
+  }
 }
 
 // ── Context Visualization ──
 
 function ContextVisualization() {
+  const messages = useConversationStore((s) => s.messages)
+  const isStreaming = useConversationStore((s) => s.streaming.isStreaming)
+  const turnTokens = useConversationStore((s) => s.streaming._turnTokens)
+  const ctx = useMemo(() => analyzeContext(messages), [messages])
+
+  const total = ctx.totalTokens || 1
+  const userPct = (ctx.userTokens / total) * 100
+  const assistantPct = (ctx.assistantTokens / total) * 100
+  const toolPct = (ctx.toolTokens / total) * 100
+
+  const formatTokens = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`
+
   return (
     <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-bold text-white">Context Visualization</h3>
-        <Icon icon="lucide:maximize-2" className="text-zinc-700 text-xs" />
+        <h3 className="text-xs font-bold text-white">Context Window</h3>
+        {isStreaming && (
+          <span className="text-[9px] font-mono text-orange-400 animate-pulse">streaming</span>
+        )}
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex items-center gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-sm bg-zinc-600" />
-          <span className="text-[10px] text-zinc-500">User Prompt</span>
+      {/* Context fill meter */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[10px] text-zinc-500">Window Usage</span>
+          <span className="text-[10px] font-mono text-zinc-300">
+            {formatTokens(ctx.totalTokens)} <span className="text-zinc-600">/ 200k tokens</span>
+          </span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-sm bg-orange-500/60" />
-          <span className="text-[10px] text-zinc-500">System</span>
+        <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${
+              ctx.fillPercent > 80 ? 'bg-red-500' : ctx.fillPercent > 50 ? 'bg-amber-500' : 'bg-blue-500'
+            }`}
+            style={{ width: `${Math.max(ctx.fillPercent, 0.5)}%` }}
+          />
         </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-sm bg-emerald-500/60" />
-          <span className="text-[10px] text-zinc-500">Tools</span>
-        </div>
-      </div>
-
-      {/* Diagram */}
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <div className="flex flex-col items-center gap-1">
-          <div className="w-10 h-10 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center">
-            <Icon icon="lucide:user" className="text-blue-400 text-sm" />
-          </div>
-          <span className="text-[9px] text-zinc-600">Knowledge<br/>Retrieval</span>
-        </div>
-
-        <div className="flex-1 flex items-center">
-          <div className="flex-1 h-px border-t border-dashed border-zinc-700" />
-          <div className="px-2 py-1 bg-zinc-800 border border-pilos-border rounded text-[9px] font-mono text-zinc-400 mx-1">
-            EMBEDDING
-          </div>
-          <div className="flex-1 h-px border-t border-dashed border-zinc-700" />
-        </div>
-
-        <div className="flex flex-col items-center gap-1">
-          <div className="w-10 h-10 rounded-full bg-orange-500/10 border border-orange-500/30 flex items-center justify-center">
-            <Icon icon="lucide:brain" className="text-orange-400 text-sm" />
-          </div>
-          <span className="text-[9px] text-zinc-600">Top 3 Vectors<br/>(0.92 cosine sim)</span>
+        <div className="flex items-center justify-between mt-1">
+          <span className="text-[9px] text-zinc-600">{ctx.fillPercent.toFixed(1)}% used</span>
+          {turnTokens > 0 && (
+            <span className="text-[9px] text-zinc-600">this turn: {formatTokens(turnTokens)}</span>
+          )}
         </div>
       </div>
 
-      {/* Colored bars */}
-      <div className="space-y-1.5 mb-3">
-        <div className="h-1.5 w-full bg-blue-500/40 rounded-full" />
-        <div className="h-1.5 w-4/5 bg-emerald-500/40 rounded-full" />
-        <div className="h-1.5 w-3/5 bg-orange-500/40 rounded-full" />
+      {/* Composition breakdown */}
+      <div className="mb-4">
+        <span className="text-[10px] text-zinc-500 mb-2 block">Composition</span>
+        {ctx.totalTokens > 0 ? (
+          <>
+            <div className="w-full h-3 bg-zinc-800 rounded-full overflow-hidden flex">
+              <div className="bg-blue-500/60 h-full transition-all" style={{ width: `${userPct}%` }} />
+              <div className="bg-orange-500/60 h-full transition-all" style={{ width: `${assistantPct}%` }} />
+              <div className="bg-emerald-500/60 h-full transition-all" style={{ width: `${toolPct}%` }} />
+            </div>
+            {/* Legend */}
+            <div className="flex items-center gap-3 mt-2">
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-sm bg-blue-500/60" />
+                <span className="text-[9px] text-zinc-500">User {userPct.toFixed(0)}%</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-sm bg-orange-500/60" />
+                <span className="text-[9px] text-zinc-500">Assistant {assistantPct.toFixed(0)}%</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-sm bg-emerald-500/60" />
+                <span className="text-[9px] text-zinc-500">Tools {toolPct.toFixed(0)}%</span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="w-full h-3 bg-zinc-800 rounded-full" />
+        )}
       </div>
 
-      <p className="text-[10px] text-zinc-600">
-        <span className="text-zinc-500">context compressed</span> (ratio 2.4:1)
-      </p>
+      {/* Message stats */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="text-center p-2 bg-zinc-800/50 rounded-lg">
+          <span className="text-sm font-bold text-white font-mono block">{ctx.userMsgs}</span>
+          <span className="text-[9px] text-zinc-600">User msgs</span>
+        </div>
+        <div className="text-center p-2 bg-zinc-800/50 rounded-lg">
+          <span className="text-sm font-bold text-white font-mono block">{ctx.assistantMsgs}</span>
+          <span className="text-[9px] text-zinc-600">Responses</span>
+        </div>
+        <div className="text-center p-2 bg-zinc-800/50 rounded-lg">
+          <span className="text-sm font-bold text-white font-mono block">{ctx.toolCalls}</span>
+          <span className="text-[9px] text-zinc-600">Tool calls</span>
+        </div>
+      </div>
     </div>
   )
 }
@@ -351,7 +525,6 @@ export default function DashboardPage() {
                     <AgentCard
                       key={agent.id}
                       agent={agent}
-                      index={i}
                       status={getAgentStatus(agent, i)}
                     />
                   ))}
@@ -371,51 +544,7 @@ export default function DashboardPage() {
         <div className="w-[340px] border-l border-pilos-border bg-pilos-bg overflow-y-auto custom-scrollbar flex-shrink-0">
           <div className="p-4 space-y-4">
             {/* Live Monitoring */}
-            <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Icon icon="lucide:activity" className="text-orange-400 text-sm" />
-                  <h3 className="text-xs font-bold text-white">Live Monitoring</h3>
-                </div>
-                <button className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors">Details</button>
-              </div>
-
-              {/* Token Throughput */}
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] text-zinc-500">Token Throughput</span>
-                  <span className="text-xs font-bold text-white font-mono">
-                    {summary.totalTokens > 0 ? `${(summary.totalTokens / Math.max(summary.totalSessions, 1) / 60).toFixed(1)}k/min` : '0/min'}
-                  </span>
-                </div>
-                <MiniBarChart />
-              </div>
-
-              {/* Metrics */}
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                    <span className="text-xs text-zinc-400">Memory Load</span>
-                  </div>
-                  <span className="text-xs font-mono text-white">1.2 <span className="text-zinc-600">GB</span></span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                    <span className="text-xs text-zinc-400">CPU Usage</span>
-                  </div>
-                  <span className="text-xs font-mono text-white">14.2<span className="text-zinc-600">%</span></span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    <span className="text-xs text-zinc-400">MCP Latency</span>
-                  </div>
-                  <span className="text-xs font-mono text-white">12<span className="text-zinc-600">ms</span></span>
-                </div>
-              </div>
-            </div>
+            <LiveMonitoring />
 
             {/* Context Visualization */}
             <ContextVisualization />

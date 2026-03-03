@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.on('cli:loginOutput', handler)
       return () => ipcRenderer.removeListener('cli:loginOutput', handler)
     },
+    getUsageStats: () => ipcRenderer.invoke('cli:getUsageStats'),
+    getClaudeUsage: () => ipcRenderer.invoke('cli:getClaudeUsage'),
   },
 
   // Dependency Checker
