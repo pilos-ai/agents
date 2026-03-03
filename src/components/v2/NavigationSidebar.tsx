@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react'
 import { Icon } from '../common/Icon'
 import { useAppStore, type AppView } from '../../store/useAppStore'
 import { useProjectStore } from '../../store/useProjectStore'
@@ -101,6 +102,77 @@ function SidebarFooter() {
   )
 }
 
+function ProjectSelector({ openProjects, activeProjectPath, activeProject, setActiveProject, onNewProject }: {
+  openProjects: { projectPath: string; projectName: string }[]
+  activeProjectPath: string | null
+  activeProject?: { projectName: string }
+  setActiveProject: (path: string) => Promise<void>
+  onNewProject: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handleClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handleClick)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [open])
+
+  return (
+    <div className="px-3 py-2 titlebar-no-drag relative" ref={ref}>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setOpen(!open)}
+          className="flex-1 flex items-center gap-2 px-3 py-2 bg-pilos-card border border-pilos-border rounded-lg text-left hover:border-zinc-600 transition-colors"
+        >
+          <Icon icon="lucide:folder" className="text-zinc-500 text-xs" />
+          <span className="text-xs text-zinc-300 truncate flex-1">{activeProject?.projectName || 'No Project'}</span>
+          <Icon icon="lucide:chevron-down" className={`text-zinc-600 text-[10px] transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+        <button
+          onClick={onNewProject}
+          className="p-2 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+          title="Open project"
+        >
+          <Icon icon="lucide:plus" className="text-sm" />
+        </button>
+      </div>
+
+      {open && (
+        <div className="absolute left-3 right-3 top-full mt-1 bg-pilos-card border border-pilos-border rounded-lg shadow-xl z-50 overflow-hidden">
+          {openProjects.map((p) => (
+            <button
+              key={p.projectPath}
+              onClick={() => { setActiveProject(p.projectPath); setOpen(false) }}
+              className={`w-full flex items-center gap-2 px-3 py-2 text-left text-xs transition-colors ${
+                p.projectPath === activeProjectPath
+                  ? 'bg-blue-500/10 text-blue-400'
+                  : 'text-zinc-300 hover:bg-zinc-800/60'
+              }`}
+            >
+              <Icon icon="lucide:folder" className={`text-xs ${p.projectPath === activeProjectPath ? 'text-blue-400' : 'text-zinc-600'}`} />
+              <span className="truncate">{p.projectName}</span>
+              {p.projectPath === activeProjectPath && (
+                <Icon icon="lucide:check" className="text-blue-400 text-xs ml-auto" />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function NavigationSidebar() {
   const openProjects = useProjectStore((s) => s.openProjects)
   const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
@@ -145,33 +217,13 @@ export function NavigationSidebar() {
       </div>
 
       {/* Project Selector */}
-      <div className="px-3 py-2 titlebar-no-drag">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              if (openProjects.length > 1) {
-                const currentIdx = openProjects.findIndex((p) => p.projectPath === activeProjectPath)
-                const nextIdx = (currentIdx + 1) % openProjects.length
-                setActiveProject(openProjects[nextIdx].projectPath)
-              }
-            }}
-            className="flex-1 flex items-center gap-2 px-3 py-2 bg-pilos-card border border-pilos-border rounded-lg text-left hover:border-zinc-600 transition-colors"
-          >
-            <Icon icon="lucide:folder" className="text-zinc-500 text-xs" />
-            <span className="text-xs text-zinc-300 truncate flex-1">{activeProject?.projectName || 'No Project'}</span>
-            {openProjects.length > 1 && (
-              <span className="text-[10px] text-zinc-600 bg-zinc-800 px-1.5 py-0.5 rounded">{openProjects.length}</span>
-            )}
-          </button>
-          <button
-            onClick={handleOpenProject}
-            className="p-2 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
-            title="Open project"
-          >
-            <Icon icon="lucide:plus" className="text-sm" />
-          </button>
-        </div>
-      </div>
+      <ProjectSelector
+        openProjects={openProjects}
+        activeProjectPath={activeProjectPath}
+        activeProject={activeProject}
+        setActiveProject={setActiveProject}
+        onNewProject={handleOpenProject}
+      />
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto custom-scrollbar py-2 titlebar-no-drag">
