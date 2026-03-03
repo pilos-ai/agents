@@ -46,10 +46,16 @@ export class ClaudeProcess {
   private sessions = new Map<string, ClaudeSession>()
   private mainWindow: BrowserWindow
   private settings: SettingsStore
+  private eventCallback: ((data: Record<string, unknown>) => void) | null = null
 
   constructor(mainWindow: BrowserWindow, settings: SettingsStore) {
     this.mainWindow = mainWindow
     this.settings = settings
+  }
+
+  /** Register a callback to receive all Claude events (used by RelayClient) */
+  onEvent(cb: (data: Record<string, unknown>) => void): void {
+    this.eventCallback = cb
   }
 
   async startSession(sessionId: string, options: ClaudeSessionOptions = {}): Promise<string> {
@@ -183,6 +189,11 @@ export class ClaudeProcess {
     })
 
     return cliSessionId
+  }
+
+  hasSession(sessionId: string): boolean {
+    const session = this.sessions.get(sessionId)
+    return !!session?.process.stdin?.writable
   }
 
   sendMessage(sessionId: string, message: string, images?: Array<{ data: string; mediaType: string }>): void {
@@ -451,7 +462,10 @@ export class ClaudeProcess {
   }
 
   private emit(sessionId: string, data: Record<string, unknown>): void {
-    if (this.mainWindow?.isDestroyed()) return
-    this.mainWindow.webContents.send('claude:event', { ...data, sessionId })
+    const event = { ...data, sessionId }
+    if (!this.mainWindow?.isDestroyed()) {
+      this.mainWindow.webContents.send('claude:event', event)
+    }
+    this.eventCallback?.(event)
   }
 }

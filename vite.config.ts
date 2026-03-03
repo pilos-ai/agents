@@ -65,6 +65,7 @@ const electronEntries: Parameters<typeof electron>[0] = [
             'os',
             'net',
             'http',
+            'ws',
             'child_process',
             'crypto',
             'url',

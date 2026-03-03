@@ -222,6 +222,38 @@ contextBridge.exposeInMainWorld('api', {
     clearAllData: () => ipcRenderer.invoke('storage:clearAllData'),
   },
 
+  // Mobile / Pairing
+  mobile: {
+    connect: () => ipcRenderer.invoke('mobile:connect'),
+    disconnect: () => ipcRenderer.invoke('mobile:disconnect'),
+    getStatus: () => ipcRenderer.invoke('mobile:getStatus'),
+    requestPairingToken: () => ipcRenderer.invoke('mobile:requestPairingToken'),
+    approvePairing: (requestId: string) => ipcRenderer.invoke('mobile:approvePairing', requestId),
+    denyPairing: (requestId: string) => ipcRenderer.invoke('mobile:denyPairing', requestId),
+    listPairedDevices: () => ipcRenderer.invoke('mobile:listPairedDevices'),
+    revokeDevice: (deviceId: string) => ipcRenderer.invoke('mobile:revokeDevice', deviceId),
+    onPairingRequest: (callback: (data: { requestId: string; deviceName: string; deviceId: string }) => void) => {
+      const handler = (_event: unknown, data: { requestId: string; deviceName: string; deviceId: string }) => callback(data)
+      ipcRenderer.on('mobile:pairingRequest', handler)
+      return () => ipcRenderer.removeListener('mobile:pairingRequest', handler)
+    },
+    onDeviceApproved: (callback: (data: { deviceId: string; deviceName: string }) => void) => {
+      const handler = (_event: unknown, data: { deviceId: string; deviceName: string }) => callback(data)
+      ipcRenderer.on('mobile:deviceApproved', handler)
+      return () => ipcRenderer.removeListener('mobile:deviceApproved', handler)
+    },
+    onDeviceRevoked: (callback: (data: { deviceId: string }) => void) => {
+      const handler = (_event: unknown, data: { deviceId: string }) => callback(data)
+      ipcRenderer.on('mobile:deviceRevoked', handler)
+      return () => ipcRenderer.removeListener('mobile:deviceRevoked', handler)
+    },
+    onStatus: (callback: (data: { connected: boolean; mobileCount: number }) => void) => {
+      const handler = (_event: unknown, data: { connected: boolean; mobileCount: number }) => callback(data)
+      ipcRenderer.on('mobile:status', handler)
+      return () => ipcRenderer.removeListener('mobile:status', handler)
+    },
+  },
+
   // Metrics
   metrics: {
     setLicenseKey: (key: string) => ipcRenderer.invoke('metrics:setLicenseKey', key),

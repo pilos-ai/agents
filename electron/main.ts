@@ -11,6 +11,7 @@ import { Database } from './core/database'
 import { setupMenu } from './menu'
 import { ensureGlobalClaudeConfig } from './services/claude-config'
 import { setupAutoUpdater, installUpdate } from './services/auto-updater'
+import { RelayClient } from './services/relay-client'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -24,6 +25,7 @@ let mainWindow: BrowserWindow | null = null
 let metricsCollector: MetricsCollector | null = null
 let trayManager: TrayManager | null = null
 let taskScheduler: TaskScheduler | null = null
+let relayClient: RelayClient | null = null
 let isQuitting = false
 
 async function createWindow() {
@@ -65,15 +67,46 @@ async function createWindow() {
   metricsCollector.init()
 
   // Register IPC after loadURL so a failure doesn't block the window
+  let claudeProcess, db
   try {
-    await registerIpcHandlers(mainWindow, settings, database, metricsCollector)
+    const refs = await registerIpcHandlers(mainWindow, settings, database, metricsCollector)
+    claudeProcess = refs.claudeProcess
+    db = refs.database
   } catch (err) {
     console.error('Failed to register IPC handlers:', err)
   }
 
-  // IPC: forward license key to metrics collector
+  // Initialize mobile relay client
+  if (claudeProcess && db) {
+    relayClient = new RelayClient(mainWindow, settings, claudeProcess, db)
+    const licenseKey = settings.get('licenseKey') as string
+    if (licenseKey) {
+      relayClient.connect()
+    }
+  }
+
+  // IPC: mobile relay control
+  ipcMain.handle('mobile:connect', () => relayClient?.connect())
+  ipcMain.handle('mobile:disconnect', () => relayClient?.disconnect())
+  ipcMain.handle('mobile:getStatus', () => ({
+    connected: relayClient?.isConnected() ?? false,
+    mobileCount: relayClient?.getMobileCount() ?? 0,
+  }))
+
+  // IPC: mobile pairing
+  ipcMain.handle('mobile:requestPairingToken', () => relayClient?.requestPairingToken())
+  ipcMain.handle('mobile:approvePairing', (_event, requestId: string) => relayClient?.approvePairing(requestId))
+  ipcMain.handle('mobile:denyPairing', (_event, requestId: string) => relayClient?.denyPairing(requestId))
+  ipcMain.handle('mobile:listPairedDevices', () => relayClient?.listPairedDevices())
+  ipcMain.handle('mobile:revokeDevice', (_event, deviceId: string) => relayClient?.revokeDevice(deviceId))
+
+  // IPC: forward license key to metrics collector (and reconnect relay)
   ipcMain.handle('metrics:setLicenseKey', (_event, key: string) => {
     metricsCollector?.setLicenseKey(key)
+    // Auto-connect relay when license key is set
+    if (key && relayClient && !relayClient.isConnected()) {
+      relayClient.connect()
+    }
   })
 
   // IPC: expose machineId to renderer for license enforcement
@@ -170,6 +203,7 @@ async function createWindow() {
 
 app.on('before-quit', async () => {
   isQuitting = true
+  relayClient?.disconnect()
   taskScheduler?.stop()
   trayManager?.destroy()
   if (metricsCollector) {

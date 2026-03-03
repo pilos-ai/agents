@@ -595,6 +595,20 @@ export interface ElectronAPI {
     saveBoardConfig: (projectPath: string, config: { projectKey: string; boardId: number; boardName: string }) => Promise<void>
     getBoardConfig: (projectPath: string) => Promise<{ projectKey: string; boardId: number; boardName: string } | null>
   }
+  mobile: {
+    connect: () => Promise<void>
+    disconnect: () => Promise<void>
+    getStatus: () => Promise<{ connected: boolean; mobileCount: number }>
+    requestPairingToken: () => Promise<{ token: string; expiresAt: number }>
+    approvePairing: (requestId: string) => Promise<void>
+    denyPairing: (requestId: string) => Promise<void>
+    listPairedDevices: () => Promise<Array<{ device_id: string; device_name: string; created_at: string; last_seen_at: string }>>
+    revokeDevice: (deviceId: string) => Promise<void>
+    onPairingRequest: (callback: (data: { requestId: string; deviceName: string; deviceId: string }) => void) => () => void
+    onDeviceApproved: (callback: (data: { deviceId: string; deviceName: string }) => void) => () => void
+    onDeviceRevoked: (callback: (data: { deviceId: string }) => void) => () => void
+    onStatus: (callback: (data: { connected: boolean; mobileCount: number }) => void) => () => void
+  }
   scheduler?: {
     onTriggerTask: (callback: (data: { taskId: string; trigger: string; projectPath?: string }) => void) => () => void
     onNavigateToTask: (callback: (taskId: string) => void) => () => void

@@ -22,7 +22,7 @@ let dependencyChecker: DependencyChecker
 let jiraOAuth: any  // Dynamically loaded from @pilos/agents-pm
 let jiraClient: any // Dynamically loaded from @pilos/agents-pm
 
-export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsStore: SettingsStore, db?: Database, metrics?: MetricsCollector): Promise<void> {
+export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsStore: SettingsStore, db?: Database, metrics?: MetricsCollector): Promise<{ claudeProcess: ClaudeProcess; database: Database }> {
   settings = settingsStore
   database = db || new Database()
   metricsCollector = metrics || null
@@ -688,6 +688,8 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
       mainWindow.webContents.send('stories:coverageStarted', { storyId })
     })
   }
+
+  return { claudeProcess, database }
 }
 
 // ── Row Mappers ──

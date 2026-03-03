@@ -37,12 +37,13 @@ async function loadJiraStore() {
   }
 }
 
-type SettingsNav = 'account' | 'general' | 'integrations' | 'security' | 'advanced'
+type SettingsNav = 'account' | 'general' | 'integrations' | 'devices' | 'security' | 'advanced'
 
 const navItems: { id: SettingsNav; label: string; icon: string }[] = [
   { id: 'account', label: 'Account', icon: 'lucide:user' },
   { id: 'general', label: 'General', icon: 'lucide:settings' },
   { id: 'integrations', label: 'Integrations', icon: 'lucide:plug-zap' },
+  { id: 'devices', label: 'Devices', icon: 'lucide:smartphone' },
   { id: 'security', label: 'Security', icon: 'lucide:shield-check' },
   { id: 'advanced', label: 'Advanced', icon: 'lucide:code' },
 ]
@@ -587,6 +588,245 @@ function IntegrationsSection() {
   )
 }
 
+function DevicesSection() {
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+  const [qrLoading, setQrLoading] = useState(false)
+  const [qrExpiry, setQrExpiry] = useState<number>(0)
+  const [countdown, setCountdown] = useState('')
+  const [devices, setDevices] = useState<Array<{ device_id: string; device_name: string; created_at: string; last_seen_at: string }>>([])
+  const [pendingRequest, setPendingRequest] = useState<{ requestId: string; deviceName: string; deviceId: string } | null>(null)
+  const [relayStatus, setRelayStatus] = useState<{ connected: boolean; mobileCount: number }>({ connected: false, mobileCount: 0 })
+  const [revoking, setRevoking] = useState<string | null>(null)
+
+  // Load devices & status on mount
+  useEffect(() => {
+    api.mobile.getStatus().then(setRelayStatus)
+    api.mobile.listPairedDevices().then(setDevices).catch(() => {})
+
+    const unsubStatus = api.mobile.onStatus(setRelayStatus)
+    const unsubRequest = api.mobile.onPairingRequest((data) => {
+      setPendingRequest(data)
+    })
+    const unsubApproved = api.mobile.onDeviceApproved(() => {
+      api.mobile.listPairedDevices().then(setDevices).catch(() => {})
+      setPendingRequest(null)
+    })
+    const unsubRevoked = api.mobile.onDeviceRevoked(({ deviceId }) => {
+      setDevices((prev) => prev.filter((d) => d.device_id !== deviceId))
+    })
+
+    return () => {
+      unsubStatus()
+      unsubRequest()
+      unsubApproved()
+      unsubRevoked()
+    }
+  }, [])
+
+  // Countdown timer for QR code
+  useEffect(() => {
+    if (!qrExpiry) return
+    const tick = () => {
+      const remaining = Math.max(0, qrExpiry - Date.now())
+      if (remaining <= 0) {
+        setCountdown('')
+        setQrDataUrl(null)
+        setQrExpiry(0)
+        return
+      }
+      const mins = Math.floor(remaining / 60000)
+      const secs = Math.floor((remaining % 60000) / 1000)
+      setCountdown(`${mins}:${secs.toString().padStart(2, '0')}`)
+    }
+    tick()
+    const interval = setInterval(tick, 1000)
+    return () => clearInterval(interval)
+  }, [qrExpiry])
+
+  const generateQR = async () => {
+    setQrLoading(true)
+    try {
+      const { token, expiresAt } = await api.mobile.requestPairingToken()
+      const QRCode = (await import('qrcode')).default
+      const qrPayload = JSON.stringify({ token, serverUrl: 'wss://license.pilos.net' })
+      const dataUrl = await QRCode.toDataURL(qrPayload, {
+        width: 256,
+        margin: 2,
+        color: { dark: '#ffffff', light: '#00000000' },
+      })
+      setQrDataUrl(dataUrl)
+      setQrExpiry(expiresAt)
+    } catch (err) {
+      console.error('Failed to generate QR:', err)
+    } finally {
+      setQrLoading(false)
+    }
+  }
+
+  const handleApprove = () => {
+    if (pendingRequest) {
+      api.mobile.approvePairing(pendingRequest.requestId)
+    }
+  }
+
+  const handleDeny = () => {
+    if (pendingRequest) {
+      api.mobile.denyPairing(pendingRequest.requestId)
+      setPendingRequest(null)
+    }
+  }
+
+  const handleRevoke = async (deviceId: string) => {
+    setRevoking(deviceId)
+    await api.mobile.revokeDevice(deviceId)
+    setRevoking(null)
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-bold text-white mb-1">Devices</h2>
+        <p className="text-xs text-zinc-500">Pair and manage mobile devices</p>
+      </div>
+
+      {/* Connection status */}
+      <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl">
+        <div className="flex items-center gap-3">
+          <div className={`w-2.5 h-2.5 rounded-full ${relayStatus.connected ? 'bg-green-400' : 'bg-zinc-600'}`} />
+          <div className="flex-1">
+            <p className="text-sm text-white">{relayStatus.connected ? 'Relay Connected' : 'Relay Disconnected'}</p>
+            <p className="text-[10px] text-zinc-500">
+              {relayStatus.mobileCount > 0
+                ? `${relayStatus.mobileCount} mobile device${relayStatus.mobileCount > 1 ? 's' : ''} online`
+                : 'No mobile devices connected'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Pairing Approval Dialog */}
+      {pendingRequest && (
+        <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl space-y-3 animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
+              <Icon icon="lucide:smartphone" className="text-blue-400 text-lg" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-white">Pairing Request</p>
+              <p className="text-xs text-zinc-400">
+                <span className="text-blue-300 font-medium">{pendingRequest.deviceName}</span> wants to connect
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleApprove}
+              className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors"
+            >
+              Approve
+            </button>
+            <button
+              onClick={handleDeny}
+              className="flex-1 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-lg transition-colors"
+            >
+              Deny
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Pairing */}
+      <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl space-y-4">
+        <h3 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Pair New Device</h3>
+        <p className="text-xs text-zinc-500">
+          Open the Pilos Agents mobile app and scan this QR code to pair your device.
+        </p>
+
+        {qrDataUrl ? (
+          <div className="flex flex-col items-center gap-3">
+            <div className="p-4 bg-zinc-900 rounded-xl border border-pilos-border">
+              <img src={qrDataUrl} alt="Pairing QR Code" width={200} height={200} />
+            </div>
+            <div className="flex items-center gap-2 text-xs text-zinc-400">
+              <Icon icon="lucide:clock" className="text-xs" />
+              <span>Expires in {countdown}</span>
+            </div>
+            <button
+              onClick={generateQR}
+              className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              Regenerate
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={generateQR}
+            disabled={qrLoading || !relayStatus.connected}
+            className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            {qrLoading ? (
+              <>
+                <Icon icon="lucide:loader-2" className="text-sm animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Icon icon="lucide:qr-code" className="text-sm" />
+                Generate QR Code
+              </>
+            )}
+          </button>
+        )}
+        {!relayStatus.connected && (
+          <p className="text-[10px] text-amber-400">Relay server must be connected to generate pairing codes.</p>
+        )}
+      </div>
+
+      {/* Paired Devices List */}
+      <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Paired Devices</h3>
+          <button
+            onClick={() => api.mobile.listPairedDevices().then(setDevices).catch(() => {})}
+            className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            Refresh
+          </button>
+        </div>
+
+        {devices.length === 0 ? (
+          <p className="text-xs text-zinc-600 py-2">No devices paired yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {devices.map((device) => (
+              <div
+                key={device.device_id}
+                className="flex items-center gap-3 p-3 bg-zinc-900 rounded-lg border border-pilos-border"
+              >
+                <Icon icon="lucide:smartphone" className="text-zinc-400 text-base flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white truncate">{device.device_name}</p>
+                  <p className="text-[10px] text-zinc-500">
+                    Paired {new Date(device.created_at).toLocaleDateString()}
+                    {device.last_seen_at && ` \u00b7 Last seen ${new Date(device.last_seen_at).toLocaleDateString()}`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleRevoke(device.device_id)}
+                  disabled={revoking === device.device_id}
+                  className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {revoking === device.device_id ? 'Revoking...' : 'Revoke'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function SecuritySection() {
   const [autoApproveReads, setAutoApproveReads] = useState(true)
   const [requireConfirmDestructive, setRequireConfirmDestructive] = useState(true)
@@ -849,6 +1089,7 @@ export default function SettingsPage() {
           {activeNav === 'account' && <AccountSection />}
           {activeNav === 'general' && <GeneralSection />}
           {activeNav === 'integrations' && <IntegrationsSection />}
+          {activeNav === 'devices' && <DevicesSection />}
           {activeNav === 'security' && <SecuritySection />}
           {activeNav === 'advanced' && <AdvancedSection />}
         </div>
