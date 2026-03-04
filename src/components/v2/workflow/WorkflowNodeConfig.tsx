@@ -771,6 +771,48 @@ export function WorkflowNodeConfig() {
           </div>
         )}
 
+        {/* Agent config */}
+        {data.type === 'agent' && (
+          <div>
+            <label className="block text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2">Agent Session</label>
+            <div className="space-y-3">
+              <FormSelect
+                label="Model"
+                value={data.agentModel || 'sonnet'}
+                onChange={(e) => updateNodeData(node.id, { agentModel: e.target.value as 'haiku' | 'sonnet' | 'opus' })}
+                options={[
+                  { value: 'haiku', label: 'Haiku (Fast)' },
+                  { value: 'sonnet', label: 'Sonnet (Balanced)' },
+                  { value: 'opus', label: 'Opus (Powerful)' },
+                ]}
+              />
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-medium text-zinc-400">Agent Prompt</label>
+                  <DataPickerButton nodeId={node.id} onSelect={(ref) => updateNodeData(node.id, { agentPrompt: (data.agentPrompt || '') + ref })} />
+                </div>
+                <FormTextarea
+                  value={data.agentPrompt || ''}
+                  onChange={(e) => updateNodeData(node.id, { agentPrompt: e.target.value })}
+                  rows={8}
+                  placeholder="Describe what the agent should accomplish...&#10;&#10;The agent gets a full Claude Code session with file editing, bash, git, and all MCP tools.&#10;&#10;Click the { } button to reference upstream data"
+                  codeEditor
+                />
+              </div>
+              <FormInput
+                label="Max Turns"
+                value={String(data.agentMaxTurns ?? 25)}
+                onChange={(e) => updateNodeData(node.id, { agentMaxTurns: parseInt(e.target.value) || 25 })}
+                placeholder="25"
+              />
+              <TemplatePreview value={data.agentPrompt || ''} />
+              <p className="text-[9px] text-zinc-700">
+                Full Claude Code session with tool access (file editing, bash, git, MCP tools). Use for complex multi-step tasks.
+              </p>
+            </div>
+          </div>
+        )}
+
         {data.type === 'results_display' && (
           <div>
             <label className="block text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2">Results Display</label>

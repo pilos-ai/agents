@@ -44,7 +44,7 @@ function ReplyButton({ message }: { message: ConversationMessage }) {
   return (
     <button
       onClick={(e) => { e.stopPropagation(); setReplyTo(message) }}
-      className="absolute top-1.5 right-1.5 opacity-0 group-hover/bubble:opacity-100 p-1 rounded bg-neutral-600/80 hover:bg-neutral-500/80 text-neutral-300 transition-opacity cursor-pointer"
+      className="absolute top-1.5 right-1.5 opacity-0 group-hover/bubble:opacity-100 p-1 rounded bg-neutral-600/80 hover:bg-neutral-500/80 text-neutral-300 transition-opacity cursor-pointer select-none"
       title="Reply"
     >
       <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -89,7 +89,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isLast }: Pr
           <span className={`text-xs font-semibold ${colors.text}`}>{message.agentName}</span>
         </div>
         {message.content && (
-          <div className={`group/bubble relative max-w-[85%] rounded-lg px-4 py-2.5 ${colors.bgLight} border-l-2 ${colors.border} text-neutral-100`}>
+          <div className={`group/bubble relative max-w-[85%] rounded-lg px-4 py-2.5 select-text ${colors.bgLight} border-l-2 ${colors.border} text-neutral-100`}>
             <div className="markdown-content text-sm">
               <MarkdownRenderer content={message.content} />
             </div>
@@ -111,9 +111,9 @@ export const MessageBubble = memo(function MessageBubble({ message, isLast }: Pr
   if (message.type === 'thinking' && message.content) {
     return (
       <div className="flex flex-col items-start">
-        <div className="max-w-[85%] rounded-lg px-4 py-2.5 bg-neutral-800/30 text-neutral-400 text-xs italic border-l-2 border-neutral-600">
+        <div className="max-w-[85%] rounded-lg px-4 py-2.5 bg-neutral-800/30 text-neutral-400 text-xs italic border-l-2 border-neutral-600 select-text">
           <div className="mb-1 text-neutral-500 text-[10px] uppercase tracking-wider font-medium">Thinking</div>
-          <div className="whitespace-pre-wrap">{message.content}</div>
+          <div className="whitespace-pre-wrap select-text">{message.content}</div>
         </div>
       </div>
     )
@@ -134,7 +134,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isLast }: Pr
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
       {message.replyToId && <MessageReference replyToId={message.replyToId} />}
       <div
-        className={`group/bubble relative max-w-[85%] rounded-lg px-4 py-2.5 ${
+        className={`group/bubble relative max-w-[85%] rounded-lg px-4 py-2.5 select-text ${
           isUser
             ? 'bg-blue-600 text-white'
             : 'bg-neutral-800/60 text-neutral-100'
@@ -163,7 +163,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isLast }: Pr
           </div>
         )}
         {isUser ? (
-          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+          <p className="text-sm whitespace-pre-wrap select-text">{message.content}</p>
         ) : (
           <div className="markdown-content text-sm">
             <MarkdownRenderer content={message.content} />
@@ -237,7 +237,7 @@ function renderContentBlock(block: ContentBlock, index: number, isLastBlock?: bo
       const options = isLastBlock ? detectOptions(block.text) : []
       return (
         <div key={index} className="flex flex-col items-start">
-          <div className="max-w-[85%] rounded-lg px-4 py-2.5 bg-neutral-800/60 text-neutral-100">
+          <div className="max-w-[85%] rounded-lg px-4 py-2.5 bg-neutral-800/60 text-neutral-100 select-text">
             <div className="markdown-content text-sm">
               <MarkdownRenderer content={block.text} />
             </div>

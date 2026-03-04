@@ -78,7 +78,7 @@ export function StepResultCard({ result, label }: { result: WorkflowStepResult; 
       </button>
 
       {showOutput && hasOutput && (
-        <div className="border-t border-pilos-border px-2.5 py-2 max-h-64 overflow-y-auto custom-scrollbar">
+        <div className="border-t border-pilos-border px-2.5 py-2 max-h-64 overflow-y-auto custom-scrollbar select-text">
           {isFailed ? (
             <pre className="text-[10px] text-red-400/80 leading-relaxed whitespace-pre-wrap break-words">
               {result.error || 'Unknown error'}
@@ -135,7 +135,7 @@ export function TaskRunCard({ run, index, nodeLabels }: TaskRunCardProps) {
         <div className="border-t border-pilos-border bg-zinc-900/50 px-3 py-2.5 space-y-2">
           {/* Summary */}
           {run.summary && (
-            <p className="text-[11px] text-zinc-500">{run.summary}</p>
+            <p className="text-[11px] text-zinc-500 select-text">{run.summary}</p>
           )}
 
           {/* Step results with expandable output */}
@@ -180,7 +180,7 @@ export function TaskRunCard({ run, index, nodeLabels }: TaskRunCardProps) {
               <summary className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest cursor-pointer hover:text-zinc-400">
                 Logs ({run.logs.length})
               </summary>
-              <pre className="mt-1.5 text-[10px] text-zinc-500 leading-relaxed whitespace-pre-wrap break-words max-h-40 overflow-y-auto custom-scrollbar">
+              <pre className="mt-1.5 text-[10px] text-zinc-500 leading-relaxed whitespace-pre-wrap break-words max-h-40 overflow-y-auto custom-scrollbar select-text">
                 {run.logs.join('\n')}
               </pre>
             </details>

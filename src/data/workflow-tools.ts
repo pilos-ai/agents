@@ -33,17 +33,142 @@ export const RESULTS_DISPLAY_OUTPUT: OutputField[] = [
   { key: 'data', label: 'Displayed Data', type: 'object', description: 'The collected results data' },
 ]
 
+export const AGENT_OUTPUT: OutputField[] = [
+  { key: 'result', label: 'Agent Response', type: 'string', description: 'Full text response from the Claude Code agent session' },
+  { key: 'toolsUsed', label: 'Tools Used', type: 'array', description: 'List of tools the agent invoked' },
+]
+
 export const WORKFLOW_TOOL_CATEGORIES: McpToolCategory[] = [
   {
-    name: 'GitHub Operations',
-    icon: 'lucide:github',
+    name: 'Git Operations',
+    icon: 'lucide:git-branch',
+    tools: [
+      {
+        id: 'git_checkout',
+        name: 'Git Checkout',
+        icon: 'lucide:git-branch',
+        description: 'Switch branches',
+        category: 'Git Operations',
+        parameters: [
+          { key: 'branch', label: 'Branch Name', type: 'string', value: '', required: true },
+          { key: 'create', label: 'Create New Branch', type: 'boolean', value: false },
+          { key: 'baseBranch', label: 'Base Branch', type: 'string', value: '' },
+        ],
+        outputSchema: [
+          { key: 'branch', label: 'Current Branch', type: 'string' },
+          { key: 'created', label: 'Was Created', type: 'boolean' },
+        ],
+      },
+      {
+        id: 'git_pull',
+        name: 'Git Pull',
+        icon: 'lucide:download',
+        description: 'Pull latest changes',
+        category: 'Git Operations',
+        parameters: [
+          { key: 'remote', label: 'Remote', type: 'string', value: 'origin' },
+          { key: 'branch', label: 'Branch', type: 'string', value: '' },
+          { key: 'rebase', label: 'Rebase', type: 'boolean', value: false },
+        ],
+        outputSchema: [
+          { key: 'stdout', label: 'Output', type: 'string' },
+          { key: 'updatedFiles', label: 'Updated Files Count', type: 'number' },
+        ],
+      },
+      {
+        id: 'git_push',
+        name: 'Git Push',
+        icon: 'lucide:upload',
+        description: 'Push to remote',
+        category: 'Git Operations',
+        parameters: [
+          { key: 'remote', label: 'Remote', type: 'string', value: 'origin' },
+          { key: 'branch', label: 'Branch', type: 'string', value: '' },
+          { key: 'setUpstream', label: 'Set Upstream', type: 'boolean', value: false },
+        ],
+        outputSchema: [
+          { key: 'stdout', label: 'Output', type: 'string' },
+          { key: 'branch', label: 'Pushed Branch', type: 'string' },
+        ],
+      },
+      {
+        id: 'git_merge',
+        name: 'Git Merge',
+        icon: 'lucide:git-merge',
+        description: 'Merge branches',
+        category: 'Git Operations',
+        parameters: [
+          { key: 'branch', label: 'Source Branch', type: 'string', value: '', required: true },
+          { key: 'message', label: 'Merge Message', type: 'string', value: '' },
+          { key: 'noFf', label: 'No Fast-Forward', type: 'boolean', value: false },
+        ],
+        outputSchema: [
+          { key: 'stdout', label: 'Output', type: 'string' },
+          { key: 'hash', label: 'Merge Commit', type: 'string' },
+        ],
+      },
+      {
+        id: 'git_commit',
+        name: 'Git Commit',
+        icon: 'lucide:git-commit-horizontal',
+        description: 'Commit staged changes',
+        category: 'Git Operations',
+        parameters: [
+          { key: 'message', label: 'Commit Message', type: 'string', value: '', required: true },
+          { key: 'addAll', label: 'Stage All Changes', type: 'boolean', value: false },
+        ],
+        outputSchema: [
+          { key: 'hash', label: 'Commit Hash', type: 'string' },
+          { key: 'message', label: 'Message', type: 'string' },
+        ],
+      },
+      {
+        id: 'git_diff',
+        name: 'Git Diff',
+        icon: 'lucide:diff',
+        description: 'Compare file changes',
+        category: 'Git Operations',
+        parameters: [
+          { key: 'ref', label: 'Reference', type: 'string', value: 'HEAD' },
+        ],
+        outputSchema: [
+          { key: 'diff', label: 'Diff Output', type: 'string' },
+          { key: 'files', label: 'Changed Files', type: 'array', children: [
+            { key: 'path', label: 'File Path', type: 'string' },
+            { key: 'status', label: 'Status', type: 'string' },
+          ]},
+        ],
+      },
+      {
+        id: 'create_pr',
+        name: 'Create PR',
+        icon: 'lucide:git-pull-request',
+        description: 'Create pull request',
+        category: 'Git Operations',
+        parameters: [
+          { key: 'title', label: 'PR Title', type: 'string', value: '', required: true },
+          { key: 'branch', label: 'Branch', type: 'string', value: '' },
+          { key: 'baseBranch', label: 'Base Branch', type: 'string', value: 'main' },
+          { key: 'description', label: 'Description', type: 'string', value: '' },
+        ],
+        outputSchema: [
+          { key: 'url', label: 'PR URL', type: 'string' },
+          { key: 'number', label: 'PR Number', type: 'number' },
+          { key: 'title', label: 'Title', type: 'string' },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'File Operations',
+    icon: 'lucide:file-edit',
     tools: [
       {
         id: 'read_files',
         name: 'Read Files',
         icon: 'lucide:file-search',
-        description: 'Fetch source context',
-        category: 'GitHub Operations',
+        description: 'Read file or directory',
+        category: 'File Operations',
         parameters: [
           { key: 'path', label: 'File Path', type: 'string', value: '', required: true },
           { key: 'recursive', label: 'Recursive', type: 'boolean', value: false },
@@ -61,51 +186,35 @@ export const WORKFLOW_TOOL_CATEGORIES: McpToolCategory[] = [
         ],
       },
       {
-        id: 'create_pr',
-        name: 'Create PR',
-        icon: 'lucide:git-pull-request',
-        description: 'Automate submissions',
-        category: 'GitHub Operations',
+        id: 'write_file',
+        name: 'Write File',
+        icon: 'lucide:file-plus',
+        description: 'Create or overwrite file',
+        category: 'File Operations',
         parameters: [
-          { key: 'title', label: 'PR Title', type: 'string', value: '', required: true },
-          { key: 'branch', label: 'Branch', type: 'string', value: '' },
-          { key: 'description', label: 'Description', type: 'string', value: '' },
+          { key: 'path', label: 'File Path', type: 'string', value: '', required: true },
+          { key: 'content', label: 'Content', type: 'string', value: '', required: true },
         ],
         outputSchema: [
-          { key: 'url', label: 'PR URL', type: 'string' },
-          { key: 'number', label: 'PR Number', type: 'number' },
-          { key: 'title', label: 'Title', type: 'string' },
+          { key: 'path', label: 'File Path', type: 'string' },
+          { key: 'written', label: 'Bytes Written', type: 'number' },
         ],
       },
       {
-        id: 'git_commit',
-        name: 'Git Commit',
-        icon: 'lucide:git-commit-horizontal',
-        description: 'Commit staged changes',
-        category: 'GitHub Operations',
+        id: 'edit_file',
+        name: 'Edit File',
+        icon: 'lucide:file-edit',
+        description: 'Search and replace in file',
+        category: 'File Operations',
         parameters: [
-          { key: 'message', label: 'Commit Message', type: 'string', value: '', required: true },
+          { key: 'path', label: 'File Path', type: 'string', value: '', required: true },
+          { key: 'search', label: 'Search Text', type: 'string', value: '', required: true },
+          { key: 'replace', label: 'Replace With', type: 'string', value: '', required: true },
+          { key: 'replaceAll', label: 'Replace All', type: 'boolean', value: false },
         ],
         outputSchema: [
-          { key: 'hash', label: 'Commit Hash', type: 'string' },
-          { key: 'message', label: 'Message', type: 'string' },
-        ],
-      },
-      {
-        id: 'git_diff',
-        name: 'Git Diff',
-        icon: 'lucide:diff',
-        description: 'Compare file changes',
-        category: 'GitHub Operations',
-        parameters: [
-          { key: 'ref', label: 'Reference', type: 'string', value: 'HEAD' },
-        ],
-        outputSchema: [
-          { key: 'diff', label: 'Diff Output', type: 'string' },
-          { key: 'files', label: 'Changed Files', type: 'array', children: [
-            { key: 'path', label: 'File Path', type: 'string' },
-            { key: 'status', label: 'Status', type: 'string' },
-          ]},
+          { key: 'path', label: 'File Path', type: 'string' },
+          { key: 'replacements', label: 'Replacements Made', type: 'number' },
         ],
       },
     ],
@@ -369,6 +478,52 @@ export const WORKFLOW_TOOL_CATEGORIES: McpToolCategory[] = [
     ],
   },
   {
+    name: 'HTTP / API',
+    icon: 'lucide:globe',
+    tools: [
+      {
+        id: 'api_request',
+        name: 'API Request',
+        icon: 'lucide:send',
+        description: 'Generic HTTP request',
+        category: 'HTTP / API',
+        parameters: [
+          { key: 'url', label: 'URL', type: 'string', value: '', required: true },
+          { key: 'method', label: 'Method', type: 'select', value: 'GET', options: [
+            { value: 'GET', label: 'GET' }, { value: 'POST', label: 'POST' },
+            { value: 'PUT', label: 'PUT' }, { value: 'PATCH', label: 'PATCH' },
+            { value: 'DELETE', label: 'DELETE' },
+          ]},
+          { key: 'headers', label: 'Headers', type: 'json', value: '{}' },
+          { key: 'body', label: 'Request Body', type: 'json', value: '' },
+          { key: 'auth', label: 'Auth Token', type: 'string', value: '' },
+        ],
+        outputSchema: [
+          { key: 'status', label: 'HTTP Status', type: 'number' },
+          { key: 'body', label: 'Response Body', type: 'string' },
+          { key: 'headers', label: 'Response Headers', type: 'object' },
+          { key: 'data', label: 'Parsed JSON', type: 'object' },
+        ],
+      },
+      {
+        id: 'webhook',
+        name: 'Webhook',
+        icon: 'lucide:webhook',
+        description: 'Send HTTP webhook',
+        category: 'HTTP / API',
+        parameters: [
+          { key: 'url', label: 'Webhook URL', type: 'string', value: '', required: true },
+          { key: 'method', label: 'Method', type: 'select', value: 'POST', options: [{ value: 'POST', label: 'POST' }, { value: 'PUT', label: 'PUT' }, { value: 'PATCH', label: 'PATCH' }] },
+          { key: 'payload', label: 'Payload', type: 'json', value: '{}' },
+        ],
+        outputSchema: [
+          { key: 'status', label: 'HTTP Status', type: 'number' },
+          { key: 'body', label: 'Response Body', type: 'string' },
+        ],
+      },
+    ],
+  },
+  {
     name: 'Notifications',
     icon: 'lucide:bell',
     tools: [
@@ -388,22 +543,6 @@ export const WORKFLOW_TOOL_CATEGORIES: McpToolCategory[] = [
           { key: 'messageId', label: 'Message ID', type: 'string' },
         ],
       },
-      {
-        id: 'webhook',
-        name: 'Webhook',
-        icon: 'lucide:webhook',
-        description: 'Send HTTP webhook',
-        category: 'Notifications',
-        parameters: [
-          { key: 'url', label: 'Webhook URL', type: 'string', value: '', required: true },
-          { key: 'method', label: 'Method', type: 'select', value: 'POST', options: [{ value: 'POST', label: 'POST' }, { value: 'PUT', label: 'PUT' }, { value: 'PATCH', label: 'PATCH' }] },
-          { key: 'payload', label: 'Payload', type: 'json', value: '{}' },
-        ],
-        outputSchema: [
-          { key: 'status', label: 'HTTP Status', type: 'number' },
-          { key: 'body', label: 'Response Body', type: 'string' },
-        ],
-      },
     ],
   },
 ]
@@ -415,9 +554,9 @@ export const TOOL_FILTER_TABS = [
   { id: 'api', label: 'API' },
 ] as const
 
-const CODE_CATEGORIES = new Set(['GitHub Operations', 'Code Execution'])
+const CODE_CATEGORIES = new Set(['Git Operations', 'File Operations', 'Code Execution'])
 const DATA_CATEGORIES = new Set(['Data Processing'])
-const API_CATEGORIES = new Set(['Jira Integration', 'Slack Integration', 'Notifications'])
+const API_CATEGORIES = new Set(['Jira Integration', 'Slack Integration', 'HTTP / API', 'Notifications'])
 
 export function filterToolCategories(categories: McpToolCategory[], tab: string, search: string): McpToolCategory[] {
   let filtered = categories

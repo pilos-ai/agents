@@ -669,6 +669,132 @@ IMPORTANT: Execute this operation right now using the available MCP tools or sys
   })
 }
 
+// ── Agent Executor (full Claude Code session — the universal block) ──
+
+async function executeAgent(
+  node: Node<WorkflowNodeData>,
+  ctx: ExecutionContext,
+  callbacks: ExecutionCallbacks,
+): Promise<unknown> {
+  const rawPrompt = node.data.agentPrompt || ''
+  if (!rawPrompt.trim()) {
+    return { status: 'error', message: 'Agent prompt is empty' }
+  }
+
+  const resolvedPrompt = resolveTemplates(rawPrompt, ctx)
+
+  // Build rich context from upstream outputs
+  const nodeOutputsSummary = Object.entries(ctx.nodeOutputs)
+    .map(([id, output]) => {
+      const str = JSON.stringify(output)
+      return `  ${id}: ${str.length > 2000 ? str.slice(0, 2000) + '...' : str}`
+    })
+    .join('\n')
+
+  const fullPrompt = `${resolvedPrompt}
+
+Context variables: ${JSON.stringify(ctx.variables)}
+Current loop item: ${JSON.stringify(ctx.variables['_loopItem'] ?? null)}
+
+Previous step outputs:
+${nodeOutputsSummary || '(none)'}
+
+IMPORTANT: You are running as an autonomous agent in a workflow. Execute the task immediately without asking for clarification. Use all available tools (file editing, bash commands, git, etc.) as needed. When done, provide a summary of what you accomplished.`
+
+  const model = node.data.agentModel || 'sonnet'
+  const maxTurns = node.data.agentMaxTurns || 25
+  const permissionMode = node.data.agentPermissionMode || 'bypass'
+  callbacks.onLog(`[${timestamp()}] [INFO] Agent session (${model}, max ${maxTurns} turns): ${resolvedPrompt.slice(0, 150)}${resolvedPrompt.length > 150 ? '...' : ''}`)
+
+  const sessionId = `wf-agent-${node.id}-${Date.now()}`
+  const toolsUsed: string[] = []
+
+  return new Promise<unknown>((resolve, reject) => {
+    let resultText = ''
+
+    const unsub = api.claude.onEvent((event: ClaudeEvent) => {
+      if (event.sessionId !== sessionId) return
+
+      if (event.type === 'content_block_delta') {
+        const delta = event.delta as { type: string; text?: string }
+        if (delta?.type === 'text_delta' && delta.text) {
+          resultText += delta.text
+        }
+      }
+
+      // Track tool usage
+      if (event.type === 'assistant') {
+        const msg = event.message as { content?: Array<{ type: string; name?: string }> }
+        if (msg?.content) {
+          for (const block of msg.content) {
+            if (block.type === 'tool_use' && block.name) {
+              if (!toolsUsed.includes(block.name)) toolsUsed.push(block.name)
+            }
+          }
+        }
+      }
+
+      if (event.type === 'result') {
+        unsub()
+
+        const rawResult = event.result
+        let finalText = resultText
+
+        if (typeof rawResult === 'string') {
+          finalText = rawResult
+        } else if (rawResult && typeof rawResult === 'object') {
+          const resultObj = rawResult as { content?: Array<{ type: string; text?: string }> }
+          if (resultObj.content) {
+            const extracted = resultObj.content
+              .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
+              .map((b) => b.text)
+              .join('')
+            if (extracted) finalText = extracted
+          }
+        }
+
+        callbacks.onLog(`[${timestamp()}] [INFO] Agent completed. Tools used: ${toolsUsed.join(', ') || 'none'}`)
+
+        // Try to parse as JSON, otherwise return as text with metadata
+        let textToParse = finalText
+        const codeBlockMatch = finalText.match(/```(?:json)?\s*\n?([\s\S]*?)```/)
+        if (codeBlockMatch) {
+          textToParse = codeBlockMatch[1].trim()
+        }
+
+        try {
+          const parsed = JSON.parse(textToParse)
+          resolve({ ...parsed, toolsUsed })
+        } catch {
+          resolve({ result: finalText, toolsUsed })
+        }
+      }
+    })
+
+    api.claude.startSession(sessionId, {
+      prompt: fullPrompt,
+      resume: false,
+      workingDirectory: ctx.workingDirectory,
+      model,
+      permissionMode,
+      mcpConfigPath: ctx.mcpConfigPath,
+      maxTurns,
+    }).catch((err) => {
+      unsub()
+      reject(new Error(`Agent session failed: ${err instanceof Error ? err.message : 'Unknown error'}`))
+    })
+
+    // Agent sessions get a longer timeout (10 min) since they do multi-step work
+    setTimeout(() => {
+      if (!ctx.aborted) {
+        api.claude.abort(sessionId)
+        unsub()
+        reject(new Error('Agent session timed out (600s)'))
+      }
+    }, 600_000)
+  })
+}
+
 // ── Main Execution Engine ──
 
 export async function executeWorkflow(
@@ -1211,6 +1337,17 @@ async function executeNode(
         break
       }
 
+      case 'agent': {
+        if (callbacks.dryRun) {
+          const resolvedPrompt = resolveTemplates(node.data.agentPrompt || '', ctx)
+          callbacks.onLog(`[${timestamp()}] [DRY RUN] Would run agent session (${node.data.agentModel || 'sonnet'}): ${resolvedPrompt.slice(0, 150)}...`)
+          output = { dryRun: true, prompt: resolvedPrompt.slice(0, 300) }
+        } else {
+          output = await executeAgent(node, ctx, callbacks)
+        }
+        break
+      }
+
       default:
         output = { skipped: true, reason: `Unknown node type: ${type}` }
         callbacks.onLog(`[${timestamp()}] [WARN] Skipping unknown node type: ${type}`)
@@ -1236,7 +1373,7 @@ async function executeNode(
     callbacks.onNodeComplete(nodeId, result)
 
     // Log output summary for debugging (truncate large outputs)
-    if (output && (type === 'mcp_tool' || type === 'ai_prompt')) {
+    if (output && (type === 'mcp_tool' || type === 'ai_prompt' || type === 'agent')) {
       const outputStr = typeof output === 'string' ? output : JSON.stringify(output)
       const truncated = outputStr.length > 500 ? outputStr.slice(0, 500) + '...' : outputStr
       callbacks.onLog(`[${timestamp()}] [DEBUG] Output: ${truncated}`)
@@ -1318,6 +1455,7 @@ export async function executeSingleNode(
       return executeMcpTool(node, ctx, callbacks)
     }
     case 'ai_prompt': return executeAiPrompt(node, ctx, callbacks)
+    case 'agent': return executeAgent(node, ctx, callbacks)
     case 'merge': return { merged: true }
     case 'results_display': return { displayed: true }
     default: return { executed: true }

@@ -45,7 +45,16 @@ Tool Execution:
 - Jira tools (jira_search, jira_create, etc.) run directly via API — all {{...}} in parameters are resolved before execution
 - ai_prompt nodes: entire prompt is template-resolved, then sent to Claude with all upstream outputs as context
 - mcp_tool nodes without direct handlers: sent to Claude CLI for execution
-- All parameter values support {{...}} template syntax`
+- agent nodes: full Claude Code session with file editing, bash, git, and MCP tools — use for complex multi-step tasks
+- All parameter values support {{...}} template syntax
+
+Agent Nodes:
+- "agent" type runs a full autonomous Claude Code session (10 min timeout, configurable max turns)
+- Use for complex multi-step tasks: code editing, debugging, multi-file changes, API integrations
+- Set agentPrompt with detailed instructions and reference upstream data with {{NODE_ID.field}}
+- agentModel: haiku (fast), sonnet (balanced), opus (powerful)
+- The agent has full tool access: file editing, bash commands, git operations, MCP tools
+- Output includes "result" (text response) and "toolsUsed" (list of tools invoked)`
 
 /** Extract JSON from Claude's response, handling surrounding text or code fences */
 export function extractJson(text: string): string {
@@ -102,28 +111,53 @@ export function validateAiPromptNodes(
   edges: Edge[],
 ): Node<WorkflowNodeData>[] {
   return nodes.map((node) => {
-    if (node.data.type !== 'ai_prompt') return node
-    if (node.data.aiPrompt && node.data.aiPrompt.trim()) return node
+    // Handle ai_prompt nodes
+    if (node.data.type === 'ai_prompt') {
+      if (node.data.aiPrompt && node.data.aiPrompt.trim()) return node
 
-    // Find upstream nodes feeding into this ai_prompt node
-    const upstreamIds = edges
-      .filter((e) => e.target === node.id)
-      .map((e) => e.source)
-    const upstreamNodes = nodes.filter((n) => upstreamIds.includes(n.id))
-    const upstreamRefs = upstreamNodes
-      .map((n) => `{{${n.id}}}`)
-      .join(', ')
+      const upstreamIds = edges
+        .filter((e) => e.target === node.id)
+        .map((e) => e.source)
+      const upstreamNodes = nodes.filter((n) => upstreamIds.includes(n.id))
+      const upstreamRefs = upstreamNodes
+        .map((n) => `{{${n.id}}}`)
+        .join(', ')
 
-    // Build a default prompt from the node label
-    const label = node.data.label || 'Analyze'
-    const defaultPrompt = upstreamRefs
-      ? `${label} the data from upstream steps: ${upstreamRefs}. Return structured JSON.`
-      : `${label}. Return structured JSON.`
+      const label = node.data.label || 'Analyze'
+      const defaultPrompt = upstreamRefs
+        ? `${label} the data from upstream steps: ${upstreamRefs}. Return structured JSON.`
+        : `${label}. Return structured JSON.`
 
-    return {
-      ...node,
-      data: { ...node.data, aiPrompt: defaultPrompt },
+      return {
+        ...node,
+        data: { ...node.data, aiPrompt: defaultPrompt },
+      }
     }
+
+    // Handle agent nodes
+    if (node.data.type === 'agent') {
+      if (node.data.agentPrompt && node.data.agentPrompt.trim()) return node
+
+      const upstreamIds = edges
+        .filter((e) => e.target === node.id)
+        .map((e) => e.source)
+      const upstreamNodes = nodes.filter((n) => upstreamIds.includes(n.id))
+      const upstreamRefs = upstreamNodes
+        .map((n) => `{{${n.id}}}`)
+        .join(', ')
+
+      const label = node.data.label || 'Execute task'
+      const defaultPrompt = upstreamRefs
+        ? `${label} using the data from upstream steps: ${upstreamRefs}.`
+        : `${label}.`
+
+      return {
+        ...node,
+        data: { ...node.data, agentPrompt: defaultPrompt },
+      }
+    }
+
+    return node
   })
 }
 
@@ -204,16 +238,25 @@ INTEGRATION CONTEXT (important):
 - Do NOT include warnings about credentials, domains, or authentication in your response messages
 - If an operation is not available as a dedicated tool, explain that clearly instead of using workarounds with raw scripts${jiraProjectKey ? `\n- Active Jira project key: "${jiraProjectKey}" — use this in JQL queries (e.g. "project = ${jiraProjectKey} ORDER BY created DESC")` : ''}
 
-COMPLEXITY RULES (important for speed):
-- Keep workflows SIMPLE — aim for 4-8 nodes maximum. Users can always ask for more later
-- For complex requests (e.g. "analyze code and create epics/stories/tasks"), use a single ai_prompt node to do the analysis and return structured JSON, then a loop over the results to create items — do NOT create separate tool nodes for each sub-item
-- Prefer fewer, smarter nodes over many simple ones. An ai_prompt node can handle multiple reasoning steps in one prompt
-- Keep node labels to 2-4 words
-- Respond with concise JSON — no verbose descriptions in parameters
+COMPLETENESS RULES (important):
+- Create a SEPARATE node for EVERY distinct step — never merge multiple operations into one node
+- Each distinct operation = its own mcp_tool node (e.g. git_checkout, git_pull, git_commit, git_push, create_pr are ALL separate)
+- Use agent nodes for complex multi-step tasks needing tool access (code editing, debugging)
+- For repeated operations on a list, use a loop — but keep distinct operations as separate nodes inside
+- An ai_prompt node handles ONE reasoning step, not multiple unrelated tasks
+- Keep node labels 2-4 words; concise JSON — no verbose parameter descriptions
+- Use up to 20 nodes — as many as needed to faithfully represent the process
+
+ORDERING — Think about what logically must happen first:
+- Setup/preparation first (creating branches, setting variables, fetching configs)
+- Data gathering next (API calls, queries, fetching issues/tickets)
+- Processing/transformation in the middle (loops, analysis, code changes)
+- Finalization after processing (commits, pushes, saves — OUTSIDE loops, done once)
+- Delivery/notification at the end (PRs, deploys, messages, email alerts, reports)
 
 Node schema: { id, type, position: {x,y}, data: { type, label, toolId?, parameters?, aiPrompt?, aiModel?, conditionExpression?, conditionOperator?, conditionValue?, loopType?, loopCount?, loopCollection?, loopCondition?, delayMs?, delayUnit?, variableName?, variableValue?, variableOperation?, displayTitle?, displaySource?, displayFormat? } }
 Edge schema: { id, source, target, sourceHandle (null|"yes"|"no"|"body"|"done"|"branch_1"|"branch_2"), type: "dashed" }
-Valid node types: start, end, mcp_tool, ai_prompt, condition, loop, delay, parallel, merge, variable, note, results_display
+Valid node types: start, end, mcp_tool, ai_prompt, agent, condition, loop, delay, parallel, merge, variable, note, results_display
 - results_display: Terminal node that shows results on canvas. Use instead of Slack/Email when user just wants to see output. Set displaySource to "{{NODE_ID.field}}" to pick specific data. Has no outgoing edges.
 Valid toolIds: ${WORKFLOW_TOOL_CATEGORIES.flatMap((c) => c.tools.map((t) => t.id)).join(', ')}
 
@@ -268,6 +311,9 @@ export function generateWorkflowSummaryLocally(
         break
       case 'ai_prompt':
         steps.push(`AI: ${d.label}`)
+        break
+      case 'agent':
+        steps.push(`Agent: ${d.label} — ${(d.agentPrompt || '').slice(0, 60)}${(d.agentPrompt || '').length > 60 ? '...' : ''}`)
         break
       case 'condition':
         steps.push(`If ${d.conditionExpression || '?'} ${d.conditionOperator || 'equals'} ${d.conditionValue || '?'}`)

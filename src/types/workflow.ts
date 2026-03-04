@@ -22,7 +22,7 @@ export interface WorkflowChatMessage {
 
 // ── Node Types ──
 
-export type WorkflowNodeType = 'start' | 'end' | 'mcp_tool' | 'ai_prompt' | 'condition' | 'loop' | 'delay' | 'parallel' | 'merge' | 'variable' | 'note' | 'results_display'
+export type WorkflowNodeType = 'start' | 'end' | 'mcp_tool' | 'ai_prompt' | 'agent' | 'condition' | 'loop' | 'delay' | 'parallel' | 'merge' | 'variable' | 'note' | 'results_display'
 
 export interface WorkflowParameter {
   key: string
@@ -74,6 +74,11 @@ export interface WorkflowNodeData {
   // AI Prompt
   aiPrompt?: string
   aiModel?: 'haiku' | 'sonnet' | 'opus'
+  // Agent (full Claude Code session)
+  agentPrompt?: string
+  agentModel?: 'haiku' | 'sonnet' | 'opus'
+  agentMaxTurns?: number
+  agentPermissionMode?: 'default' | 'bypass'
   executionStatus?: 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
   executionError?: string
 }

@@ -75,7 +75,7 @@ function RunRow({ run, isExpanded, onToggle, nodes }: { run: TaskRun; isExpanded
           {run.stepResults?.some((r) => r.status === 'failed' && r.error) && (
             <div className="mt-2 pl-2 space-y-1">
               {run.stepResults.filter((r) => r.status === 'failed' && r.error).map((r, i) => (
-                <div key={i} className="text-[10px] text-red-400/70 bg-red-500/5 px-2 py-1 rounded">
+                <div key={i} className="text-[10px] text-red-400/70 bg-red-500/5 px-2 py-1 rounded select-text">
                   <span className="font-bold">{getNodeLabel(r.nodeId, nodes)}:</span> {r.error}
                 </div>
               ))}

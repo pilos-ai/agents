@@ -40,7 +40,7 @@ JSON schema:
     "interval": "manual|15min|30min|1h|2h|4h|8h|12h|1d|1w"
   },
   "workflow": {
-    "nodes": [{"id":"NODE_START_01","type":"start|end|mcp_tool|ai_prompt|condition|loop|delay|variable|note","position":{"x":300,"y":50},"data":{"type":"(same as node type)","label":"short name","toolId":"optional tool id","toolCategory":"optional","toolIcon":"optional: lucide:icon-name","aiPrompt":"for ai_prompt nodes","aiModel":"haiku|sonnet|opus","conditionExpression":"for condition","conditionOperator":"equals|contains|greater_than|less_than|regex","conditionValue":"for condition","loopType":"count|collection|while","loopCount":3,"loopCollection":"{{NODE_ID.arrayField}}","parameters":{"key":{"value":"..."}}}}],
+    "nodes": [{"id":"NODE_START_01","type":"start|end|mcp_tool|ai_prompt|agent|condition|loop|delay|variable|note","position":{"x":300,"y":50},"data":{"type":"(same as node type)","label":"short name","toolId":"optional tool id for mcp_tool","toolCategory":"optional","toolIcon":"optional: lucide:icon-name","aiPrompt":"for ai_prompt nodes","aiModel":"haiku|sonnet|opus","agentPrompt":"for agent nodes - detailed instruction","agentModel":"haiku|sonnet|opus","agentMaxTurns":25,"conditionExpression":"for condition","conditionOperator":"equals|contains|greater_than|less_than|regex","conditionValue":"for condition","loopType":"count|collection|while","loopCount":3,"loopCollection":"{{NODE_ID.arrayField}}","parameters":{"key":{"value":"..."}}}}],
     "edges": [{"id":"edge_01","source":"node id","target":"node id","sourceHandle":"null or yes/no for condition, body/done for loop","type":"dashed"}]
   }
 }
@@ -51,17 +51,32 @@ Task rules:
 - Set schedule interval based on how often the task should run (use "manual" if user doesn't specify frequency)
 - Description should explain what the task automates
 
-Workflow rules:
-- Always include start and end nodes
-- Top-to-bottom layout: start y:50, increment y by ~150, center at x:300
+COMPLETENESS — Break the user's description into individual steps. Create a SEPARATE node for each step:
+- Every distinct operation = its own mcp_tool node (e.g. git_checkout, git_pull, git_commit, git_push, create_pr are ALL separate)
+- Every analysis/reasoning step = its own ai_prompt node
+- Every complex multi-step task (code editing, debugging) = its own agent node
+- Repeated operations on a list = wrap in a loop node
+- Dynamic values = use variable nodes
+- Use up to 20 nodes — as many as the task requires. Never merge distinct steps.
+
+ORDERING — Think about what logically must happen first:
+- Setup/preparation steps come first (creating branches, setting variables, fetching configs)
+- Data gathering steps come next (API calls, database queries, fetching issues)
+- Processing/transformation in the middle (loops, analysis, code changes)
+- Finalization after processing (commits, pushes, saves — OUTSIDE loops)
+- Delivery/notification at the end (PRs, deploys, Slack messages, email alerts, reports)
+
+Node type guide:
+- mcp_tool: Single concrete operations — API calls, git commands, file ops, Jira/Slack actions
+- ai_prompt: Pure reasoning/analysis/summarization (no tool access). Must have aiPrompt with {{NODE_ID.field}} refs
+- agent: Complex multi-step tasks needing tool access. Must have agentPrompt with specific instructions
 - condition: sourceHandle "yes"/"no"
-- loop: sourceHandle "body"/"done"
+- loop: sourceHandle "body"/"done". Collection loops MUST set loopCollection to "{{NODE_ID.arrayField}}"
+
+Workflow layout:
+- Always include start and end nodes
+- Top-to-bottom: start y:50, increment y by ~150, center at x:300
 - Keep labels 2-4 words
-- Keep workflows simple: 4-8 nodes maximum
-- Use mcp_tool for standard operations (Jira, API calls, etc.)
-- Use ai_prompt ONLY for reasoning/analysis/summarization — set aiPrompt with detailed instructions
-- ai_prompt nodes MUST have a non-empty "aiPrompt" with specific references to upstream data using {{NODE_ID.field}}
-- collection loops MUST set loopCollection to "{{NODE_ID.arrayField}}"
 - All edges must have type: "dashed"
 
 Available toolIds: ${toolCatalog}

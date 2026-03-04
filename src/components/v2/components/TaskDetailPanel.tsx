@@ -9,6 +9,8 @@ import { useWorkflowStore } from '../../../store/useWorkflowStore'
 import type { Node } from '@xyflow/react'
 import type { WorkflowNodeData } from '../../../types/workflow'
 import { prepareTaskForExport, serializeExport, encodeForClipboard, canShareTask } from '../../../utils/task-sharing'
+import { useLicenseStore } from '../../../store/useLicenseStore'
+import { ProBadge } from '../../common/ProBadge'
 import { api } from '../../../api'
 
 const statusColors: Record<TaskStatus, 'green' | 'orange' | 'blue' | 'gray'> = {
@@ -72,6 +74,8 @@ export function TaskDetailPanel({ task, onClose }: Props) {
   const updateTask = useTaskStore((s) => s.updateTask)
   const updateSchedule = useTaskStore((s) => s.updateSchedule)
   const activeExecution = useTaskStore((s) => s.activeExecutions[task.id])
+  const tier = useLicenseStore((s) => s.tier)
+  const isPro = tier === 'pro' || tier === 'teams'
 
   // Inline editing state
   const [editingTitle, setEditingTitle] = useState(false)
@@ -381,8 +385,25 @@ export function TaskDetailPanel({ task, onClose }: Props) {
 
             {/* Share */}
             <div>
-              <label className="block text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2">Share</label>
-              {canShareTask(task) ? (
+              <label className="block text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2">Share {!isPro && <ProBadge />}</label>
+              {!isPro ? (
+                <div className="space-y-2">
+                  <button
+                    disabled
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-pilos-card border border-pilos-border rounded-lg text-xs text-zinc-500 opacity-50 cursor-not-allowed"
+                  >
+                    <Icon icon="lucide:download" className="text-zinc-600 text-sm" />
+                    Export as .pilos file
+                  </button>
+                  <button
+                    disabled
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-pilos-card border border-pilos-border rounded-lg text-xs text-zinc-500 opacity-50 cursor-not-allowed"
+                  >
+                    <Icon icon="lucide:clipboard-copy" className="text-zinc-600 text-sm" />
+                    Copy to clipboard
+                  </button>
+                </div>
+              ) : canShareTask(task) ? (
                 <div className="space-y-2">
                   <button
                     onClick={handleExportFile}
@@ -438,7 +459,7 @@ export function TaskDetailPanel({ task, onClose }: Props) {
                     <span className="text-xs font-bold text-white">Latest Run</span>
                     <span className="text-[10px] text-zinc-600 ml-auto">{fmtTimeAgo(task.runs[0].startedAt)}</span>
                   </div>
-                  <p className="text-[11px] text-zinc-400 leading-relaxed">{task.runs[0].summary}</p>
+                  <p className="text-[11px] text-zinc-400 leading-relaxed select-text">{task.runs[0].summary}</p>
                   <div className="flex items-center gap-3 mt-2">
                     <span className="text-[10px] text-zinc-500 font-mono">{fmtDuration(task.runs[0].duration)}</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${
@@ -492,7 +513,7 @@ export function TaskDetailPanel({ task, onClose }: Props) {
                         return (
                           <div key={i} className="flex items-start gap-2 p-2 bg-pilos-card border border-pilos-border rounded-lg">
                             <Icon icon={iconCfg.icon} className={`${iconCfg.color} text-xs mt-0.5 flex-shrink-0`} />
-                            <div className="min-w-0">
+                            <div className="min-w-0 select-text">
                               <span className="text-[11px] text-zinc-300">{action.description}</span>
                               {action.metadata && Object.keys(action.metadata).length > 0 && (
                                 <div className="mt-0.5 text-[10px] text-zinc-600 font-mono truncate">
@@ -513,7 +534,7 @@ export function TaskDetailPanel({ task, onClose }: Props) {
                     <summary className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest cursor-pointer hover:text-zinc-400">
                       Logs ({task.runs[0].logs.length})
                     </summary>
-                    <pre className="mt-1.5 text-[10px] text-zinc-500 leading-relaxed whitespace-pre-wrap break-words max-h-48 overflow-y-auto custom-scrollbar">
+                    <pre className="mt-1.5 text-[10px] text-zinc-500 leading-relaxed whitespace-pre-wrap break-words max-h-48 overflow-y-auto custom-scrollbar select-text">
                       {task.runs[0].logs.join('\n')}
                     </pre>
                   </details>

@@ -7,6 +7,8 @@ import { useProjectStore } from '../../../store/useProjectStore'
 import { useWorkflowDetection } from '../../../hooks/useWorkflowDetection'
 import { ConvertConversationModal } from '../components/ConvertConversationModal'
 import { WorkflowSuggestionBanner } from '../components/WorkflowSuggestionBanner'
+import { useLicenseStore } from '../../../store/useLicenseStore'
+import { ProBadge } from '../../common/ProBadge'
 import type { ImageAttachment } from '../../../types'
 
 // Reuse existing chat components
@@ -191,6 +193,8 @@ function TerminalControls({ onSaveAsTask }: { onSaveAsTask: () => void }) {
   const messages = useConversationStore((s) => s.messages)
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
   const conversations = useConversationStore((s) => s.conversations)
+  const tier = useLicenseStore((s) => s.tier)
+  const isPro = tier === 'pro' || tier === 'teams'
   const [copied, setCopied] = useState(false)
 
   const handleCopyAll = () => {
@@ -233,29 +237,32 @@ function TerminalControls({ onSaveAsTask }: { onSaveAsTask: () => void }) {
   return (
     <div className="flex items-center gap-1 px-4 py-1.5 border-b border-pilos-border bg-pilos-card/30 flex-shrink-0">
       <button
-        onClick={handleCopyAll}
-        disabled={messages.length === 0}
-        className="px-2 py-1 text-[10px] text-zinc-500 hover:text-white hover:bg-zinc-800 disabled:opacity-30 rounded transition-colors flex items-center gap-1"
+        onClick={isPro ? handleCopyAll : undefined}
+        disabled={!isPro || messages.length === 0}
+        className="px-2 py-1 text-[10px] text-zinc-500 hover:text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed rounded transition-colors flex items-center gap-1"
       >
         <Icon icon={copied ? 'lucide:check' : 'lucide:copy'} className="text-[10px]" />
         {copied ? 'Copied' : 'Copy All'}
+        {!isPro && <ProBadge />}
       </button>
       <button
-        onClick={handleExport}
-        disabled={messages.length === 0}
-        className="px-2 py-1 text-[10px] text-zinc-500 hover:text-white hover:bg-zinc-800 disabled:opacity-30 rounded transition-colors flex items-center gap-1"
+        onClick={isPro ? handleExport : undefined}
+        disabled={!isPro || messages.length === 0}
+        className="px-2 py-1 text-[10px] text-zinc-500 hover:text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed rounded transition-colors flex items-center gap-1"
       >
         <Icon icon="lucide:download" className="text-[10px]" />
         Export
+        {!isPro && <ProBadge />}
       </button>
       <div className="w-px h-3 bg-pilos-border mx-1" />
       <button
-        onClick={onSaveAsTask}
-        disabled={messages.length < 4}
-        className="px-2 py-1 text-[10px] text-zinc-500 hover:text-white hover:bg-zinc-800 disabled:opacity-30 rounded transition-colors flex items-center gap-1"
+        onClick={isPro ? onSaveAsTask : undefined}
+        disabled={!isPro || messages.length < 4}
+        className="px-2 py-1 text-[10px] text-zinc-500 hover:text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed rounded transition-colors flex items-center gap-1"
       >
         <Icon icon="lucide:workflow" className="text-[10px]" />
         Save as Task
+        {!isPro && <ProBadge />}
       </button>
     </div>
   )
@@ -269,6 +276,8 @@ function TerminalInput() {
   const queueMessage = useConversationStore((s) => s.queueMessage)
   const messageQueue = useConversationStore((s) => s.messageQueue)
   const clearMessageQueue = useConversationStore((s) => s.clearMessageQueue)
+  const replyToMessage = useConversationStore((s) => s.replyToMessage)
+  const setReplyTo = useConversationStore((s) => s.setReplyTo)
   const isWaitingForResponse = useConversationStore((s) => s.isWaitingForResponse)
   const isStreaming = useConversationStore((s) => s.streaming.isStreaming)
   const abortSession = useConversationStore((s) => s.abortSession)
@@ -394,6 +403,23 @@ function TerminalInput() {
         <div className="flex items-center justify-center gap-2 py-2 mb-2 rounded-lg border border-dashed border-blue-500/30 bg-blue-500/5">
           <Icon icon="lucide:upload" className="text-blue-400 text-sm" />
           <span className="text-xs text-blue-400">Drop file here</span>
+        </div>
+      )}
+
+      {/* Reply preview */}
+      {replyToMessage && (
+        <div className="flex items-center gap-2 mb-2 px-2 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+          <Icon icon="lucide:reply" className="text-blue-400 text-xs flex-shrink-0" />
+          <span className="text-xs text-blue-300 truncate flex-1">
+            <span className="font-medium">{replyToMessage.role === 'user' ? 'You' : (replyToMessage.agentName || 'Assistant')}:</span>{' '}
+            {replyToMessage.content.slice(0, 100)}{replyToMessage.content.length > 100 ? '...' : ''}
+          </span>
+          <button
+            onClick={() => setReplyTo(null)}
+            className="text-blue-400/60 hover:text-blue-300 transition-colors cursor-pointer flex-shrink-0"
+          >
+            <Icon icon="lucide:x" className="text-xs" />
+          </button>
         </div>
       )}
 
@@ -610,7 +636,7 @@ export default function TerminalPage() {
         )}
 
         {/* Messages */}
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto custom-scrollbar bg-[#0c0c0e]">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto custom-scrollbar bg-[#0c0c0e] select-text">
           <div className="p-4 space-y-1">
             {messages.map((msg, i) => (
               <MessageBubble
@@ -623,7 +649,7 @@ export default function TerminalPage() {
             {/* Streaming content */}
             {streaming.isStreaming && streaming.text && (
               <div className="py-2">
-                <div className="text-sm text-zinc-300 whitespace-pre-wrap font-mono leading-relaxed">
+                <div className="text-sm text-zinc-300 whitespace-pre-wrap font-mono leading-relaxed select-text">
                   {streaming.text}
                   <span className="streaming-cursor" />
                 </div>

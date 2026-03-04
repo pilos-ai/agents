@@ -121,6 +121,15 @@ export function validateWorkflow(
     }
   }
 
+  // --- Agent checks ---
+
+  const agentNodes = nodes.filter((n) => n.data.type === 'agent')
+  for (const agent of agentNodes) {
+    if (!agent.data.agentPrompt?.trim()) {
+      issues.push({ type: 'error', nodeId: agent.id, message: `Agent "${agent.data.label}" has an empty prompt` })
+    }
+  }
+
   // --- Required parameter checks ---
 
   const toolNodes = nodes.filter((n) => n.data.type === 'mcp_tool' && n.data.parameters)

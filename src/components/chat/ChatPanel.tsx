@@ -136,7 +136,7 @@ export function ChatPanel() {
       {/* Messages with neural background */}
       <div className="relative flex-1 min-h-0">
         <ThinkingBackground />
-        <div ref={scrollRef} onScroll={handleScroll} className="relative z-[1] h-full overflow-y-auto px-4 py-3">
+        <div ref={scrollRef} onScroll={handleScroll} className="relative z-[1] h-full overflow-y-auto px-4 py-3 select-text">
           {/* Load earlier messages button */}
           {hiddenCount > 0 && (
             <button
@@ -191,7 +191,7 @@ export function ChatPanel() {
                 )}
 
                 {/* Text / thinking bubble */}
-                <div className={`max-w-[85%] rounded-lg px-4 py-3 text-neutral-100 ${
+                <div className={`max-w-[85%] rounded-lg px-4 py-3 text-neutral-100 select-text ${
                   agentColors
                     ? `${agentColors.bgLight} border-l-2 ${agentColors.border}`
                     : 'bg-neutral-800/60'

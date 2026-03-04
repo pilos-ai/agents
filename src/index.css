@@ -80,6 +80,20 @@ pre, code, .xterm, .markdown-content,
   -webkit-user-select: text;
 }
 
+/* Ensure select-text propagates to all descendants (overrides * rule) */
+.select-text,
+.select-text * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+/* Ensure select-none wins inside select-text containers (buttons, icons, etc.) */
+.select-none,
+.select-none * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 body {
   margin: 0;
   background: var(--pilos-bg);

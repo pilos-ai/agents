@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Icon } from '../../common/Icon'
 import { useWorkflowStore } from '../../../store/useWorkflowStore'
-import { WORKFLOW_TOOL_CATEGORIES, LOOP_COLLECTION_OUTPUT, LOOP_COUNT_OUTPUT, VARIABLE_OUTPUT, CONDITION_OUTPUT, DELAY_OUTPUT, AI_PROMPT_OUTPUT } from '../../../data/workflow-tools'
+import { WORKFLOW_TOOL_CATEGORIES, LOOP_COLLECTION_OUTPUT, LOOP_COUNT_OUTPUT, VARIABLE_OUTPUT, CONDITION_OUTPUT, DELAY_OUTPUT, AI_PROMPT_OUTPUT, AGENT_OUTPUT } from '../../../data/workflow-tools'
 import type { OutputField, WorkflowNodeData } from '../../../types/workflow'
 import type { Node, Edge } from '@xyflow/react'
 
@@ -70,6 +70,7 @@ function getNodeOutputSchema(node: Node<WorkflowNodeData>): OutputField[] {
   if (d.type === 'condition') return CONDITION_OUTPUT
   if (d.type === 'delay') return DELAY_OUTPUT
   if (d.type === 'ai_prompt') return AI_PROMPT_OUTPUT
+  if (d.type === 'agent') return AGENT_OUTPUT
   return []
 }
 

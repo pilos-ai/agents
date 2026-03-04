@@ -28,22 +28,35 @@ function buildGenerationPrompt(userDescription: string): string {
 OUTPUT ONLY THE RAW JSON OBJECT. Do not include any text before or after the JSON. No markdown code fences. No explanation. Start your response with { and end with }.
 
 JSON schema:
-{"nodes":[{"id":"NODE_START_01","type":"start|end|mcp_tool|ai_prompt|condition|loop|delay|parallel|merge|variable|note","position":{"x":300,"y":50},"data":{"type":"(same as node type)","label":"short name","description":"optional for mcp_tool","toolId":"optional: read_files|create_pr|git_commit|git_diff|transform_json|filter_data|aggregate|jira_search|jira_get_issue|jira_create|jira_transition|jira_get_transitions|slack_message|slack_thread|run_command|run_script|web_search|email_alert|webhook","toolCategory":"optional: GitHub Operations|Data Processing|Jira Integration|Slack Integration|Code Execution|Notifications","toolIcon":"optional: lucide:icon-name","aiPrompt":"for ai_prompt: the prompt text for Claude","aiModel":"for ai_prompt: haiku|sonnet|opus","conditionExpression":"for condition","conditionOperator":"equals|contains|greater_than|less_than|regex","conditionValue":"for condition","loopType":"count|collection|while","loopCount":3,"loopCollection":"for collection loops: use {{NODE_ID.arrayField}} to reference upstream output","delayMs":5,"delayUnit":"s|ms|min|h","variableName":"for variable","variableValue":"for variable","variableOperation":"set|append|increment|transform","noteText":"for note"}}],"edges":[{"id":"edge_01","source":"node id","target":"node id","sourceHandle":"null or yes/no for condition, body/done for loop, branch_1/branch_2 for parallel","type":"dashed"}]}
+{"nodes":[{"id":"NODE_START_01","type":"start|end|mcp_tool|ai_prompt|agent|condition|loop|delay|parallel|merge|variable|note","position":{"x":300,"y":50},"data":{"type":"(same as node type)","label":"short name","description":"optional for mcp_tool","toolId":"optional: git_checkout|git_pull|git_push|git_merge|git_commit|git_diff|create_pr|read_files|write_file|edit_file|transform_json|filter_data|aggregate|jira_search|jira_get_issue|jira_create|jira_transition|jira_get_transitions|jira_delete|slack_message|slack_thread|run_command|run_script|web_search|api_request|webhook|email_alert","toolCategory":"optional","toolIcon":"optional: lucide:icon-name","aiPrompt":"for ai_prompt: the prompt text for Claude","aiModel":"for ai_prompt: haiku|sonnet|opus","agentPrompt":"for agent nodes - detailed instruction of what to accomplish","agentModel":"haiku|sonnet|opus","agentMaxTurns":25,"conditionExpression":"for condition","conditionOperator":"equals|contains|greater_than|less_than|regex","conditionValue":"for condition","loopType":"count|collection|while","loopCount":3,"loopCollection":"for collection loops: use {{NODE_ID.arrayField}} to reference upstream output","delayMs":5,"delayUnit":"s|ms|min|h","variableName":"for variable","variableValue":"for variable","variableOperation":"set|append|increment|transform","noteText":"for note"}}],"edges":[{"id":"edge_01","source":"node id","target":"node id","sourceHandle":"null or yes/no for condition, body/done for loop, branch_1/branch_2 for parallel","type":"dashed"}]}
 
-Rules:
+COMPLETENESS — Break the description into individual steps. Create a SEPARATE node for each step:
+- Every distinct operation = its own mcp_tool node (e.g. git_checkout, git_pull, git_commit, git_push, create_pr are ALL separate)
+- Every analysis/reasoning step = its own ai_prompt node
+- Every complex multi-step task (code editing, debugging) = its own agent node
+- Repeated operations on a list = wrap in a loop node
+- Dynamic values = use variable nodes
+- Use up to 20 nodes — as many as the workflow requires. Never merge distinct steps.
+
+ORDERING — Think about what logically must happen first:
+- Setup/preparation steps first (creating branches, setting variables, fetching configs)
+- Data gathering next (API calls, database queries, fetching issues)
+- Processing/transformation in the middle (loops, analysis, code changes)
+- Finalization after processing (commits, pushes, saves — OUTSIDE loops)
+- Delivery/notification at the end (PRs, deploys, Slack messages, email alerts, reports)
+
+Layout & structure:
 - Always include start and end nodes
-- Top-to-bottom layout: start y:50, increment y by ~150
-- Parallel branches: spread x (100 vs 400)
-- Single column: center at x:300
-- condition: sourceHandle "yes"/"no"
-- loop: sourceHandle "body"/"done"
-- parallel/merge for concurrency
-- Keep labels 2-4 words
-- Only include data fields relevant to each node type
-- collection loops MUST set loopCollection to reference the upstream node output, e.g. "{{NODE_FIND_01.files}}" where NODE_FIND_01 is the id of the node whose output contains the array
-- Use mcp_tool for standard operations (Jira search/create/transition, API calls, etc.) — these run directly via API, no AI needed
-- Use ai_prompt ONLY when reasoning/analysis/summarization is needed (e.g. "analyze these issues", "write a summary", "decide what to do"). Set aiPrompt and optionally aiModel
-- ai_prompt nodes MUST have a non-empty "aiPrompt" field with a detailed, actionable prompt. Include specific references to upstream data using {{NODE_ID.field}} syntax. Never leave aiPrompt empty or with placeholder text
+- Top-to-bottom: start y:50, increment y by ~150
+- Parallel branches: spread x (100 vs 400); single column: center at x:300
+- condition: sourceHandle "yes"/"no"; loop: sourceHandle "body"/"done"; parallel/merge for concurrency
+- Keep labels 2-4 words; only include data fields relevant to each node type
+
+Node type guide:
+- mcp_tool: Single concrete operations — API calls, git commands, file ops, Jira/Slack actions
+- ai_prompt: Pure reasoning/analysis/summarization (no tool access). Must have aiPrompt with {{NODE_ID.field}} refs
+- agent: Complex multi-step tasks needing tool access. Must have agentPrompt with specific instructions
+- Collection loops MUST set loopCollection to "{{NODE_ID.arrayField}}"
 
 ${WORKFLOW_RUNTIME_GUIDE}`
 }

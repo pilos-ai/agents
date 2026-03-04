@@ -66,7 +66,7 @@ export function ToolResultBlock({ block }: Props) {
         </button>
 
         {expanded && content && (
-          <div className="px-3 pb-2">
+          <div className="px-3 pb-2 select-text">
             <CodeBlock language="" code={content} />
           </div>
         )}

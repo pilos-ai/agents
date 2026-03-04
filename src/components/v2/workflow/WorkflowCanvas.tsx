@@ -15,9 +15,12 @@ import { MergeNode } from './nodes/MergeNode'
 import { VariableNode } from './nodes/VariableNode'
 import { NoteNode } from './nodes/NoteNode'
 import { AiNode } from './nodes/AiNode'
+import { AgentNode } from './nodes/AgentNode'
 import { ResultsDisplayNode } from './nodes/ResultsDisplayNode'
 import { DashedEdge } from './edges/DashedEdge'
 import { useWorkflowStore } from '../../../store/useWorkflowStore'
+import { useLicenseStore } from '../../../store/useLicenseStore'
+import { ProBadge } from '../../common/ProBadge'
 import type { WorkflowNodeData, McpToolDefinition } from '../../../types/workflow'
 
 const nodeTypes = {
@@ -32,6 +35,7 @@ const nodeTypes = {
   variable: VariableNode,
   note: NoteNode,
   ai_prompt: AiNode,
+  agent: AgentNode,
   results_display: ResultsDisplayNode,
 }
 
@@ -62,6 +66,8 @@ export function WorkflowCanvas() {
   const duplicateNode = useWorkflowStore((s) => s.duplicateNode)
   const selectedNodeId = useWorkflowStore((s) => s.selectedNodeId)
   const setShowGenerateModal = useWorkflowStore((s) => s.setShowGenerateModal)
+  const tier = useLicenseStore((s) => s.tier)
+  const isPro = tier === 'pro' || tier === 'teams'
 
   const reactFlowRef = useRef<ReactFlowInstance<Node<WorkflowNodeData>> | null>(null)
 
@@ -238,6 +244,7 @@ export function WorkflowCanvas() {
       if (t === 'variable') return '#8b5cf6'
       if (t === 'note') return '#eab308'
       if (t === 'ai_prompt') return '#a855f7'
+      if (t === 'agent') return '#10b981'
       if (t === 'results_display') return '#22d3ee'
       return '#3b82f6'
     }
@@ -320,11 +327,13 @@ export function WorkflowCanvas() {
                 Templates
               </button>
               <button
-                onClick={() => setShowGenerateModal(true)}
-                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-lg shadow-blue-600/20 transition-all"
+                onClick={() => isPro && setShowGenerateModal(true)}
+                disabled={!isPro}
+                className={`flex-1 px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${isPro ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20' : 'bg-zinc-800 border border-pilos-border text-zinc-500 cursor-not-allowed opacity-60'}`}
               >
-                <Icon icon="lucide:sparkles" className="text-sm mr-1.5 inline-block" />
+                <Icon icon="lucide:sparkles" className="text-sm" />
                 Generate with AI
+                {!isPro && <ProBadge />}
               </button>
             </div>
           </div>

@@ -9,6 +9,8 @@ import { useTaskStore, type Task, type TaskStatus, type TaskPriority } from '../
 import { useProjectStore } from '../../../store/useProjectStore'
 import { useWorkflowStore } from '../../../store/useWorkflowStore'
 import { parseExportFile, decodeFromClipboard, importedFileToTask, isPilosClipboardString } from '../../../utils/task-sharing'
+import { useLicenseStore } from '../../../store/useLicenseStore'
+import { ProBadge } from '../../common/ProBadge'
 import { api } from '../../../api'
 
 const statusColors: Record<TaskStatus, 'green' | 'orange' | 'blue' | 'gray'> = {
@@ -115,6 +117,8 @@ export default function TasksPage() {
   const editingWorkflowTaskId = useWorkflowStore((s) => s.editingTaskId)
   const addTask = useTaskStore((s) => s.addTask)
   const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
+  const tier = useLicenseStore((s) => s.tier)
+  const isPro = tier === 'pro' || tier === 'teams'
   const [showGenerateModal, setShowGenerateModal] = useState(false)
   const [showImportMenu, setShowImportMenu] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
@@ -233,13 +237,15 @@ export default function TasksPage() {
           </div>
           <div className="relative" onClick={(e) => e.stopPropagation()}>
             <button
-              onClick={() => setShowImportMenu(!showImportMenu)}
-              className="px-3 py-1.5 bg-pilos-card border border-pilos-border hover:border-zinc-600 text-zinc-300 hover:text-white text-xs font-medium rounded-lg transition-all flex items-center gap-1.5"
+              onClick={() => isPro && setShowImportMenu(!showImportMenu)}
+              disabled={!isPro}
+              className={`px-3 py-1.5 bg-pilos-card border border-pilos-border text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${isPro ? 'hover:border-zinc-600 text-zinc-300 hover:text-white' : 'opacity-50 cursor-not-allowed text-zinc-500'}`}
             >
-              <Icon icon="lucide:upload" className="text-blue-400 text-xs" />
+              <Icon icon="lucide:upload" className={isPro ? 'text-blue-400 text-xs' : 'text-zinc-600 text-xs'} />
               Import
+              {!isPro && <ProBadge />}
             </button>
-            {showImportMenu && (
+            {showImportMenu && isPro && (
               <div className="absolute top-full right-0 mt-1 bg-zinc-800 border border-pilos-border rounded-lg shadow-xl z-10 overflow-hidden w-52">
                 <button
                   onClick={handleImportFile}
@@ -259,11 +265,13 @@ export default function TasksPage() {
             )}
           </div>
           <button
-            onClick={() => setShowGenerateModal(true)}
-            className="px-3 py-1.5 bg-pilos-card border border-pilos-border hover:border-zinc-600 text-zinc-300 hover:text-white text-xs font-medium rounded-lg transition-all flex items-center gap-1.5"
+            onClick={() => isPro && setShowGenerateModal(true)}
+            disabled={!isPro}
+            className={`px-3 py-1.5 bg-pilos-card border border-pilos-border text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${isPro ? 'hover:border-zinc-600 text-zinc-300 hover:text-white' : 'opacity-50 cursor-not-allowed text-zinc-500'}`}
           >
-            <Icon icon="lucide:sparkles" className="text-blue-400 text-xs" />
+            <Icon icon="lucide:sparkles" className={isPro ? 'text-blue-400 text-xs' : 'text-zinc-600 text-xs'} />
             AI Generate
+            {!isPro && <ProBadge />}
           </button>
         </div>
 

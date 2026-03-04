@@ -57,10 +57,10 @@ function ResultRow({ result, label, nodeType }: { result: WorkflowStepResult; la
       {expanded && (
         <div className="px-3 pb-2.5 border-t border-pilos-border/50">
           {isFailed && result.error && (
-            <p className="text-[10px] text-red-400 mt-2 leading-relaxed">{result.error}</p>
+            <p className="text-[10px] text-red-400 mt-2 leading-relaxed select-text">{result.error}</p>
           )}
           {isOk && result.output != null && (
-            <pre className="text-[10px] text-zinc-400 mt-2 leading-relaxed whitespace-pre-wrap break-all font-mono bg-zinc-900/50 rounded p-2 max-h-[200px] overflow-y-auto custom-scrollbar">
+            <pre className="text-[10px] text-zinc-400 mt-2 leading-relaxed whitespace-pre-wrap break-all font-mono bg-zinc-900/50 rounded p-2 max-h-[200px] overflow-y-auto custom-scrollbar select-text">
               {formatOutput(result.output, 'full')}
             </pre>
           )}

@@ -179,7 +179,7 @@ function ResultFeedCard({ run }: { run: FlattenedRun }) {
               {run.status}
             </span>
           </div>
-          <p className="text-[11px] text-zinc-500 truncate">{run.summary}</p>
+          <p className="text-[11px] text-zinc-500 truncate select-text">{run.summary}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <span className="text-[10px] text-zinc-500 font-mono">{formatDuration(run.duration)}</span>
@@ -210,7 +210,7 @@ function ResultFeedCard({ run }: { run: FlattenedRun }) {
                 <Icon icon="lucide:layout-dashboard" className="text-cyan-400 text-[10px]" />
                 <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">{structuredResult.title}</span>
               </div>
-              <div className="rounded-lg border border-pilos-border/50 bg-zinc-900/40 p-3 max-h-[300px] overflow-y-auto custom-scrollbar">
+              <div className="rounded-lg border border-pilos-border/50 bg-zinc-900/40 p-3 max-h-[300px] overflow-y-auto custom-scrollbar select-text">
                 <SmartDataRenderer data={structuredResult.output} />
               </div>
             </div>
@@ -220,7 +220,7 @@ function ResultFeedCard({ run }: { run: FlattenedRun }) {
           {run.summary && (
             <div>
               <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest block mb-1.5">Summary</span>
-              <p className="text-xs text-zinc-400 leading-relaxed">{run.summary}</p>
+              <p className="text-xs text-zinc-400 leading-relaxed select-text">{run.summary}</p>
             </div>
           )}
 
@@ -260,7 +260,7 @@ function ResultFeedCard({ run }: { run: FlattenedRun }) {
                   return (
                     <div key={i} className="flex items-start gap-2 p-2 bg-pilos-card border border-pilos-border rounded-lg">
                       <Icon icon={iconCfg.icon} className={`${iconCfg.color} text-xs mt-0.5 flex-shrink-0`} />
-                      <div className="min-w-0">
+                      <div className="min-w-0 select-text">
                         <span className="text-[11px] text-zinc-300">{action.description}</span>
                         {action.metadata && Object.keys(action.metadata).length > 0 && (
                           <div className="mt-0.5 text-[10px] text-zinc-600 font-mono truncate">
@@ -281,7 +281,7 @@ function ResultFeedCard({ run }: { run: FlattenedRun }) {
               <summary className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest cursor-pointer hover:text-zinc-400">
                 Logs ({run.logs.length})
               </summary>
-              <pre className="mt-1.5 text-[10px] text-zinc-500 leading-relaxed whitespace-pre-wrap break-words max-h-48 overflow-y-auto custom-scrollbar">
+              <pre className="mt-1.5 text-[10px] text-zinc-500 leading-relaxed whitespace-pre-wrap break-words max-h-48 overflow-y-auto custom-scrollbar select-text">
                 {run.logs.join('\n')}
               </pre>
             </details>

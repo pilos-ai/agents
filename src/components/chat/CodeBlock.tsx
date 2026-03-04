@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { useLicenseStore } from '../../store/useLicenseStore'
+import { ProBadge } from '../common/ProBadge'
 
 interface Props {
   language: string
@@ -9,8 +11,11 @@ interface Props {
 
 export function CodeBlock({ language, code }: Props) {
   const [copied, setCopied] = useState(false)
+  const tier = useLicenseStore((s) => s.tier)
+  const isPro = tier === 'pro' || tier === 'teams'
 
   const handleCopy = async () => {
+    if (!isPro) return
     await navigator.clipboard.writeText(code)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
@@ -23,9 +28,10 @@ export function CodeBlock({ language, code }: Props) {
         <span>{language || 'text'}</span>
         <button
           onClick={handleCopy}
-          className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-white"
+          disabled={!isPro}
+          className={`opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 ${isPro ? 'hover:text-white' : 'cursor-not-allowed opacity-50'}`}
         >
-          {copied ? 'Copied!' : 'Copy'}
+          {isPro ? (copied ? 'Copied!' : 'Copy') : <><span>Copy</span><ProBadge /></>}
         </button>
       </div>
 

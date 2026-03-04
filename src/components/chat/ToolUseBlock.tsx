@@ -211,7 +211,7 @@ function BashBlock({ block, showRaw, onToggleRaw }: { block: ToolUseBlockType; s
         <button onClick={onToggleRaw} className="w-full text-left">
           <div className="flex items-start gap-2">
             <span className="text-green-400 text-xs font-mono select-none shrink-0">$</span>
-            <pre className="text-xs font-mono text-neutral-200 whitespace-pre-wrap break-all m-0">{command}</pre>
+            <pre className="text-xs font-mono text-neutral-200 whitespace-pre-wrap break-all m-0 select-text">{command}</pre>
           </div>
         </button>
         {description && (

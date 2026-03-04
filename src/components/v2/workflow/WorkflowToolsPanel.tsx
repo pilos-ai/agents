@@ -5,6 +5,8 @@ import { WorkflowGenerateModal } from './WorkflowGenerateModal'
 import { WORKFLOW_TOOL_CATEGORIES, TOOL_FILTER_TABS, filterToolCategories } from '../../../data/workflow-tools'
 import { useWorkflowStore } from '../../../store/useWorkflowStore'
 import { useProjectStore } from '../../../store/useProjectStore'
+import { useLicenseStore } from '../../../store/useLicenseStore'
+import { ProBadge } from '../../common/ProBadge'
 import type { McpToolCategory, McpToolDefinition } from '../../../types/workflow'
 
 // Map MCP server configs to workflow tool categories
@@ -65,6 +67,7 @@ const STRUCTURAL_NODES = [
   { id: '_variable', name: 'Variable', icon: 'lucide:variable', description: 'Set or transform data', nodeType: 'variable' },
   { id: '_note', name: 'Note', icon: 'lucide:sticky-note', description: 'Add annotation', nodeType: 'note' },
   { id: '_ai_prompt', name: 'AI Prompt', icon: 'lucide:sparkles', description: 'Ask Claude AI to help', nodeType: 'ai_prompt' },
+  { id: '_agent', name: 'Agent', icon: 'lucide:bot', description: 'Full Claude Code session', nodeType: 'agent' },
   { id: '_results_display', name: 'Results', icon: 'lucide:layout-dashboard', description: 'Display workflow output', nodeType: 'results_display' },
 ] as const
 
@@ -79,6 +82,7 @@ const NODE_COLORS: Record<string, { bg: string; bgHover: string; text: string }>
   variable: { bg: 'bg-violet-500/10', bgHover: 'group-hover:bg-violet-500/20', text: 'text-violet-400' },
   note: { bg: 'bg-yellow-500/10', bgHover: 'group-hover:bg-yellow-500/20', text: 'text-yellow-400' },
   ai_prompt: { bg: 'bg-purple-500/10', bgHover: 'group-hover:bg-purple-500/20', text: 'text-purple-400' },
+  agent: { bg: 'bg-emerald-500/10', bgHover: 'group-hover:bg-emerald-500/20', text: 'text-emerald-400' },
   results_display: { bg: 'bg-cyan-500/10', bgHover: 'group-hover:bg-cyan-500/20', text: 'text-cyan-400' },
 }
 
@@ -109,6 +113,8 @@ export function WorkflowToolsPanel() {
   const showGenerate = useWorkflowStore((s) => s.showGenerateModal)
   const setShowGenerate = useWorkflowStore((s) => s.setShowGenerateModal)
   const toggleChatMode = useWorkflowStore((s) => s.toggleChatMode)
+  const tier = useLicenseStore((s) => s.tier)
+  const isPro = tier === 'pro' || tier === 'teams'
   const search = useWorkflowStore((s) => s.toolSearchQuery)
   const setSearch = useWorkflowStore((s) => s.setToolSearchQuery)
   const tab = useWorkflowStore((s) => s.toolFilterTab)
@@ -155,11 +161,13 @@ export function WorkflowToolsPanel() {
 
         {/* AI Chat / Tools toggle */}
         <button
-          onClick={toggleChatMode}
-          className="w-full mb-2.5 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition-all shadow-lg shadow-blue-500/10"
+          onClick={isPro ? toggleChatMode : undefined}
+          disabled={!isPro}
+          className={`w-full mb-2.5 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${isPro ? 'text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 shadow-lg shadow-blue-500/10' : 'text-zinc-500 bg-zinc-800 border border-pilos-border cursor-not-allowed opacity-60'}`}
         >
           <Icon icon="lucide:sparkles" className="text-xs" />
           Build with AI Chat
+          {!isPro && <ProBadge />}
         </button>
 
         {/* Search */}

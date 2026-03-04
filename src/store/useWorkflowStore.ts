@@ -148,7 +148,7 @@ export function stripEdgeRuntime(edges: Edge[]): Edge[] {
 /** Valid React Flow node types — must match the nodeTypes map in WorkflowCanvas */
 const VALID_NODE_TYPES = new Set([
   'start', 'end', 'mcp_tool', 'condition', 'loop', 'delay',
-  'parallel', 'merge', 'variable', 'note', 'ai_prompt', 'results_display',
+  'parallel', 'merge', 'variable', 'note', 'ai_prompt', 'agent', 'results_display',
 ])
 
 /** Ensure every node has a valid React Flow `type` AND `data.type` */
