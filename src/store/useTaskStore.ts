@@ -148,6 +148,10 @@ interface TaskStore {
   selectedTaskId: string | null
   showCreateModal: boolean
   activeExecutions: Record<string, ActiveExecution>
+  /** Task IDs that have been requested to stop */
+  _abortedTaskIds: Set<string>
+  /** Active Claude session ID per task (for mid-node abort) */
+  _activeTaskSessions: Record<string, string>
 
   setActiveExecution: (taskId: string, data: ActiveExecution | null) => void
   loadTasks: (projectPath: string) => Promise<void>
@@ -168,6 +172,7 @@ interface TaskStore {
   triggerRun: (taskId: string, trigger: 'manual' | 'scheduled') => Promise<void>
   addRunResult: (taskId: string, run: TaskRun) => Promise<void>
   runTaskWorkflow: (taskId: string, trigger?: 'manual' | 'scheduled') => Promise<void>
+  stopTask: (taskId: string) => void
 }
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
@@ -181,6 +186,8 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   selectedTaskId: null,
   showCreateModal: false,
   activeExecutions: {},
+  _abortedTaskIds: new Set(),
+  _activeTaskSessions: {},
 
   setActiveExecution: (taskId, data) => {
     set((s) => {
@@ -568,8 +575,34 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       },
 
       isAborted: () => {
-        return false // TODO: support aborting from task detail panel
+        return get()._abortedTaskIds.has(taskId)
+      },
+
+      onSessionStart: (sessionId: string) => {
+        set((s) => ({ _activeTaskSessions: { ...s._activeTaskSessions, [taskId]: sessionId } }))
+      },
+
+      onSessionEnd: () => {
+        set((s) => {
+          const next = { ...s._activeTaskSessions }
+          delete next[taskId]
+          return { _activeTaskSessions: next }
+        })
       },
     }, workingDirectory, jiraProjectKey)
+
+    // Clean up abort flag when workflow finishes
+    get()._abortedTaskIds.delete(taskId)
+  },
+
+  stopTask: (taskId) => {
+    // 1. Set abort flag so isAborted() returns true at next node boundary
+    get()._abortedTaskIds.add(taskId)
+
+    // 2. Kill any active Claude session for immediate effect
+    const sessionId = get()._activeTaskSessions[taskId]
+    if (sessionId) {
+      api.claude.abort(sessionId)
+    }
   },
 }))

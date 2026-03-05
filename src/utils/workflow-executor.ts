@@ -35,6 +35,10 @@ export interface ExecutionCallbacks {
   onComplete: () => void
   onFail: (error: string) => void
   isAborted: () => boolean
+  /** Called when a Claude CLI session starts (for abort tracking) */
+  onSessionStart?: (sessionId: string) => void
+  /** Called when a Claude CLI session ends */
+  onSessionEnd?: () => void
   /** When true, tool nodes log what they would do but don't execute API calls */
   dryRun?: boolean
   /** When true, execution pauses after each node and waits for debugStep/debugContinue */
@@ -465,9 +469,12 @@ IMPORTANT: Execute this immediately. Do NOT ask for clarification. Return your r
 
   // Reuse the existing MCP tool execution pattern
   const sessionId = `wf-ai-${node.id}-${Date.now()}`
+  callbacks.onSessionStart?.(sessionId)
 
   return new Promise<unknown>((resolve, reject) => {
     let resultText = ''
+
+    const cleanup = () => { callbacks.onSessionEnd?.() }
 
     const unsub = api.claude.onEvent((event: ClaudeEvent) => {
       if (event.sessionId !== sessionId) return
@@ -481,6 +488,7 @@ IMPORTANT: Execute this immediately. Do NOT ask for clarification. Return your r
 
       if (event.type === 'result') {
         unsub()
+        cleanup()
 
         const rawResult = event.result
         let finalText = resultText
@@ -522,6 +530,7 @@ IMPORTANT: Execute this immediately. Do NOT ask for clarification. Return your r
       mcpConfigPath: ctx.mcpConfigPath,
     }).catch((err) => {
       unsub()
+      cleanup()
       reject(new Error(`AI session failed: ${err instanceof Error ? err.message : 'Unknown error'}`))
     })
 
@@ -529,6 +538,7 @@ IMPORTANT: Execute this immediately. Do NOT ask for clarification. Return your r
       if (!ctx.aborted) {
         api.claude.abort(sessionId)
         unsub()
+        cleanup()
         reject(new Error('AI prompt execution timed out (300s)'))
       }
     }, 300_000)
@@ -543,6 +553,7 @@ async function executeMcpTool(
   callbacks: ExecutionCallbacks,
 ): Promise<unknown> {
   const sessionId = `wf-exec-${node.id}-${Date.now()}`
+  callbacks.onSessionStart?.(sessionId)
   const toolName = node.data.toolId || node.data.label
   const params = node.data.parameters || {}
 
@@ -583,6 +594,8 @@ IMPORTANT: Execute this operation right now using the available MCP tools or sys
   return new Promise<unknown>((resolve, reject) => {
     let resultText = ''
 
+    const cleanup = () => { callbacks.onSessionEnd?.() }
+
     const unsub = api.claude.onEvent((event: ClaudeEvent) => {
       if (event.sessionId !== sessionId) return
 
@@ -595,6 +608,7 @@ IMPORTANT: Execute this operation right now using the available MCP tools or sys
 
       if (event.type === 'result') {
         unsub()
+        cleanup()
 
         // Extract text from result
         const rawResult = event.result
@@ -655,6 +669,7 @@ IMPORTANT: Execute this operation right now using the available MCP tools or sys
       mcpConfigPath: ctx.mcpConfigPath,
     }).catch((err) => {
       unsub()
+      cleanup()
       reject(new Error(`CLI session failed: ${err instanceof Error ? err.message : 'Unknown error'}`))
     })
 
@@ -663,6 +678,7 @@ IMPORTANT: Execute this operation right now using the available MCP tools or sys
       if (!ctx.aborted) {
         api.claude.abort(sessionId)
         unsub()
+        cleanup()
         reject(new Error('MCP tool execution timed out (120s)'))
       }
     }, 120_000)
@@ -707,10 +723,13 @@ IMPORTANT: You are running as an autonomous agent in a workflow. Execute the tas
   callbacks.onLog(`[${timestamp()}] [INFO] Agent session (${model}, max ${maxTurns} turns): ${resolvedPrompt.slice(0, 150)}${resolvedPrompt.length > 150 ? '...' : ''}`)
 
   const sessionId = `wf-agent-${node.id}-${Date.now()}`
+  callbacks.onSessionStart?.(sessionId)
   const toolsUsed: string[] = []
 
   return new Promise<unknown>((resolve, reject) => {
     let resultText = ''
+
+    const cleanup = () => { callbacks.onSessionEnd?.() }
 
     const unsub = api.claude.onEvent((event: ClaudeEvent) => {
       if (event.sessionId !== sessionId) return
@@ -736,6 +755,7 @@ IMPORTANT: You are running as an autonomous agent in a workflow. Execute the tas
 
       if (event.type === 'result') {
         unsub()
+        cleanup()
 
         const rawResult = event.result
         let finalText = resultText
@@ -781,6 +801,7 @@ IMPORTANT: You are running as an autonomous agent in a workflow. Execute the tas
       maxTurns,
     }).catch((err) => {
       unsub()
+      cleanup()
       reject(new Error(`Agent session failed: ${err instanceof Error ? err.message : 'Unknown error'}`))
     })
 
@@ -789,6 +810,7 @@ IMPORTANT: You are running as an autonomous agent in a workflow. Execute the tas
       if (!ctx.aborted) {
         api.claude.abort(sessionId)
         unsub()
+        cleanup()
         reject(new Error('Agent session timed out (600s)'))
       }
     }, 600_000)

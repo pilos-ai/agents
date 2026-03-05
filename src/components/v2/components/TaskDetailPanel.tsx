@@ -196,16 +196,25 @@ export function TaskDetailPanel({ task, onClose }: Props) {
           </select>
         </div>
 
-        {/* Run button */}
+        {/* Run / Stop button */}
         <div className="relative">
-          <button
-            onClick={() => setShowRunMenu(!showRunMenu)}
-            disabled={task.status === 'running'}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-xs font-bold rounded-lg transition-colors"
-          >
-            <Icon icon={task.status === 'running' ? 'lucide:loader-2' : 'lucide:play'} className={`text-sm ${task.status === 'running' ? 'animate-spin' : ''}`} />
-            {task.status === 'running' ? 'Running...' : 'Run Task'}
-          </button>
+          {task.status === 'running' ? (
+            <button
+              onClick={() => useTaskStore.getState().stopTask(task.id)}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-lg transition-colors"
+            >
+              <Icon icon="lucide:square" className="text-sm" />
+              Stop Task
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowRunMenu(!showRunMenu)}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors"
+            >
+              <Icon icon="lucide:play" className="text-sm" />
+              Run Task
+            </button>
+          )}
 
           {showRunMenu && task.status !== 'running' && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-800 border border-pilos-border rounded-lg shadow-xl z-10 overflow-hidden">
