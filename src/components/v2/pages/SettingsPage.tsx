@@ -21,31 +21,32 @@ const PLANS = [
 function UpgradeModal({ onClose }: { onClose: () => void }) {
   const [email, setEmail] = useState('')
   const [selectedPlan, setSelectedPlan] = useState('pro_monthly')
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState<'coinbase' | 'nowpayments' | null>(null)
   const [error, setError] = useState('')
 
-  const handleCryptoPay = async () => {
+  const handlePay = async (provider: 'coinbase' | 'nowpayments') => {
     if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
       setError('Please enter a valid email address')
       return
     }
-    setLoading(true)
+    setLoading(provider)
     setError('')
     try {
       const plan = PLANS.find(p => p.id === selectedPlan)!
-      const res = await fetch(`${LICENSE_SERVER}/create-coinbase-charge`, {
+      const endpoint = provider === 'coinbase' ? 'create-coinbase-charge' : 'create-nowpayments-invoice'
+      const res = await fetch(`${LICENSE_SERVER}/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim(), plan: plan.plan, billing: plan.billing }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to create charge')
-      api.dialog.openExternal(data.hostedUrl)
+      if (!res.ok) throw new Error(data.error || 'Failed to create payment')
+      api.dialog.openExternal(data.hostedUrl || data.invoiceUrl)
       onClose()
     } catch (e: any) {
       setError(e.message || 'Something went wrong. Please try again.')
     } finally {
-      setLoading(false)
+      setLoading(null)
     }
   }
 
@@ -62,7 +63,6 @@ function UpgradeModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* Plan selector */}
         <div className="space-y-2">
           {PLANS.map(plan => (
             <button
@@ -80,7 +80,6 @@ function UpgradeModal({ onClose }: { onClose: () => void }) {
           ))}
         </div>
 
-        {/* Email */}
         <input
           type="email"
           value={email}
@@ -91,18 +90,28 @@ function UpgradeModal({ onClose }: { onClose: () => void }) {
 
         {error && <p className="text-xs text-red-400">{error}</p>}
 
-        <button
-          onClick={handleCryptoPay}
-          disabled={loading}
-          className="w-full px-3 py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2"
-        >
-          <Icon icon="lucide:bitcoin" className="text-sm" />
-          {loading ? 'Creating payment...' : 'Pay with Crypto (BTC / ETH / USDC)'}
-        </button>
+        <div className="space-y-2">
+          <button
+            onClick={() => handlePay('coinbase')}
+            disabled={loading !== null}
+            className="w-full px-3 py-2.5 bg-gradient-to-r from-blue-700 to-blue-600 hover:from-blue-600 hover:to-blue-500 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2"
+          >
+            <Icon icon="lucide:bitcoin" className="text-sm" />
+            {loading === 'coinbase' ? 'Creating payment...' : 'Coinbase — BTC / ETH / USDC'}
+          </button>
+
+          <button
+            onClick={() => handlePay('nowpayments')}
+            disabled={loading !== null}
+            className="w-full px-3 py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2"
+          >
+            <Icon icon="lucide:coins" className="text-sm" />
+            {loading === 'nowpayments' ? 'Creating payment...' : 'NOWPayments — 300+ coins'}
+          </button>
+        </div>
 
         <p className="text-[10px] text-zinc-600 text-center">
           License key delivered instantly to your email after payment.
-          <br />Secure checkout via Coinbase Commerce.
         </p>
       </div>
     </div>
