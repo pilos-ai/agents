@@ -1073,14 +1073,14 @@ export default function SettingsPage() {
 
         <div className="mt-6 pt-6 border-t border-pilos-border space-y-0.5">
           <button
-            onClick={() => api.dialog.openExternal('https://docs.pilos.ai')}
+            onClick={() => api.dialog.openExternal('https://pilos.net/docs')}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-zinc-500 hover:text-white hover:bg-zinc-800/50 transition-colors"
           >
             <Icon icon="lucide:book-open" className="text-zinc-600" />
             Documentation
           </button>
           <button
-            onClick={() => api.dialog.openExternal('mailto:support@pilos.ai')}
+            onClick={() => api.dialog.openExternal('mailto:support@pilos.net')}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-zinc-500 hover:text-white hover:bg-zinc-800/50 transition-colors"
           >
             <Icon icon="lucide:life-buoy" className="text-zinc-600" />
