@@ -360,6 +360,7 @@ export interface ProFeatureFlags {
   teamMode: boolean        // free=false
   teamSync: boolean        // teams only
   premiumAgents: boolean   // pro/teams
+  enabledFeatures: string[] // server-controlled feature flags (e.g. ['devices', 'browser_mcp'])
 }
 
 // ── AskUserQuestion Types ──

@@ -3,6 +3,27 @@ import type { LicenseTier, ProFeatureFlags } from '../types'
 import { FREE_LIMITS, getFlagsForTier, loadProModule } from '../lib/pro'
 import { api } from '../api'
 
+const LICENSE_SERVER = 'https://license.pilos.net/v1/licenses'
+
+/** Fetch server-side feature flags for a plan, merging them into flags. */
+function applyFeatures(flags: ProFeatureFlags, features?: string[]): ProFeatureFlags {
+  return { ...flags, enabledFeatures: features || [] }
+}
+
+/** Fetch features for the free tier from the server (best-effort). */
+async function fetchFreeFeatures(email?: string): Promise<string[]> {
+  try {
+    const params = new URLSearchParams({ plan: 'free' })
+    if (email) params.set('email', email)
+    const res = await fetch(`${LICENSE_SERVER}/features?${params}`)
+    if (res.ok) {
+      const data = await res.json() as { features: string[] }
+      return data.features || []
+    }
+  } catch { /* best effort */ }
+  return []
+}
+
 let fallbackMachineId: string | null = null
 async function getSafeMachineId(): Promise<string> {
   try {
@@ -18,6 +39,7 @@ interface PilosAuth {
   email: string
   licenseKey?: string
   tier: LicenseTier
+  features?: string[]
 }
 
 interface LicenseStore {
@@ -60,7 +82,7 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
           email: auth.email,
           licenseKey: auth.licenseKey || null,
           tier: auth.tier || 'free',
-          flags: getFlagsForTier(auth.tier || 'free'),
+          flags: applyFeatures(getFlagsForTier(auth.tier || 'free'), auth.features),
           isAuthenticated: true,
           authLoaded: true,
         })
@@ -92,13 +114,14 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
         const result = await pro.activateLicense(key, email, machineId)
         if (result.valid && result.license) {
           const tier = result.license.plan as LicenseTier
-          const authData: PilosAuth = { email, licenseKey: key, tier }
+          const features = result.features || []
+          const authData: PilosAuth = { email, licenseKey: key, tier, features }
           await api.settings.set('pilos_auth', authData)
           set({
             tier,
             licenseKey: key,
             email,
-            flags: getFlagsForTier(tier),
+            flags: applyFeatures(getFlagsForTier(tier), features),
             error: null,
             isValidating: false,
             isAuthenticated: true,
@@ -139,13 +162,14 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
         registerFree(email, machineId).catch(() => {})
       }
 
-      const authData: PilosAuth = { email, tier: 'free' }
+      const features = await fetchFreeFeatures(email)
+      const authData: PilosAuth = { email, tier: 'free', features }
       await api.settings.set('pilos_auth', authData)
       set({
         tier: 'free',
         licenseKey: null,
         email,
-        flags: getFlagsForTier('free'),
+        flags: applyFeatures(getFlagsForTier('free'), features),
         error: null,
         isValidating: false,
         isAuthenticated: true,
@@ -206,11 +230,14 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
 
       if (result.valid && result.license) {
         const tier = result.license.plan as LicenseTier
+        const features = result.features || []
+        const authData: PilosAuth = { email: get().email || result.license.email || '', licenseKey: result.license.key, tier, features }
+        api.settings.set('pilos_auth', authData).catch(() => {})
         set({
           tier,
           licenseKey: result.license.key,
           email: get().email || result.license.email,
-          flags: getFlagsForTier(tier),
+          flags: applyFeatures(getFlagsForTier(tier), features),
           isValidating: false,
           machineMismatch: false,
         })
@@ -243,14 +270,15 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
       const result = await pro.activateLicense(key, email, machineId)
       if (result.valid && result.license) {
         const tier = result.license.plan as LicenseTier
+        const features = result.features || []
         const authEmail = get().email || result.license.email
-        const authData: PilosAuth = { email: authEmail || '', licenseKey: key, tier }
+        const authData: PilosAuth = { email: authEmail || '', licenseKey: key, tier, features }
         await api.settings.set('pilos_auth', authData)
         set({
           tier,
           licenseKey: result.license.key,
           email: authEmail,
-          flags: getFlagsForTier(tier),
+          flags: applyFeatures(getFlagsForTier(tier), features),
           error: null,
           isValidating: false,
           machineMismatch: false,

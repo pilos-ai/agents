@@ -39,11 +39,11 @@ async function loadJiraStore() {
 
 type SettingsNav = 'account' | 'general' | 'integrations' | 'devices' | 'security' | 'advanced'
 
-const navItems: { id: SettingsNav; label: string; icon: string }[] = [
+const allNavItems: { id: SettingsNav; label: string; icon: string; featureFlag?: string }[] = [
   { id: 'account', label: 'Account', icon: 'lucide:user' },
   { id: 'general', label: 'General', icon: 'lucide:settings' },
   { id: 'integrations', label: 'Integrations', icon: 'lucide:plug-zap' },
-  { id: 'devices', label: 'Devices', icon: 'lucide:smartphone' },
+  { id: 'devices', label: 'Devices', icon: 'lucide:smartphone', featureFlag: 'devices' },
   { id: 'security', label: 'Security', icon: 'lucide:shield-check' },
   { id: 'advanced', label: 'Advanced', icon: 'lucide:code' },
 ]
@@ -1025,6 +1025,12 @@ function AdvancedSection() {
 export default function SettingsPage() {
   const storeSection = useAppStore((s) => s.activeSettingsSection)
   const setStoreSection = useAppStore((s) => s.setActiveSettingsSection)
+  const enabledFeatures = useLicenseStore((s) => s.flags.enabledFeatures)
+
+  // Filter nav items based on feature flags
+  const navItems = allNavItems.filter((item) =>
+    !item.featureFlag || enabledFeatures.includes(item.featureFlag)
+  )
 
   // Map store section to local nav — default to 'account' for sections not in our nav
   const validNavIds = navItems.map((n) => n.id) as string[]

@@ -8,6 +8,7 @@ export const FREE_LIMITS: ProFeatureFlags = {
   teamMode: false,
   teamSync: false,
   premiumAgents: false,
+  enabledFeatures: [],
 }
 
 const PRO_LIMITS: ProFeatureFlags = {
@@ -18,6 +19,7 @@ const PRO_LIMITS: ProFeatureFlags = {
   teamMode: true,
   teamSync: false,
   premiumAgents: true,
+  enabledFeatures: [],
 }
 
 const TEAMS_LIMITS: ProFeatureFlags = {
@@ -28,6 +30,7 @@ const TEAMS_LIMITS: ProFeatureFlags = {
   teamMode: true,
   teamSync: true,
   premiumAgents: true,
+  enabledFeatures: [],
 }
 
 export function getFlagsForTier(tier: LicenseTier): ProFeatureFlags {
