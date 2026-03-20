@@ -1,4 +1,5 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { installUpdate, checkForUpdates } from './services/auto-updater'
 import { ClaudeProcess } from './core/claude-process'
 import { TerminalManager } from './core/terminal-manager'
 import { ProcessTracker } from './core/process-tracker'
@@ -313,6 +314,15 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
 
   ipcMain.handle('processes:stop', async (_event, pid: number) => {
     return processTracker.stop(pid)
+  })
+
+  // ── Auto-updater ──
+  ipcMain.handle('update:install', async () => {
+    installUpdate()
+  })
+
+  ipcMain.handle('update:check', async () => {
+    checkForUpdates()
   })
 
   // ── Settings ──
