@@ -49,10 +49,12 @@ export function AppShell() {
     }
   }, [activeView, isPro])
 
-  // Cmd+Shift+F to open search
+  // Cmd+F or Cmd+Shift+F to open search
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'f') {
+      const isSearchShortcut =
+        (e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F')
+      if (isSearchShortcut) {
         e.preventDefault()
         const store = useSearchStore.getState()
         if (store.isOpen) {

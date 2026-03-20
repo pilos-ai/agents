@@ -967,10 +967,13 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   },
 
   addMessage: (message) => {
+    // Capture convId BEFORE set() to avoid race condition where user switches
+    // conversations between set() and the DB save, causing messages to be
+    // saved under the wrong conversation ID.
+    const convId = get().activeConversationId
     set((s) => ({ messages: [...s.messages, message] }))
 
     // Save to DB in background and update in-memory message with the assigned ID
-    const convId = get().activeConversationId
     if (convId) {
       api.conversations.saveMessage(convId, {
         role: message.role,

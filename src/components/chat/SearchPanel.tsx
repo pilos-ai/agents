@@ -44,14 +44,12 @@ export function SearchPanel() {
   }, [close])
 
   const handleResultClick = useCallback(async (conversationId: string, messageId: number) => {
+    close()
     if (activeConversationId !== conversationId) {
       await setActiveConversation(conversationId)
     }
-    // Small delay to let messages load before scrolling
-    setTimeout(() => {
-      setScrollToMessageId(messageId)
-    }, 100)
-    close()
+    // setActiveConversation is async and fully awaited — safe to scroll now
+    setScrollToMessageId(messageId)
   }, [activeConversationId, setActiveConversation, setScrollToMessageId, close])
 
   if (!isOpen) return null
@@ -72,6 +70,9 @@ export function SearchPanel() {
           className="flex-1 bg-transparent text-white text-lg outline-none placeholder-neutral-500"
           autoFocus
         />
+        <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-1 text-[10px] text-neutral-500 bg-neutral-800 border border-neutral-700 rounded">
+          ⌘F
+        </kbd>
         <button
           onClick={close}
           className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"

@@ -139,12 +139,27 @@ export function ChatPanel() {
         <div ref={scrollRef} onScroll={handleScroll} className="relative z-[1] h-full overflow-y-auto px-4 py-3 select-text">
           {/* Load earlier messages button */}
           {hiddenCount > 0 && (
-            <button
-              onClick={loadMore}
-              className="w-full py-2 mb-3 text-xs text-neutral-400 hover:text-blue-400 transition-colors rounded-lg bg-neutral-800/40 hover:bg-neutral-800/60 cursor-pointer"
-            >
-              Load {Math.min(PAGE_SIZE, hiddenCount)} earlier messages ({hiddenCount} hidden)
-            </button>
+            <div className="flex items-center gap-2 mb-4">
+              <button
+                onClick={loadMore}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 hover:border-blue-500/40 cursor-pointer"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                </svg>
+                Load {Math.min(PAGE_SIZE, hiddenCount)} earlier messages
+                <span className="text-xs text-blue-500/70">({hiddenCount} hidden)</span>
+              </button>
+              {hiddenCount > PAGE_SIZE && (
+                <button
+                  onClick={() => setVisibleCount(messages.length)}
+                  className="px-3 py-2.5 text-xs text-neutral-400 hover:text-neutral-200 transition-colors rounded-lg bg-neutral-800/40 hover:bg-neutral-800/70 border border-neutral-700/30 cursor-pointer whitespace-nowrap"
+                  title="Load all messages"
+                >
+                  Load all
+                </button>
+              )}
+            </div>
           )}
 
           <div className="space-y-3">
@@ -177,9 +192,35 @@ export function ChatPanel() {
               : null
             const agentColors = streamingAgent ? AGENT_COLORS[streamingAgent.color] || AGENT_COLORS.blue : null
 
-            // Hide streaming bubble when only tool blocks are in progress (no text/thinking)
             const hasToolActivity = streaming.contentBlocks.some(b => b.type === 'tool_use' || b.type === 'tool_result')
-            if (!streaming.text && !streaming.thinking && hasToolActivity) return null
+            const activeToolName = hasToolActivity
+              ? (() => {
+                  const lastTool = [...streaming.contentBlocks].reverse().find(b => b.type === 'tool_use') as { name?: string } | undefined
+                  return lastTool?.name || 'tool'
+                })()
+              : null
+
+            // Show tool activity indicator when only tools are running (no text/thinking yet)
+            if (!streaming.text && !streaming.thinking && hasToolActivity) {
+              return (
+                <div className="flex flex-col items-start space-y-1 mt-3">
+                  {streamingAgent && (
+                    <div className="flex items-center gap-1.5 mb-1 ml-1">
+                      <Icon icon={streamingAgent.icon} className="text-base" />
+                      <span className={`text-xs font-semibold ${agentColors!.text}`}>{streamingAgent.name}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-800/40 border border-neutral-700/30 text-neutral-400 text-sm">
+                    <div className="flex gap-0.5">
+                      <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                    <span>Running <span className="text-amber-400/80 font-mono text-xs">{activeToolName}</span>...</span>
+                  </div>
+                </div>
+              )
+            }
 
             return (
               <div className="flex flex-col items-start space-y-1 mt-3">
