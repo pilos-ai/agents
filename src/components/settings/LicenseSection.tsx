@@ -15,13 +15,21 @@ export function LicenseSection() {
   const error = useLicenseStore((s) => s.error)
   const activateLicense = useLicenseStore((s) => s.activateLicense)
   const deactivateLicense = useLicenseStore((s) => s.deactivateLicense)
+  const loginWithKey = useLicenseStore((s) => s.loginWithKey)
 
   const [keyInput, setKeyInput] = useState('')
+  const [emailInput, setEmailInput] = useState('')
 
   const handleActivate = async () => {
     if (!keyInput.trim()) return
-    const result = await activateLicense(keyInput.trim())
-    if (result.valid) setKeyInput('')
+    // If no email is stored yet, use loginWithKey which accepts both email + key
+    if (!email && emailInput.trim()) {
+      const result = await loginWithKey(emailInput.trim(), keyInput.trim())
+      if (result.valid) { setKeyInput(''); setEmailInput('') }
+    } else {
+      const result = await activateLicense(keyInput.trim())
+      if (result.valid) setKeyInput('')
+    }
   }
 
   return (
@@ -61,6 +69,15 @@ export function LicenseSection() {
         </div>
       ) : (
         <div className="space-y-2">
+          {!email && (
+            <input
+              type="email"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              placeholder="your@email.com"
+              className="w-full bg-neutral-800 text-neutral-100 text-xs rounded-md px-3 py-2 outline-none border border-neutral-700 focus:border-blue-500 placeholder:text-neutral-600"
+            />
+          )}
           <div className="flex gap-2">
             <input
               type="text"
@@ -72,7 +89,7 @@ export function LicenseSection() {
             />
             <button
               onClick={handleActivate}
-              disabled={isValidating || !keyInput.trim()}
+              disabled={isValidating || !keyInput.trim() || (!email && !emailInput.trim())}
               className="px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isValidating ? 'Validating...' : 'Activate'}
