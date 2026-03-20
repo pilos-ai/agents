@@ -3,6 +3,8 @@ import { NavigationSidebar } from './NavigationSidebar'
 import { HeaderBar } from './HeaderBar'
 import { ViewRouter } from './ViewRouter'
 import { CommandPalette } from './CommandPalette'
+import { SearchPanel } from '../chat/SearchPanel'
+import { useSearchStore } from '../../store/useSearchStore'
 import { useAppStore } from '../../store/useAppStore'
 import { useProjectStore } from '../../store/useProjectStore'
 import { useConversationStore } from '../../store/useConversationStore'
@@ -30,6 +32,23 @@ export function V2Layout() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
         setPaletteOpen((prev) => !prev)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  // ⌘+F / Ctrl+F to toggle search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault()
+        const store = useSearchStore.getState()
+        if (store.isOpen) {
+          store.close()
+        } else {
+          store.open()
+        }
       }
     }
     window.addEventListener('keydown', handler)
@@ -103,6 +122,7 @@ export function V2Layout() {
         <ViewRouter view={activeView} />
       </main>
       <CommandPalette open={paletteOpen} onClose={closePalette} />
+      <SearchPanel />
     </div>
   )
 }
