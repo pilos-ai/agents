@@ -3,7 +3,7 @@ import { api } from '../api'
 import { useProjectStore, getActiveProjectTab } from './useProjectStore'
 import { useUsageStore } from './useUsageStore'
 import { useAnalyticsStore } from './useAnalyticsStore'
-import { buildTeamSystemPrompt } from '../utils/team-prompt-builder'
+import { buildTeamSystemPrompt, buildMessageContextHint } from '../utils/team-prompt-builder'
 import { restoreAgentIds } from '../utils/agent-names'
 import { AGENT_COLORS } from '../data/agent-templates'
 import type { Conversation, ConversationMessage, ContentBlock, ClaudeEvent, ImageAttachment, AgentDefinition, ToolUseBlock, ToolResultBlock, AskUserQuestionData, ExitPlanModeData } from '../types'
@@ -310,6 +310,12 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       // Register this conversation for event routing
       useProjectStore.getState().registerConversation(conversationId, projectPath)
 
+      // Inject per-message context hint for team mode so agents self-activate proactively
+      if (tab?.mode === 'team' && tab.agents.length > 0) {
+        const hint = buildMessageContextHint(cliText, tab.agents)
+        if (hint) cliText = hint + cliText
+      }
+
       // Build system prompt additions
       const systemPromptParts: string[] = []
 
@@ -362,6 +368,12 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         }],
       }))
     } else {
+      // Inject per-message context hint for team mode (multi-turn path)
+      const tab = getActiveProjectTab()
+      if (tab?.mode === 'team' && tab.agents.length > 0) {
+        const hint = buildMessageContextHint(cliText, tab.agents)
+        if (hint) cliText = hint + cliText
+      }
       await api.claude.sendMessage(conversationId, cliText, images)
       set((s) => ({
         processLogs: [...s.processLogs, {

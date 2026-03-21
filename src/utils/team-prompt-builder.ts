@@ -1,5 +1,56 @@
 import type { AgentDefinition } from '../types'
 
+/**
+ * Analyze a message and return agents whose expertise is relevant.
+ * Used to inject per-message context hints so agents self-activate proactively.
+ */
+export function detectRelevantAgents(message: string, agents: AgentDefinition[]): AgentDefinition[] {
+  if (agents.length === 0) return []
+
+  const lower = message.toLowerCase()
+
+  // Check for explicit @mentions — those agents always lead
+  const mentioned = agents.filter((a) => lower.includes(`@${a.name.toLowerCase()}`))
+
+  // Score each agent by how many of their expertise keywords appear in the message
+  const scored = agents.map((a) => {
+    const keywords = [
+      ...a.expertise,
+      a.role.toLowerCase(),
+      a.name.toLowerCase(),
+    ]
+    const score = keywords.reduce((acc, kw) => {
+      return acc + (lower.includes(kw.toLowerCase()) ? 1 : 0)
+    }, 0)
+    return { agent: a, score }
+  })
+
+  // Relevant = score >= 1, plus any mentioned agents
+  const relevant = scored
+    .filter((s) => s.score >= 1)
+    .map((s) => s.agent)
+
+  // Merge mentioned + relevant, deduplicated
+  const combined = [...new Set([...mentioned, ...relevant])]
+  return combined
+}
+
+/**
+ * Build a per-message context hint to inject before the user's message.
+ * This guides Claude on which agents should speak up for this specific turn.
+ */
+export function buildMessageContextHint(message: string, agents: AgentDefinition[]): string {
+  const relevant = detectRelevantAgents(message, agents)
+
+  // Don't inject if all agents are relevant (broad message) or none matched
+  if (relevant.length === 0 || relevant.length === agents.length) return ''
+
+  const names = relevant.map((a) => `@${a.name}`).join(', ')
+  const others = agents.filter((a) => !relevant.includes(a)).map((a) => a.name).join(', ')
+
+  return `[Team routing: ${names} should lead on this. ${others ? `${others} should join only if they have something direct to add.` : ''} All agents may still contribute if the topic touches their domain.]\n\n`
+}
+
 export function buildTeamSystemPrompt(agents: AgentDefinition[]): string {
   if (agents.length === 0) return ''
 
