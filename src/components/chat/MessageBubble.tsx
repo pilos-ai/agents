@@ -113,7 +113,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isLast }: Pr
       <div className="flex flex-col items-start">
         <div className="max-w-[85%] rounded-lg px-4 py-2.5 bg-neutral-800/30 text-neutral-400 text-xs italic border-l-2 border-neutral-600 select-text">
           <div className="mb-1 text-neutral-500 text-[10px] uppercase tracking-wider font-medium">Thinking</div>
-          <div className="whitespace-pre-wrap select-text">{message.content}</div>
+          <div className="whitespace-pre-wrap break-words select-text">{message.content}</div>
         </div>
       </div>
     )
@@ -163,7 +163,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isLast }: Pr
           </div>
         )}
         {isUser ? (
-          <p className="text-sm whitespace-pre-wrap select-text">{message.content}</p>
+          <p className="text-sm whitespace-pre-wrap break-words select-text">{message.content}</p>
         ) : (
           <div className="markdown-content text-sm">
             <MarkdownRenderer content={message.content} />

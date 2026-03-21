@@ -66,10 +66,33 @@ async function createWindow() {
   metricsCollector = new MetricsCollector(database, settings)
   metricsCollector.init()
 
+  // Store last right-click spell params so IPC menu can include suggestions
+  let lastSpellParams: { misspelledWord: string; suggestions: string[] } | null = null
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    lastSpellParams = params.misspelledWord
+      ? { misspelledWord: params.misspelledWord, suggestions: params.dictionarySuggestions.slice(0, 5) }
+      : null
+
+    // Show native menu for editable elements (textarea) — handles spell check + Writing Tools
+    if (params.isEditable) {
+      const items: Electron.MenuItemConstructorOptions[] = []
+      if (params.misspelledWord) {
+        for (const s of params.dictionarySuggestions.slice(0, 5)) {
+          items.push({ label: s, click: () => mainWindow?.webContents.replaceMisspelling(s) })
+        }
+        items.push({ type: 'separator' })
+        items.push({ label: 'Add to Dictionary', click: () => mainWindow?.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord) })
+        items.push({ type: 'separator' })
+      }
+      items.push({ role: 'cut' }, { role: 'copy' }, { type: 'separator' }, { role: 'paste' }, { role: 'selectAll' })
+      Menu.buildFromTemplate(items).popup({ window: mainWindow ?? undefined })
+    }
+  })
+
   // Register IPC after loadURL so a failure doesn't block the window
   let claudeProcess, db
   try {
-    const refs = await registerIpcHandlers(mainWindow, settings, database, metricsCollector)
+    const refs = await registerIpcHandlers(mainWindow, settings, database, metricsCollector, () => lastSpellParams)
     claudeProcess = refs.claudeProcess
     db = refs.database
   } catch (err) {
@@ -126,39 +149,6 @@ async function createWindow() {
   setupAutoUpdater(mainWindow)
   ipcMain.handle('update:install', () => installUpdate())
 
-  // Native context menu
-  mainWindow.webContents.on('context-menu', (_event, params) => {
-    try {
-      const menuItems: Electron.MenuItemConstructorOptions[] = []
-
-      if (params.misspelledWord) {
-        for (const suggestion of params.dictionarySuggestions.slice(0, 5)) {
-          menuItems.push({
-            label: suggestion,
-            click: () => mainWindow?.webContents.replaceMisspelling(suggestion),
-          })
-        }
-        if (menuItems.length > 0) menuItems.push({ type: 'separator' })
-        menuItems.push({
-          label: 'Add to Dictionary',
-          click: () => mainWindow?.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
-        })
-        menuItems.push({ type: 'separator' })
-      }
-
-      if (params.isEditable) {
-        menuItems.push({ role: 'cut' }, { role: 'copy' }, { type: 'separator' }, { role: 'paste' }, { role: 'selectAll' })
-      } else if (params.selectionText) {
-        menuItems.push({ role: 'copy' })
-      }
-
-      if (menuItems.length > 0) {
-        Menu.buildFromTemplate(menuItems).popup()
-      }
-    } catch (e) {
-      console.error('[context-menu] error:', e)
-    }
-  })
 
   // Hide-to-tray on close — keeps scheduler running in background (all platforms)
   mainWindow.on('close', (event) => {

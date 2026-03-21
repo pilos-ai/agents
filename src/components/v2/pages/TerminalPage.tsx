@@ -760,14 +760,13 @@ export default function TerminalPage() {
   const justSwitched = useRef(true)
   const userScrolledUp = useRef(false)
 
-  // Context menu: textarea → native Electron (spell check + corrections)
-  //               messages → IPC custom menu (Copy)
+  // Context menu: textarea handled by Electron main (spell check), messages via IPC
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement
-      // Textarea: do NOT preventDefault — Electron main process handles it with spell suggestions
+      // Textarea: don't preventDefault — let main process context-menu handle with spell check
       if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') return
-      // Messages area: use IPC for Copy
+      // Messages: IPC copy menu
       const sel = window.getSelection()?.toString().trim() ?? ''
       if (!sel) return
       e.preventDefault()
@@ -875,7 +874,7 @@ export default function TerminalPage() {
             {/* Streaming content */}
             {streaming.isStreaming && streaming.text && (
               <div className="py-2">
-                <div className="text-sm text-zinc-300 whitespace-pre-wrap font-mono leading-relaxed select-text">
+                <div className="text-sm text-zinc-300 whitespace-pre-wrap break-words font-mono leading-relaxed select-text">
                   {streaming.text}
                   <span className="streaming-cursor" />
                 </div>
@@ -889,7 +888,7 @@ export default function TerminalPage() {
                   <Icon icon="lucide:clock" className="text-amber-400 text-[10px]" />
                   <span className="text-[10px] text-amber-400 font-medium">Queued</span>
                 </div>
-                <div className="text-sm text-blue-300 whitespace-pre-wrap font-mono leading-relaxed">
+                <div className="text-sm text-blue-300 whitespace-pre-wrap break-words font-mono leading-relaxed">
                   {qMsg.text}
                 </div>
               </div>

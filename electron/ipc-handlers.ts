@@ -23,7 +23,9 @@ let dependencyChecker: DependencyChecker
 let jiraOAuth: any  // Dynamically loaded from @pilos/agents-pm
 let jiraClient: any // Dynamically loaded from @pilos/agents-pm
 
-export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsStore: SettingsStore, db?: Database, metrics?: MetricsCollector): Promise<{ claudeProcess: ClaudeProcess; database: Database }> {
+type SpellParams = { misspelledWord: string; suggestions: string[] } | null
+
+export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsStore: SettingsStore, db?: Database, metrics?: MetricsCollector, getSpellParams?: () => SpellParams): Promise<{ claudeProcess: ClaudeProcess; database: Database }> {
   settings = settingsStore
   database = db || new Database()
   metricsCollector = metrics || null
@@ -496,7 +498,25 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
   ipcMain.handle('shell:showContextMenu', async (event, text: string, isEditable?: boolean) => {
     const { Menu, clipboard, BrowserWindow } = await import('electron')
     const win = BrowserWindow.fromWebContents(event.sender)
+    const spell = getSpellParams?.()
     const items: Electron.MenuItemConstructorOptions[] = []
+
+    // Spell suggestions first
+    if (spell?.suggestions.length) {
+      for (const s of spell.suggestions) {
+        items.push({
+          label: s,
+          click: () => win?.webContents.replaceMisspelling(s),
+        })
+      }
+      items.push({ type: 'separator' })
+      items.push({
+        label: 'Add to Dictionary',
+        click: () => win?.webContents.session.addWordToSpellCheckerDictionary(spell.misspelledWord),
+      })
+      items.push({ type: 'separator' })
+    }
+
     if (text) {
       items.push({
         label: 'Copy',
@@ -506,10 +526,9 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
     }
     if (isEditable) {
       if (text) items.push({ type: 'separator' })
-      items.push({ role: 'paste', label: 'Paste' })
-      items.push({ type: 'separator' })
+      items.push({ role: 'paste' })
     }
-    items.push({ role: 'selectAll', label: 'Select All' })
+    items.push({ role: 'selectAll' })
     Menu.buildFromTemplate(items).popup({ window: win ?? undefined })
   })
 
