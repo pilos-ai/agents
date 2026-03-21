@@ -51,7 +51,7 @@ export class DependencyChecker {
       git,
       node,
       claude,
-      allFound: git.status === 'found' && node.status === 'found' && claude.status === 'found',
+      allFound: git.status === 'found' && node.status === 'found',
     }
   }
 
