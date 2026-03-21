@@ -162,8 +162,11 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   setActiveConversation: async (id) => {
     const prevId = get().activeConversationId
 
-    // Move the previous active session into background tracking (don't abort it)
-    if (prevId && prevId !== id && get().hasActiveSession) {
+    // Move the previous active session into background tracking (don't abort it).
+    // Check both hasActiveSession AND isWaitingForResponse: the latter is set in sendMessage
+    // BEFORE startSession fires, so we correctly handle the race where the user switches
+    // before session:started arrives.
+    if (prevId && prevId !== id && (get().hasActiveSession || get().isWaitingForResponse)) {
       const curStreamingText = get().streaming.text
       set((s) => ({
         bgSessions: { ...s.bgSessions, [prevId]: { streamingText: curStreamingText, isWaiting: true } },
@@ -443,7 +446,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       if (!bgId) return
 
       if (event.type === 'assistant') {
-        // Track latest streaming text so we can save it when result fires
+        // Track latest streaming text so we can save it when result fires.
+        // Auto-create the bgSessions entry if missing (handles the race where the user
+        // switched before session:started arrived and hasActiveSession was still false).
         const msg = event.message as { content?: Array<{ type: string; text?: string }> }
         const textContent = msg?.content
           ?.filter((b) => b.type === 'text')
@@ -451,13 +456,13 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
           .join('') ?? ''
         if (textContent) {
           set((s) => {
-            const bg = s.bgSessions[bgId]
-            if (!bg) return {}
+            const bg = s.bgSessions[bgId] ?? { streamingText: '', isWaiting: true }
             return { bgSessions: { ...s.bgSessions, [bgId]: { ...bg, streamingText: textContent } } }
           })
         }
       } else if (event.type === 'result') {
-        // Save the final text to DB so it's there when the user switches back
+        // Save the final text to DB so it's there when the user switches back.
+        // bg may be undefined if assistant events arrived before bgSessions entry was created.
         const bg = get().bgSessions[bgId]
         const finalText = bg?.streamingText ?? ''
         if (finalText) {
