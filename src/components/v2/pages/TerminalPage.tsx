@@ -747,6 +747,7 @@ export default function TerminalPage() {
   const permissionRequest = useConversationStore((s) => s.permissionRequest)
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
   const isLoadingMessages = useConversationStore((s) => s.isLoadingMessages)
+  const isWaitingForResponse = useConversationStore((s) => s.isWaitingForResponse)
 
   const activeTab = useProjectStore((s) => {
     const path = s.activeProjectPath
@@ -831,17 +832,17 @@ export default function TerminalPage() {
             >
               <Icon icon={sidebarOpen ? 'lucide:panel-left-close' : 'lucide:panel-left-open'} />
             </button>
-            {streaming.isStreaming && currentAgent ? (
+            {(streaming.isStreaming || isWaitingForResponse) && currentAgent ? (
               <div className="flex items-center gap-2">
                 <GradientAvatar gradient={currentAgent.color} icon={currentAgent.icon} size="sm" />
                 <span className="text-xs font-bold text-white">{currentAgent.name}</span>
                 <StatusDot color="green" pulse />
-                <span className="text-[10px] text-zinc-500">Processing...</span>
+                <span className="text-[10px] text-zinc-500">{streaming.isStreaming ? 'Processing...' : 'Thinking...'}</span>
               </div>
-            ) : streaming.isStreaming ? (
+            ) : (streaming.isStreaming || isWaitingForResponse) ? (
               <div className="flex items-center gap-2">
                 <StatusDot color="green" pulse />
-                <span className="text-xs text-zinc-400">Agent processing...</span>
+                <span className="text-xs text-zinc-400">{streaming.isStreaming ? 'Agent processing...' : 'Agent thinking...'}</span>
               </div>
             ) : (
               <span className="text-xs text-zinc-600">
