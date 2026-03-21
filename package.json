@@ -1,6 +1,6 @@
 {
   "name": "pilos-agents",
-  "version": "2.9.1",
+  "version": "2.9.3",
   "description": "Pilos Agents — AI-powered multi-agent desktop app",
   "author": "Vahe Saroyan <vahe.saroyan.web@gmail.com>",
   "license": "MIT",
@@ -22,6 +22,10 @@
   "dependencies": {
     "@dagrejs/dagre": "^2.0.4",
     "@iconify-icon/react": "^3.0.3",
+    "@iconify-json/lucide": "^1.2.98",
+    "@iconify-json/mdi": "^1.2.3",
+    "@iconify-json/simple-icons": "^1.2.74",
+    "@iconify/react": "^6.0.2",
     "@tanstack/react-virtual": "^3.13.18",
     "@types/qrcode": "^1.5.6",
     "@xterm/addon-fit": "^0.11.0",
