@@ -421,11 +421,19 @@ export interface DependencyInstallInfo {
 export interface ClaudeUsageStats {
   version: number
   lastComputedDate: string
+  totalSessions?: number
+  totalMessages?: number
   dailyActivity: Array<{
     date: string
     messageCount: number
     sessionCount: number
     toolCallCount: number
+  }>
+  modelUsage?: Record<string, {
+    inputTokens: number
+    outputTokens: number
+    cacheReadInputTokens: number
+    cacheCreationInputTokens: number
   }>
 }
 
@@ -574,6 +582,7 @@ export interface ElectronAPI {
   }
   shell: {
     openPath: (path: string) => Promise<string>
+    showContextMenu: (text: string, isEditable?: boolean) => Promise<void>
   }
   jira?: {
     setActiveProject: (projectPath: string) => Promise<void>

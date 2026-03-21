@@ -10,23 +10,35 @@ interface HeaderBarProps {
   onOpenPalette?: () => void
 }
 
+function fmtNum(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`
+  return String(n)
+}
+
 export function HeaderBar({ actionLabel, actionIcon, onAction, onOpenPalette }: HeaderBarProps) {
   const hasActiveSession = useConversationStore((s) => s.hasActiveSession)
   const isStreaming = useConversationStore((s) => s.streaming.isStreaming)
   const limits = useUsageStore((s) => s.limits)
+  const stats = useUsageStore((s) => s.stats)
 
   const systemStatus = isStreaming ? 'Active' : hasActiveSession ? 'Running' : 'Idle'
   const statusColor = isStreaming ? 'text-orange-400' : hasActiveSession ? 'text-blue-400' : 'text-zinc-500'
   const dotColor = isStreaming ? 'bg-orange-400' : hasActiveSession ? 'bg-blue-400' : 'bg-zinc-600'
 
   // Rate limit data from Anthropic API
-  const sessionUsage = limits?.five_hour?.utilization ?? null
-  const weekUsage = limits?.seven_day?.utilization ?? null
-  const opusUsage = limits?.seven_day_opus?.utilization ?? null
+  // If the window object exists, show 0% rather than hiding (null = no data at all)
+  const sessionUsage = limits?.five_hour != null ? (limits.five_hour.utilization ?? 0) : null
+  const weekUsage = limits?.seven_day != null ? (limits.seven_day.utilization ?? 0) : null
+  const opusUsage = limits?.seven_day_opus != null ? (limits.seven_day_opus.utilization ?? 0) : null
 
   // Primary ring shows session usage
   const ringPercent = sessionUsage ?? 0
   const ringColor = ringPercent > 80 ? '#ef4444' : ringPercent > 50 ? '#f59e0b' : '#3b82f6'
+
+  // Fallback stats from local cache when limits API unavailable
+  const totalMsgs = stats?.totalMessages
+  const totalSessions = stats?.totalSessions
 
   return (
     <div className="h-12 border-b border-pilos-border bg-pilos-bg flex items-center px-4 gap-4 flex-shrink-0">
@@ -54,23 +66,40 @@ export function HeaderBar({ actionLabel, actionIcon, onAction, onOpenPalette }: 
 
       {/* Stats */}
       <div className="flex items-center gap-2.5">
-        {sessionUsage !== null && (
-          <div title={`Session: ${Math.round(sessionUsage)}% used${limits?.five_hour?.resets_at ? ` · Resets ${new Date(limits.five_hour.resets_at).toLocaleTimeString()}` : ''}`}>
-            <span className="text-[10px] text-zinc-500">Session</span>
-            <span className="text-[11px] text-zinc-300 font-mono tabular-nums ml-1">{Math.round(sessionUsage)}%</span>
-          </div>
-        )}
-        {weekUsage !== null && (
-          <div title={`Weekly: ${Math.round(weekUsage)}% used`}>
-            <span className="text-[10px] text-zinc-500">Week</span>
-            <span className="text-[11px] text-zinc-300 font-mono tabular-nums ml-1">{Math.round(weekUsage)}%</span>
-          </div>
-        )}
-        {opusUsage !== null && (
-          <div title={`Opus weekly: ${Math.round(opusUsage)}% used`}>
-            <span className="text-[10px] text-zinc-500">Opus</span>
-            <span className="text-[11px] text-zinc-300 font-mono tabular-nums ml-1">{Math.round(opusUsage)}%</span>
-          </div>
+        {sessionUsage !== null ? (
+          <>
+            <div title={`Session: ${Math.round(sessionUsage)}% used${limits?.five_hour?.resets_at ? ` · Resets ${new Date(limits.five_hour.resets_at).toLocaleTimeString()}` : ''}`}>
+              <span className="text-[10px] text-zinc-500">Session</span>
+              <span className="text-[11px] text-zinc-300 font-mono tabular-nums ml-1">{Math.round(sessionUsage)}%</span>
+            </div>
+            {weekUsage !== null && (
+              <div title={`Weekly: ${Math.round(weekUsage)}% used`}>
+                <span className="text-[10px] text-zinc-500">Week</span>
+                <span className="text-[11px] text-zinc-300 font-mono tabular-nums ml-1">{Math.round(weekUsage)}%</span>
+              </div>
+            )}
+            {opusUsage !== null && (
+              <div title={`Opus weekly: ${Math.round(opusUsage)}% used`}>
+                <span className="text-[10px] text-zinc-500">Opus</span>
+                <span className="text-[11px] text-zinc-300 font-mono tabular-nums ml-1">{Math.round(opusUsage)}%</span>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {totalMsgs != null && (
+              <div title={`Total messages: ${totalMsgs.toLocaleString()}`}>
+                <span className="text-[10px] text-zinc-500">Msgs</span>
+                <span className="text-[11px] text-zinc-300 font-mono tabular-nums ml-1">{fmtNum(totalMsgs)}</span>
+              </div>
+            )}
+            {totalSessions != null && (
+              <div title={`Total sessions: ${totalSessions}`}>
+                <span className="text-[10px] text-zinc-500">Sessions</span>
+                <span className="text-[11px] text-zinc-300 font-mono tabular-nums ml-1">{totalSessions}</span>
+              </div>
+            )}
+          </>
         )}
       </div>
 

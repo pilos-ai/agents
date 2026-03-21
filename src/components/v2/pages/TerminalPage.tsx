@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Icon } from '../../common/Icon'
+import { AgentSkillsPanel } from '../../chat/AgentSkillsPanel'
+import { AGENT_COLORS } from '../../../data/agent-templates'
 import { StatusDot } from '../components/StatusDot'
 import { GradientAvatar } from '../components/GradientAvatar'
 import { useConversationStore } from '../../../store/useConversationStore'
@@ -288,6 +290,57 @@ function TerminalInput() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Agents + model from active tab
+  const activeTab = useProjectStore((s) => s.openProjects.find((p) => p.projectPath === s.activeProjectPath))
+  const agents = activeTab?.agents || []
+  const model = activeTab?.model || 'sonnet'
+  const setProjectModel = useProjectStore((s) => s.setProjectModel)
+
+  // Model dropdown
+  const [showModelMenu, setShowModelMenu] = useState(false)
+  const modelMenuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!showModelMenu) return
+    const handler = (e: MouseEvent) => {
+      if (!modelMenuRef.current?.contains(e.target as Node)) setShowModelMenu(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showModelMenu])
+
+  const MODELS = [
+    { value: 'sonnet', label: 'Sonnet', desc: 'Fast & smart' },
+    { value: 'opus', label: 'Opus', desc: 'Most capable' },
+    { value: 'haiku', label: 'Haiku', desc: 'Fastest' },
+  ]
+
+  // Skills panel
+  const [showSkills, setShowSkills] = useState(false)
+
+  // @mention state
+  const [mention, setMention] = useState<{ query: string; cursorStart: number } | null>(null)
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const filteredAgents = mention
+    ? agents.filter((a) => a.name.toLowerCase().startsWith(mention.query.toLowerCase()))
+    : []
+
+  const selectMention = useCallback((agentName: string) => {
+    if (!mention) return
+    const el = textareaRef.current
+    const before = text.slice(0, mention.cursorStart)
+    const after = text.slice(mention.cursorStart + 1 + mention.query.length)
+    const newText = before + '@' + agentName + ' ' + after
+    setText(newText)
+    setMention(null)
+    setMentionIndex(0)
+    requestAnimationFrame(() => {
+      if (!el) return
+      el.focus()
+      const pos = mention.cursorStart + agentName.length + 2
+      el.setSelectionRange(pos, pos)
+    })
+  }, [mention, text])
+
   const addFiles = useCallback(async (files: FileList | File[]) => {
     const newImages: ImageAttachment[] = []
     for (const file of Array.from(files)) {
@@ -327,22 +380,42 @@ function TerminalInput() {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (mention && filteredAgents.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIndex((i) => (i + 1) % filteredAgents.length); return }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setMentionIndex((i) => (i - 1 + filteredAgents.length) % filteredAgents.length); return }
+      if (e.key === 'Tab' || (e.key === 'Enter' && mention)) { e.preventDefault(); selectMention(filteredAgents[mentionIndex]?.name || filteredAgents[0].name); return }
+      if (e.key === 'Escape') { setMention(null); return }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      // If there's a pending permission request and no text, approve it
-      if (permissionRequest && !text.trim()) {
-        respondPermission(true)
-        return
-      }
+      if (permissionRequest && !text.trim()) { respondPermission(true); return }
       handleSend()
     }
   }
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setText(e.target.value)
+    const val = e.target.value
+    setText(val)
     const el = e.target
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+    // @mention detection
+    if (agents.length > 0) {
+      const cursor = el.selectionStart ?? val.length
+      const textBeforeCursor = val.slice(0, cursor)
+      const atIndex = textBeforeCursor.lastIndexOf('@')
+      if (atIndex !== -1) {
+        const charBefore = textBeforeCursor[atIndex - 1]
+        const isValidStart = atIndex === 0 || charBefore === ' ' || charBefore === '\n'
+        const query = textBeforeCursor.slice(atIndex + 1)
+        if (isValidStart && !query.includes(' ')) {
+          setMention({ query, cursorStart: atIndex })
+          setMentionIndex(0)
+          return
+        }
+      }
+    }
+    setMention(null)
   }
 
   const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
@@ -469,6 +542,33 @@ function TerminalInput() {
         </div>
       )}
 
+      {/* Skills panel */}
+      {showSkills && agents.length > 0 && (
+        <AgentSkillsPanel agents={agents} onClose={() => setShowSkills(false)} />
+      )}
+
+      {/* @mention dropdown */}
+      {mention && filteredAgents.length > 0 && (
+        <div className="mb-1 rounded-lg border border-zinc-700 bg-zinc-900 shadow-lg overflow-hidden">
+          {filteredAgents.map((agent, i) => {
+            const colors = AGENT_COLORS[agent.color] || AGENT_COLORS.blue
+            return (
+              <button
+                key={agent.id}
+                onMouseDown={(e) => { e.preventDefault(); selectMention(agent.name) }}
+                className={`w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors cursor-pointer ${i === mentionIndex ? 'bg-zinc-700/60' : 'hover:bg-zinc-800'}`}
+              >
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${colors.bgLight} ${colors.text}`}>
+                  {agent.name[0]}
+                </div>
+                <span className={`text-xs font-medium ${colors.text}`}>@{agent.name}</span>
+                <span className="text-[10px] text-zinc-500 truncate">{agent.role}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       <div className="flex items-end gap-3">
         {/* File upload button */}
         <button
@@ -488,31 +588,139 @@ function TerminalInput() {
           className="hidden"
         />
 
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={handleInput}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          placeholder={
-            isLoading
-              ? 'Type to queue a message...'
-              : images.length > 0
-                ? 'Add a message about the attachment...'
-                : activeConversationId
-                  ? 'Send a message...'
-                  : 'Create a conversation first...'
-          }
-          disabled={!activeConversationId}
-          rows={1}
-          className="flex-1 bg-transparent text-sm text-white placeholder-zinc-600 outline-none resize-none font-mono leading-relaxed disabled:opacity-50"
-          style={{ maxHeight: 120 }}
-        />
+        {/* @ mention button */}
+        {agents.length > 0 && (
+          <button
+            onClick={() => {
+              const el = textareaRef.current
+              if (!el) return
+              const pos = el.selectionStart ?? text.length
+              const before = text.slice(0, pos)
+              const needsSpace = before.length > 0 && !before.endsWith(' ')
+              const insert = needsSpace ? ' @' : '@'
+              const newText = before + insert + text.slice(pos)
+              setText(newText)
+              requestAnimationFrame(() => {
+                el.focus()
+                const newPos = pos + insert.length
+                el.setSelectionRange(newPos, newPos)
+                setMention({ query: '', cursorStart: newText.lastIndexOf('@', newPos - 1) })
+                setMentionIndex(0)
+              })
+            }}
+            className="p-2 h-[32px] w-[32px] flex items-center justify-center text-zinc-500 hover:text-blue-400 hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0 font-medium text-sm cursor-pointer"
+            title="Mention an agent"
+          >
+            @
+          </button>
+        )}
+
+        {/* Textarea + highlight backdrop */}
+        <div className="relative flex-1" style={{ maxHeight: 120 }}>
+          {/* Backdrop: renders @mention with color, invisible text so textarea text shows on top */}
+          <div
+            aria-hidden
+            className="absolute inset-0 text-sm font-mono leading-relaxed pointer-events-none whitespace-pre-wrap break-words overflow-hidden text-transparent"
+            dangerouslySetInnerHTML={{
+              __html: (() => {
+                const escaped = text
+                  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                // Split by @word tokens, render mentions in color, rest in white
+                const parts = escaped.split(/(@\w+)/g)
+                return parts.map((part) => {
+                  if (part.startsWith('@')) {
+                    const name = part.slice(1)
+                    const agent = agents.find((a) => a.name.toLowerCase() === name.toLowerCase())
+                    if (agent) {
+                      const colors = AGENT_COLORS[agent.color] || AGENT_COLORS.blue
+                      return `<span class="font-semibold ${colors.text}">${part}</span>`
+                    }
+                  }
+                  return `<span class="text-white">${part}</span>`
+                }).join('') + '&nbsp;'
+              })(),
+            }}
+          />
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={handleInput}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            placeholder={
+              isLoading
+                ? 'Type to queue a message...'
+                : images.length > 0
+                  ? 'Add a message about the attachment...'
+                  : agents.length > 0
+                    ? 'Message the team... (@ to mention)'
+                    : activeConversationId
+                      ? 'Send a message...'
+                      : 'Create a conversation first...'
+            }
+            disabled={!activeConversationId}
+            rows={1}
+            className="relative w-full bg-transparent text-sm placeholder-zinc-600 outline-none resize-none font-mono leading-relaxed disabled:opacity-50"
+            style={{ maxHeight: 120, color: 'transparent', caretColor: 'white' }}
+          />
+        </div>
+
+        {/* Skills button */}
+        {agents.length > 0 && (
+          <button
+            onClick={() => setShowSkills((v) => !v)}
+            className={`p-2 h-[32px] w-[32px] flex items-center justify-center rounded-lg transition-colors flex-shrink-0 cursor-pointer ${showSkills ? 'bg-yellow-500/20 text-yellow-400' : 'text-zinc-500 hover:text-yellow-400 hover:bg-zinc-800'}`}
+            title="Agent skills"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            </svg>
+          </button>
+        )}
+
+        {/* Model selector */}
+        <div ref={modelMenuRef} className="relative flex-shrink-0">
+          <button
+            onClick={() => !isLoading && setShowModelMenu((v) => !v)}
+            disabled={isLoading}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 h-[32px] rounded-lg border text-xs font-medium transition-all ${isLoading ? 'opacity-40 cursor-not-allowed border-zinc-700 bg-zinc-800/50 text-zinc-500' : 'border-zinc-700 bg-zinc-800/80 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800 hover:text-white cursor-pointer'}`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+            {MODELS.find((m) => m.value === model)?.label ?? 'Sonnet'}
+            <svg className="w-3 h-3 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+
+          {showModelMenu && (
+            <div className="absolute bottom-full mb-2 right-0 w-44 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-50">
+              {MODELS.map((m) => (
+                <button
+                  key={m.value}
+                  onClick={() => { setProjectModel(m.value); setShowModelMenu(false) }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${model === m.value ? 'bg-blue-600/20 text-white' : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'}`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${model === m.value ? 'bg-blue-400' : 'bg-zinc-600'}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold">{m.label}</div>
+                    <div className="text-[10px] text-zinc-500">{m.desc}</div>
+                  </div>
+                  {model === m.value && (
+                    <svg className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M20 6L9 17l-5-5"/>
+                    </svg>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Send / Queue button */}
         <button
           onClick={handleSend}
           disabled={(!text.trim() && images.length === 0) || !activeConversationId}
-          className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-600/20 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5"
+          className="px-4 h-[32px] bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-600/20 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5"
         >
           <Icon icon="lucide:send" className="text-[10px]" />
           {isLoading ? 'Queue' : 'Send'}
@@ -521,7 +729,7 @@ function TerminalInput() {
         {isLoading && (
           <button
             onClick={abortSession}
-            className="px-4 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
+            className="px-4 h-[32px] bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
           >
             <Icon icon="lucide:square" className="text-[10px]" />
             Stop
@@ -549,18 +757,35 @@ export default function TerminalPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const prevConversationId = useRef(activeConversationId)
-  const switchedAt = useRef(0)
+  const justSwitched = useRef(true)
   const userScrolledUp = useRef(false)
+
+  // Context menu: textarea → native Electron (spell check + corrections)
+  //               messages → IPC custom menu (Copy)
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      // Textarea: do NOT preventDefault — Electron main process handles it with spell suggestions
+      if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') return
+      // Messages area: use IPC for Copy
+      const sel = window.getSelection()?.toString().trim() ?? ''
+      if (!sel) return
+      e.preventDefault()
+      window.api.shell?.showContextMenu(sel, false)
+    }
+    document.addEventListener('contextmenu', handler)
+    return () => document.removeEventListener('contextmenu', handler)
+  }, [])
 
   // Workflow detection
   const { showSuggestion, dismiss: dismissSuggestion } = useWorkflowDetection()
   const [showConvertModal, setShowConvertModal] = useState(false)
 
-  // Track conversation switches
+  // Mark as "just switched" whenever the active conversation changes
   useEffect(() => {
     if (prevConversationId.current !== activeConversationId) {
       prevConversationId.current = activeConversationId
-      switchedAt.current = Date.now()
+      justSwitched.current = true
       userScrolledUp.current = false
     }
   }, [activeConversationId])
@@ -577,13 +802,14 @@ export default function TerminalPage() {
     return () => el.removeEventListener('scroll', handleScroll)
   }, [])
 
-  // Smart scroll: instant on conversation switch, smooth for new messages, skip if user scrolled up
+  // Smart scroll: instant jump when loading a conversation, smooth for new incoming messages
   useEffect(() => {
-    const recentSwitch = Date.now() - switchedAt.current < 500
-    if (recentSwitch) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
-    } else if (!userScrolledUp.current) {
+    if (justSwitched.current) {
+      // Always instant-jump when switching/loading conversation, regardless of load time
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      justSwitched.current = false
+    } else if (!userScrolledUp.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
     }
   }, [messages.length, activeConversationId])
 
@@ -675,7 +901,27 @@ export default function TerminalPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Empty state */}
+          {/* Empty state — no conversation */}
+          {!activeConversationId && (
+            <div className="flex flex-col items-center justify-center h-full text-center p-8 gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-zinc-800/60 border border-zinc-700/50 flex items-center justify-center mb-2">
+                <Icon icon="lucide:message-square" className="text-zinc-500 text-2xl" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-400 mb-1">No conversation selected</h3>
+                <p className="text-xs text-zinc-600">Select a conversation from the sidebar<br />or start a new one</p>
+              </div>
+              <button
+                className="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-2"
+                onClick={() => useConversationStore.getState().createConversation?.()}
+              >
+                <Icon icon="lucide:plus" className="text-xs" />
+                New Chat
+              </button>
+            </div>
+          )}
+
+          {/* Empty state — conversation exists but no messages */}
           {messages.length === 0 && !streaming.isStreaming && activeConversationId && (
             <div className="flex flex-col items-center justify-center h-full text-center p-8">
               <Icon icon="lucide:terminal" className="text-zinc-800 text-3xl mb-3" />
@@ -685,8 +931,8 @@ export default function TerminalPage() {
           )}
         </div>
 
-        {/* Input */}
-        <TerminalInput />
+        {/* Input — only show when a conversation is active */}
+        {activeConversationId && <TerminalInput />}
       </div>
 
       {/* Convert to workflow modal */}
@@ -697,6 +943,7 @@ export default function TerminalPage() {
           onClose={() => setShowConvertModal(false)}
         />
       )}
+
     </div>
   )
 }

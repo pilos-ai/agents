@@ -126,52 +126,37 @@ async function createWindow() {
   setupAutoUpdater(mainWindow)
   ipcMain.handle('update:install', () => installUpdate())
 
-  // Native context menu with spell check, Look Up, Share, etc.
+  // Native context menu
   mainWindow.webContents.on('context-menu', (_event, params) => {
-    const menuItems: Electron.MenuItemConstructorOptions[] = []
+    try {
+      const menuItems: Electron.MenuItemConstructorOptions[] = []
 
-    // Spell check suggestions
-    if (params.misspelledWord) {
-      for (const suggestion of params.dictionarySuggestions.slice(0, 5)) {
+      if (params.misspelledWord) {
+        for (const suggestion of params.dictionarySuggestions.slice(0, 5)) {
+          menuItems.push({
+            label: suggestion,
+            click: () => mainWindow?.webContents.replaceMisspelling(suggestion),
+          })
+        }
+        if (menuItems.length > 0) menuItems.push({ type: 'separator' })
         menuItems.push({
-          label: suggestion,
-          click: () => mainWindow?.webContents.replaceMisspelling(suggestion),
+          label: 'Add to Dictionary',
+          click: () => mainWindow?.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
         })
+        menuItems.push({ type: 'separator' })
       }
-      if (menuItems.length > 0) menuItems.push({ type: 'separator' })
-      menuItems.push({
-        label: 'Add to Dictionary',
-        click: () => mainWindow?.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
-      })
-      menuItems.push({ type: 'separator' })
-    }
 
-    // Look Up (macOS)
-    if (process.platform === 'darwin' && params.selectionText) {
-      menuItems.push({
-        label: `Look Up "${params.selectionText.slice(0, 20)}${params.selectionText.length > 20 ? '...' : ''}"`,
-        click: () => mainWindow?.webContents.showDefinitionForSelection(),
-      })
-      menuItems.push({ type: 'separator' })
-    }
+      if (params.isEditable) {
+        menuItems.push({ role: 'cut' }, { role: 'copy' }, { type: 'separator' }, { role: 'paste' }, { role: 'selectAll' })
+      } else if (params.selectionText) {
+        menuItems.push({ role: 'copy' })
+      }
 
-    // Standard edit actions
-    if (params.isEditable) {
-      menuItems.push(
-        { role: 'undo' },
-        { role: 'redo' },
-        { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'selectAll' },
-      )
-    } else if (params.selectionText) {
-      menuItems.push({ role: 'copy' })
-    }
-
-    if (menuItems.length > 0) {
-      Menu.buildFromTemplate(menuItems).popup()
+      if (menuItems.length > 0) {
+        Menu.buildFromTemplate(menuItems).popup()
+      }
+    } catch (e) {
+      console.error('[context-menu] error:', e)
     }
   })
 

@@ -1,7 +1,9 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useState } from 'react'
 import { useConversationStore } from '../../store/useConversationStore'
 import { useProjectStore } from '../../store/useProjectStore'
 import { ReplyPreview } from './ReplyPreview'
+import { AgentSkillsPanel } from './AgentSkillsPanel'
+import { AGENT_COLORS } from '../../data/agent-templates'
 import type { ImageAttachment } from '../../types'
 
 const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf']
@@ -19,6 +21,11 @@ function fileToBase64(file: File | Blob): Promise<string> {
     reader.onerror = reject
     reader.readAsDataURL(file)
   })
+}
+
+interface MentionState {
+  query: string        // text after @ (may be empty)
+  cursorStart: number  // index of the @ in the textarea value
 }
 
 export function InputBar() {
@@ -43,8 +50,21 @@ export function InputBar() {
   const images = activeTab?.draftImages || []
   const model = activeTab?.model || 'sonnet'
   const mcpCount = activeTab?.mcpServers?.filter((s) => s.enabled).length || 0
+  const isTeamMode = activeTab?.mode === 'team'
+  const agents = activeTab?.agents || []
 
   const isLoading = isWaitingForResponse || streaming.isStreaming
+
+  // Skills panel visibility
+  const [showSkills, setShowSkills] = useState(false)
+
+  // @mention autocomplete state
+  const [mention, setMention] = useState<MentionState | null>(null)
+  const [mentionIndex, setMentionIndex] = useState(0)
+
+  const filteredAgents = mention
+    ? agents.filter((a) => a.name.toLowerCase().startsWith(mention.query.toLowerCase()))
+    : []
 
   const addImages = useCallback(async (files: FileList | File[]) => {
     const newImages: ImageAttachment[] = []
@@ -89,12 +109,55 @@ export function InputBar() {
 
     setDraftText('')
     setDraftImages([])
+    setMention(null)
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
   }, [text, images, isLoading, sendMessage, queueMessage, setDraftText, setDraftImages])
 
+  // Insert a mention selection into the textarea text
+  const selectMention = useCallback((agentName: string) => {
+    if (!mention) return
+    const before = text.slice(0, mention.cursorStart)
+    const after = text.slice(mention.cursorStart + 1 + mention.query.length)
+    const newText = before + '@' + agentName + ' ' + after
+    setDraftText(newText)
+    setMention(null)
+    setMentionIndex(0)
+    // Restore focus + move cursor after inserted name
+    requestAnimationFrame(() => {
+      const el = textareaRef.current
+      if (!el) return
+      el.focus()
+      const pos = mention.cursorStart + agentName.length + 2 // @Name<space>
+      el.setSelectionRange(pos, pos)
+    })
+  }, [mention, text, setDraftText])
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Handle mention navigation
+    if (mention && filteredAgents.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setMentionIndex((i) => (i + 1) % filteredAgents.length)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setMentionIndex((i) => (i - 1 + filteredAgents.length) % filteredAgents.length)
+        return
+      }
+      if (e.key === 'Tab' || (e.key === 'Enter' && mention)) {
+        e.preventDefault()
+        selectMention(filteredAgents[mentionIndex]?.name || filteredAgents[0].name)
+        return
+      }
+      if (e.key === 'Escape') {
+        setMention(null)
+        return
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       // If there's a pending permission request and no text, approve it
@@ -107,10 +170,35 @@ export function InputBar() {
   }
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setDraftText(e.target.value)
+    const val = e.target.value
+    setDraftText(val)
     const el = e.target
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 200) + 'px'
+
+    // @mention detection
+    if (agents.length > 0) {
+      const cursor = el.selectionStart ?? val.length
+      const textBeforeCursor = val.slice(0, cursor)
+      // Find last @ that is at start or after whitespace (no lookbehind needed)
+      const atIndex = textBeforeCursor.lastIndexOf('@')
+      if (atIndex !== -1) {
+        const charBefore = textBeforeCursor[atIndex - 1]
+        const isValidStart = atIndex === 0 || charBefore === ' ' || charBefore === '\n'
+        const query = textBeforeCursor.slice(atIndex + 1)
+        const hasSpace = query.includes(' ')
+        if (isValidStart && !hasSpace) {
+          setMention({ query, cursorStart: atIndex })
+          setMentionIndex(0)
+        } else {
+          setMention(null)
+        }
+      } else {
+        setMention(null)
+      }
+    } else {
+      setMention(null)
+    }
   }
 
   const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
@@ -161,6 +249,11 @@ export function InputBar() {
       {/* Reply preview */}
       <ReplyPreview />
 
+      {/* Skills panel */}
+      {showSkills && agents.length > 0 && (
+        <AgentSkillsPanel agents={agents} onClose={() => setShowSkills(false)} />
+      )}
+
       {/* File previews */}
       {images.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-2">
@@ -209,6 +302,28 @@ export function InputBar() {
         </div>
       )}
 
+      {/* @mention dropdown */}
+      {mention && filteredAgents.length > 0 && (
+        <div className="mb-1 rounded-lg border border-neutral-700 bg-neutral-900 shadow-lg overflow-hidden">
+          {filteredAgents.map((agent, i) => {
+            const colors = AGENT_COLORS[agent.color] || AGENT_COLORS.blue
+            return (
+              <button
+                key={agent.id}
+                onMouseDown={(e) => { e.preventDefault(); selectMention(agent.name) }}
+                className={`w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors cursor-pointer ${i === mentionIndex ? 'bg-neutral-700/60' : 'hover:bg-neutral-800'}`}
+              >
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${colors.bgLight} ${colors.text}`}>
+                  {agent.name[0]}
+                </div>
+                <span className={`text-xs font-medium ${colors.text}`}>@{agent.name}</span>
+                <span className="text-[10px] text-neutral-500 truncate">{agent.role}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       <div className="flex items-end gap-2">
         {/* Upload button */}
         <button
@@ -220,6 +335,36 @@ export function InputBar() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
           </svg>
         </button>
+
+        {/* @ mention button — only in team mode */}
+        {agents.length > 0 && (
+          <button
+            onClick={() => {
+              const el = textareaRef.current
+              if (!el) return
+              const pos = el.selectionStart ?? el.value.length
+              const before = text.slice(0, pos)
+              const after = text.slice(pos)
+              const needsSpace = before.length > 0 && !before.endsWith(' ')
+              const insert = (needsSpace ? ' @' : '@')
+              const newText = before + insert + after
+              setDraftText(newText)
+              requestAnimationFrame(() => {
+                el.focus()
+                const newPos = pos + insert.length
+                el.setSelectionRange(newPos, newPos)
+                // Trigger mention detection
+                const atIndex = newText.lastIndexOf('@', newPos - 1)
+                setMention({ query: '', cursorStart: atIndex })
+                setMentionIndex(0)
+              })
+            }}
+            className="p-2 h-[36px] w-[36px] flex items-center justify-center bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-blue-400 rounded-lg transition-colors shrink-0 cursor-pointer font-medium text-sm"
+            title="Mention an agent"
+          >
+            @
+          </button>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -235,33 +380,45 @@ export function InputBar() {
           onChange={handleInput}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder={isLoading ? 'Type to queue a message...' : (images.length > 0 ? 'Add a message about the attachment...' : 'Send a message to Pilos...')}
+          placeholder={isLoading ? 'Type to queue a message...' : (images.length > 0 ? 'Add a message about the attachment...' : (agents.length > 0 ? 'Message the team... (@ to mention an agent)' : 'Send a message to Pilos...'))}
           rows={1}
           className="flex-1 min-w-0 bg-neutral-800 text-neutral-100 rounded-lg px-4 py-2 text-sm resize-none outline-none focus:ring-1 focus:ring-blue-500/50 placeholder-neutral-500"
         />
 
-        {/* Model selector — hidden during loading to save space */}
-        {!isLoading && (
-          <select
-            value={model}
-            onChange={(e) => setProjectModel(e.target.value)}
-            className="bg-neutral-800 text-neutral-300 text-xs rounded-md px-2 py-2 h-[36px] outline-none border border-neutral-700 cursor-pointer shrink-0"
+        {/* Skills button — only in team mode */}
+        {agents.length > 0 && (
+          <button
+            onClick={() => setShowSkills((v) => !v)}
+            className={`p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg transition-colors shrink-0 cursor-pointer ${showSkills ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-yellow-400'}`}
+            title="Show agent skills"
           >
-            <option value="sonnet">Sonnet</option>
-            <option value="opus">Opus</option>
-            <option value="haiku">Haiku</option>
-          </select>
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            </svg>
+          </button>
         )}
 
-        {/* MCP badge — hidden during loading to save space */}
-        {mcpCount > 0 && !isLoading && (
-          <div className="flex items-center gap-1 px-2 py-1 h-[36px] bg-neutral-800 border border-green-500/30 rounded-md text-green-400 text-xs shrink-0">
+        {/* Model selector — always visible, disabled during loading */}
+        <select
+          value={model}
+          onChange={(e) => setProjectModel(e.target.value)}
+          disabled={isLoading}
+          className={`bg-neutral-800 text-xs rounded-md px-2 py-2 h-[36px] min-w-[80px] outline-none border cursor-pointer shrink-0 transition-opacity ${isLoading ? 'opacity-40 cursor-not-allowed border-neutral-700 text-neutral-500' : 'text-neutral-300 border-neutral-700 hover:border-neutral-600'}`}
+        >
+          <option value="sonnet">Sonnet</option>
+          <option value="opus">Opus</option>
+          <option value="haiku">Haiku</option>
+        </select>
+
+        {/* MCP badge */}
+        {mcpCount > 0 && (
+          <div className={`flex items-center gap-1 px-2 py-1 h-[36px] bg-neutral-800 border border-green-500/30 rounded-md text-green-400 text-xs shrink-0 transition-opacity ${isLoading ? 'opacity-40' : ''}`}>
             <span>MCP</span>
             <span className="font-medium">{mcpCount}</span>
           </div>
         )}
 
-        {/* Send / Queue button — placed before Stop so it's always visible */}
+        {/* Send / Queue button */}
         <button
           onClick={handleSend}
           disabled={!text.trim() && images.length === 0}

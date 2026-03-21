@@ -77,9 +77,20 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
 
   // ── Claude Usage (rate limits from Anthropic API) ──
   ipcMain.handle('cli:getClaudeUsage', async () => {
+    const os = await import('os')
+    const fs = await import('fs/promises')
+    const path = await import('path')
+    const cachePath = path.join(os.homedir(), '.claude', 'usage-cache.json')
+
+    const readCache = async () => {
+      try {
+        const raw = await fs.readFile(cachePath, 'utf-8')
+        return JSON.parse(raw)
+      } catch { return null }
+    }
+
     try {
       const { execSync } = await import('child_process')
-      const os = await import('os')
 
       // Read OAuth credentials from macOS Keychain
       const username = os.userInfo().username
@@ -90,13 +101,12 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
           { encoding: 'utf-8', timeout: 5000 }
         ).trim()
       } catch {
-        // Keychain not available or no credentials stored
-        return null
+        return readCache()
       }
 
       const creds = JSON.parse(credJson)
       const accessToken = creds?.claudeAiOauth?.accessToken
-      if (!accessToken) return null
+      if (!accessToken) return readCache()
 
       // Call Anthropic usage API
       const resp = await fetch('https://api.anthropic.com/api/oauth/usage', {
@@ -106,13 +116,20 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
           'anthropic-beta': 'oauth-2025-04-20',
           'User-Agent': 'claude-code/2.0.15',
         },
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(8000),
       })
 
-      if (!resp.ok) return null
-      return await resp.json()
+      if (!resp.ok) {
+        // Rate limited or error — return cached data
+        return readCache()
+      }
+
+      const data = await resp.json()
+      // Persist successful response for next startup
+      await fs.writeFile(cachePath, JSON.stringify(data), 'utf-8').catch(() => {})
+      return data
     } catch {
-      return null
+      return readCache()
     }
   })
 
@@ -474,6 +491,26 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
   ipcMain.handle('shell:openPath', async (_event, p: string) => {
     const { shell } = await import('electron')
     return shell.openPath(p)
+  })
+
+  ipcMain.handle('shell:showContextMenu', async (event, text: string, isEditable?: boolean) => {
+    const { Menu, clipboard, BrowserWindow } = await import('electron')
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const items: Electron.MenuItemConstructorOptions[] = []
+    if (text) {
+      items.push({
+        label: 'Copy',
+        accelerator: 'CmdOrCtrl+C',
+        click: () => clipboard.writeText(text),
+      })
+    }
+    if (isEditable) {
+      if (text) items.push({ type: 'separator' })
+      items.push({ role: 'paste', label: 'Paste' })
+      items.push({ type: 'separator' })
+    }
+    items.push({ role: 'selectAll', label: 'Select All' })
+    Menu.buildFromTemplate(items).popup({ window: win ?? undefined })
   })
 
   // ── Jira & Stories (only if PM package is available) ──

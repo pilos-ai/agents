@@ -185,6 +185,7 @@ contextBridge.exposeInMainWorld('api', {
   // Shell
   shell: {
     openPath: (p: string) => ipcRenderer.invoke('shell:openPath', p),
+    showContextMenu: (text: string, isEditable?: boolean) => ipcRenderer.invoke('shell:showContextMenu', text, isEditable),
   },
 
   // Jira

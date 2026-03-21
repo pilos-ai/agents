@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Icon } from '../../common/Icon'
+import { McpIcon } from '../../mcp/McpIcon'
 import { IconPicker } from '../../common/IconPicker'
 import { GradientAvatar } from '../components/GradientAvatar'
 import { StatusDot } from '../components/StatusDot'
@@ -341,7 +342,7 @@ function AgentForm({ agent, onUpdate, onDelete, mcpServers }: { agent: AgentDefi
                         className="flex items-center gap-3 p-3 bg-pilos-card border border-pilos-border rounded-lg"
                       >
                         <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-base">
-                          {template.icon}
+                          <McpIcon icon={template.icon} className="w-5 h-5 text-zinc-300" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">

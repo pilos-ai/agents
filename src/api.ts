@@ -126,6 +126,7 @@ const stubAPI: ElectronAPI = {
   },
   shell: {
     openPath: () => Promise.resolve(''),
+    showContextMenu: (_text: string, _isEditable?: boolean) => Promise.resolve(),
   },
   scheduler: {
     onTriggerTask: noopUnsub,

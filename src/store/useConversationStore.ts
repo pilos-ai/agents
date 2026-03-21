@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { api } from '../api'
 import { useProjectStore, getActiveProjectTab } from './useProjectStore'
+import { useUsageStore } from './useUsageStore'
 import { useAnalyticsStore } from './useAnalyticsStore'
 import { buildTeamSystemPrompt } from '../utils/team-prompt-builder'
 import { restoreAgentIds } from '../utils/agent-names'
@@ -873,6 +874,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
             isWaitingForResponse: false,
             streaming: { ...emptyStreaming },
           })
+          // Refresh usage stats after each completed response
+          setTimeout(() => useUsageStore.getState().fetchStats(), 500)
         }
 
         // Auto-generate title from first assistant response

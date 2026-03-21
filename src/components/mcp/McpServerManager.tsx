@@ -6,6 +6,7 @@ import { useLicenseStore } from '../../store/useLicenseStore'
 import { ProBadge } from '../common/ProBadge'
 import { loadProModule } from '../../lib/pro'
 import { Icon } from '../common/Icon'
+import { McpIcon } from './McpIcon'
 
 interface Props {
   servers: McpServer[]
@@ -96,7 +97,7 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
               }`}
             >
               <div className="w-8 h-8 rounded-lg bg-neutral-700/50 flex items-center justify-center shrink-0">
-                <Icon icon={server.icon} className="text-base text-neutral-300" />
+                <McpIcon icon={server.icon} className="w-5 h-5 text-neutral-300" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
@@ -165,7 +166,7 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
                       className="flex items-center gap-2 p-2 rounded-lg border border-neutral-700 bg-neutral-800/50 hover:border-blue-500/50 hover:bg-blue-500/5 transition-colors text-left"
                     >
                       <div className="w-7 h-7 rounded-md bg-neutral-700/50 flex items-center justify-center shrink-0">
-                        <Icon icon={template.icon} className="text-sm text-neutral-300" />
+                        <McpIcon icon={template.icon} className="w-4 h-4 text-neutral-300" />
                       </div>
                       <div className="min-w-0">
                         <div className="text-xs font-medium text-neutral-200">{template.name}</div>
