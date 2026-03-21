@@ -882,15 +882,12 @@ export default function TerminalPage() {
               </div>
             )}
 
-            {/* Queued messages — shown as pending user bubbles */}
+            {/* Queued messages — shown as pending user bubbles (right-aligned, same as sent messages) */}
             {messageQueue.length > 0 && messageQueue.map((qMsg, i) => (
-              <div key={`queued-${i}`} className="py-2 opacity-50">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <Icon icon="lucide:clock" className="text-amber-400 text-[10px]" />
-                  <span className="text-[10px] text-amber-400 font-medium">Queued</span>
-                </div>
-                <div className="text-sm text-blue-300 whitespace-pre-wrap break-words font-mono leading-relaxed">
-                  {qMsg.text}
+              <div key={`queued-${i}`} className="flex flex-col items-end opacity-60">
+                <div className="relative max-w-[85%] rounded-lg px-4 py-2.5 bg-blue-600 text-white">
+                  <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">{qMsg.text}</p>
+                  <Icon icon="lucide:clock" className="absolute -bottom-1 -right-1 text-[10px] text-blue-300 bg-zinc-900 rounded-full p-0.5" />
                 </div>
               </div>
             ))}
