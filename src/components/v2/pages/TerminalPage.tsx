@@ -746,6 +746,7 @@ export default function TerminalPage() {
   const messageQueue = useConversationStore((s) => s.messageQueue)
   const permissionRequest = useConversationStore((s) => s.permissionRequest)
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
+  const isLoadingMessages = useConversationStore((s) => s.isLoadingMessages)
 
   const activeTab = useProjectStore((s) => {
     const path = s.activeProjectPath
@@ -921,7 +922,7 @@ export default function TerminalPage() {
           )}
 
           {/* Empty state — conversation exists but no messages */}
-          {messages.length === 0 && !streaming.isStreaming && activeConversationId && (
+          {messages.length === 0 && !streaming.isStreaming && activeConversationId && !isLoadingMessages && (
             <div className="flex flex-col items-center justify-center h-full text-center p-8">
               <Icon icon="lucide:terminal" className="text-zinc-800 text-3xl mb-3" />
               <h3 className="text-sm font-medium text-zinc-500 mb-1">Ready for input</h3>

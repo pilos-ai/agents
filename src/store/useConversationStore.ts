@@ -43,6 +43,9 @@ interface ConversationStore {
   processLogs: ProcessLogEntry[]
   isWaitingForResponse: boolean
   hasActiveSession: boolean
+  isLoadingMessages: boolean
+  // background sessions: conversations processing while another is active
+  bgSessions: Record<string, { streamingText: string; isWaiting: boolean }>
   permissionRequest: { sessionId: string; toolName: string; toolInput: Record<string, unknown> } | null
   permissionQueue: Array<{ sessionId: string; toolName: string; toolInput: Record<string, unknown> }>
   askUserQuestion: AskUserQuestionData | null
@@ -140,6 +143,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   processLogs: [],
   isWaitingForResponse: false,
   hasActiveSession: false,
+  isLoadingMessages: false,
+  bgSessions: {},
   permissionRequest: null,
   permissionQueue: [],
   askUserQuestion: null,
@@ -155,15 +160,40 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   },
 
   setActiveConversation: async (id) => {
-    // Abort the previous chat's Claude process to prevent context divergence.
-    // If we don't abort, the CLI keeps running and its internal state diverges
-    // from the app's DB — causing context bleeding when resuming later.
     const prevId = get().activeConversationId
+
+    // Move the previous active session into background tracking (don't abort it)
     if (prevId && prevId !== id && get().hasActiveSession) {
-      api.claude.abort(prevId)
+      const curStreamingText = get().streaming.text
+      set((s) => ({
+        bgSessions: { ...s.bgSessions, [prevId]: { streamingText: curStreamingText, isWaiting: true } },
+      }))
     }
 
-    set({ activeConversationId: id, messages: [], streaming: { ...emptyStreaming }, hasActiveSession: false, permissionRequest: null, permissionQueue: [], askUserQuestion: null, exitPlanMode: null, replyToMessage: null, scrollToMessageId: null, messageQueue: [] })
+    // Restore state for the target conversation if it was running in the background
+    const bg = id ? get().bgSessions[id] : undefined
+    const inProgress = !!bg
+
+    set((s) => {
+      const updated = { ...s.bgSessions }
+      if (id) delete updated[id] // it's now the active conversation
+      return {
+        bgSessions: updated,
+        activeConversationId: id,
+        messages: [],
+        streaming: { ...emptyStreaming },
+        hasActiveSession: inProgress,
+        isWaitingForResponse: inProgress,
+        isLoadingMessages: !!id,
+        permissionRequest: null,
+        permissionQueue: [],
+        askUserQuestion: null,
+        exitPlanMode: null,
+        replyToMessage: null,
+        scrollToMessageId: null,
+        messageQueue: [],
+      }
+    })
 
     // Register the new conversation for event routing
     if (id) {
@@ -199,9 +229,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
             messages.push(msg)
           }
         }
-        set({ messages })
+        set({ messages, isLoadingMessages: false })
       } else {
-        set({ messages: loaded })
+        set({ messages: loaded, isLoadingMessages: false })
       }
     }
   },
@@ -266,7 +296,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     // Broadcast user message to mobile clients
     api.mobile?.broadcastUserMessage(conversationId, text, images)
 
-    // Start or send to Claude
     set({ isWaitingForResponse: true, streaming: { ...emptyStreaming, isStreaming: true, _turnStartTime: Date.now() } })
 
     // Always start a new session if none is active for this conversation
@@ -357,7 +386,11 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     const id = get().activeConversationId
     if (id) {
       api.claude.abort(id)
-      set({ isWaitingForResponse: false, streaming: { ...emptyStreaming }, messageQueue: [] })
+      set((s) => {
+        const bg = { ...s.bgSessions }
+        delete bg[id]
+        return { isWaitingForResponse: false, streaming: { ...emptyStreaming }, messageQueue: [], bgSessions: bg }
+      })
     }
   },
 
@@ -403,7 +436,56 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
   handleClaudeEvent: (event) => {
     const { activeConversationId } = get()
-    if (event.sessionId !== activeConversationId) return
+
+    // Handle background session events (conversations running while another is active)
+    if (event.sessionId !== activeConversationId) {
+      const bgId = event.sessionId
+      if (!bgId) return
+
+      if (event.type === 'assistant') {
+        // Track latest streaming text so we can save it when result fires
+        const msg = event.message as { content?: Array<{ type: string; text?: string }> }
+        const textContent = msg?.content
+          ?.filter((b) => b.type === 'text')
+          .map((b) => b.text ?? '')
+          .join('') ?? ''
+        if (textContent) {
+          set((s) => {
+            const bg = s.bgSessions[bgId]
+            if (!bg) return {}
+            return { bgSessions: { ...s.bgSessions, [bgId]: { ...bg, streamingText: textContent } } }
+          })
+        }
+      } else if (event.type === 'result') {
+        // Save the final text to DB so it's there when the user switches back
+        const bg = get().bgSessions[bgId]
+        const finalText = bg?.streamingText ?? ''
+        if (finalText) {
+          // Get project tab for team mode agent parsing
+          const projectPath = useProjectStore.getState().conversationProjectMap.get(bgId)
+          const tab = projectPath
+            ? useProjectStore.getState().openProjects.find((p) => p.projectPath === projectPath)
+            : null
+
+          if (tab?.mode === 'team' && tab.agents.length > 0) {
+            const segments = parseAgentSegments(finalText, tab.agents)
+            for (const seg of segments) {
+              api.conversations.saveMessage(bgId, {
+                role: 'assistant', type: 'text', content: seg.text,
+                agentName: seg.agentName || undefined, agentIcon: seg.agentIcon, agentColor: seg.agentColor,
+              })
+            }
+          } else {
+            api.conversations.saveMessage(bgId, { role: 'assistant', type: 'text', content: finalText })
+          }
+        }
+        // Session work is done — remove from bgSessions
+        set((s) => { const bg = { ...s.bgSessions }; delete bg[bgId]; return { bgSessions: bg } })
+      } else if (event.type === 'session:ended' || event.type === 'session:error') {
+        set((s) => { const bg = { ...s.bgSessions }; delete bg[bgId]; return { bgSessions: bg } })
+      }
+      return
+    }
 
     // Log every incoming event to processLogs
     {
