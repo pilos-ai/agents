@@ -55,6 +55,7 @@ interface StreamingSnapshot {
   _partialJson: string
   _turnTokens: number
   _turnStartTime: number
+  _lastActivityTime: number
 }
 
 export interface ConversationSnapshot {
@@ -129,6 +130,7 @@ const emptyStreaming: StreamingSnapshot = {
   _partialJson: '',
   _turnTokens: 0,
   _turnStartTime: 0,
+  _lastActivityTime: 0,
 }
 
 const emptySnapshot: ConversationSnapshot = {
