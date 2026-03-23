@@ -274,7 +274,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     set({ replyToMessage: null })
 
     // Restore any friendly agent names back to hex IDs for Claude CLI
-    const cliText = restoreAgentIds(text)
+    let cliText = restoreAgentIds(text)
 
     // Save user message to DB first to get the assigned ID
     const saved = await api.conversations.saveMessage(conversationId, {
@@ -299,7 +299,25 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     // Broadcast user message to mobile clients
     api.mobile?.broadcastUserMessage(conversationId, text, images)
 
-    set({ isWaitingForResponse: true, streaming: { ...emptyStreaming, isStreaming: true, _turnStartTime: Date.now() } })
+    const turnStartTime = Date.now()
+    set({ isWaitingForResponse: true, streaming: { ...emptyStreaming, isStreaming: true, _turnStartTime: turnStartTime } })
+
+    // Safety timeout: if the CLI hangs (e.g. large context write stalls, API never responds),
+    // reset the processing state after 10 minutes so the user isn't stuck forever
+    setTimeout(() => {
+      if (get().isWaitingForResponse && get().activeConversationId === conversationId &&
+          get().streaming._turnStartTime === turnStartTime) {
+        console.warn('[ConversationStore] Safety timeout: resetting stuck processing state')
+        get().addMessage({
+          role: 'assistant',
+          type: 'text',
+          content: '⚠️ No response received after 10 minutes. The request may have timed out — possibly due to a very large context. Try starting a new conversation.',
+          timestamp: Date.now(),
+        })
+        set({ isWaitingForResponse: false, streaming: { ...emptyStreaming }, hasActiveSession: false })
+        api.claude.abort(conversationId)
+      }
+    }, 10 * 60 * 1000)
 
     // Always start a new session if none is active for this conversation
     if (!get().hasActiveSession) {
@@ -887,6 +905,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       case 'result': {
         // The result field can be either a string or an object with content[]
         const rawResult = event.result
+        const isError = !!(event as Record<string, unknown>).is_error
         const streaming = get().streaming
         let finalText = ''
 
@@ -903,6 +922,12 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         }
 
         finalText = finalText || streaming.text
+
+        // When the CLI signals an error and there's no content to show, surface a fallback
+        // so the user isn't left staring at a frozen spinner with no feedback
+        if (isError && !finalText) {
+          finalText = '⚠️ The request could not be completed. The context may be too large for the model. Try starting a new conversation or reducing the amount of text.'
+        }
 
         // Tool blocks (tool_use, tool_result) are already added as separate messages
         // by content_block_stop. Here we only handle the text content.
@@ -1026,6 +1051,20 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       case 'stderr':
         // Informational events — no UI action needed
         break
+
+      case 'stderr_error': {
+        // Claude CLI printed something error-like to stderr (e.g. context window exceeded)
+        // Show it as an assistant error message so the user isn't left with a frozen spinner
+        const errText = String((event as Record<string, unknown>).data || 'Unknown CLI error')
+        get().addMessage({
+          role: 'assistant',
+          type: 'text',
+          content: `⚠️ ${errText}`,
+          timestamp: Date.now(),
+        })
+        // Don't clear isWaitingForResponse here — the CLI will close and session:ended will do that
+        break
+      }
 
       default: {
         // Catch permission-related events with alternate type names

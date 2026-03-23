@@ -332,19 +332,28 @@ function ContextVisualization() {
 
 function RecentProjectCard({ path, name }: { path: string; name: string }) {
   const openProject = useProjectStore((s) => s.openProject)
+  const removeRecentProject = useProjectStore((s) => s.removeRecentProject)
 
   return (
-    <button
-      onClick={() => openProject(path)}
-      className="w-full flex items-center gap-3 p-3 hover:bg-zinc-800/50 rounded-lg transition-colors text-left"
-    >
-      <Icon icon="lucide:folder" className="text-zinc-600" />
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-zinc-300 truncate">{name}</p>
-        <p className="text-[10px] text-zinc-600 truncate">{path}</p>
-      </div>
-      <Icon icon="lucide:chevron-right" className="text-zinc-700 text-xs" />
-    </button>
+    <div className="group w-full flex items-center gap-3 p-3 hover:bg-zinc-800/50 rounded-lg transition-colors">
+      <button onClick={() => openProject(path)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+        <Icon icon="lucide:folder" className="text-zinc-600" />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium text-zinc-300 truncate">{name}</p>
+          <p className="text-[10px] text-zinc-600 truncate">{path}</p>
+        </div>
+      </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          removeRecentProject(path)
+        }}
+        className="p-1 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+        title="Remove from recent"
+      >
+        <Icon icon="lucide:x" className="text-xs" />
+      </button>
+    </div>
   )
 }
 

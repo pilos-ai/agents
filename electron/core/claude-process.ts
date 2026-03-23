@@ -142,6 +142,12 @@ export class ClaudeProcess {
 
     this.sessions.set(sessionId, session)
 
+    // Surface stdin write errors so the UI doesn't hang in "processing" forever
+    proc.stdin!.on('error', (err: Error) => {
+      console.log(`[ClaudeProcess] stdin error for ${sessionId}: ${err.message}`)
+      this.emit(sessionId, { type: 'session:error', sessionId, error: `stdin error: ${err.message}` })
+    })
+
     this.emit(sessionId, { type: 'session:started', sessionId })
 
     // Send initial prompt if provided
@@ -174,6 +180,17 @@ export class ClaudeProcess {
       const text = chunk.toString()
       console.log(`[ClaudeProcess] stderr: ${text.slice(0, 500)}`)
       this.emit(sessionId, { type: 'stderr', data: text })
+      // Surface context-window / API errors so the UI doesn't stay frozen
+      const lower = text.toLowerCase()
+      if (
+        lower.includes('context') ||
+        lower.includes('too long') ||
+        lower.includes('token') ||
+        lower.includes('error') ||
+        lower.includes('invalid')
+      ) {
+        this.emit(sessionId, { type: 'stderr_error', sessionId, data: text.trim() })
+      }
     })
 
     proc.on('close', (code: number | null) => {
