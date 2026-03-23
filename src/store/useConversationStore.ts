@@ -90,41 +90,6 @@ const emptyStreaming: StreamingState = {
 }
 
 // ── Inactivity timeout ────────────────────────────────────────────────────────
-// Fires only when there has been NO streaming activity for 5 minutes straight.
-// Any event from Claude (text delta, tool use, etc.) resets the timer so
-// long-running but active responses never get killed.
-const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000
-let _inactivityTimer: ReturnType<typeof setTimeout> | null = null
-
-function clearInactivityTimer() {
-  if (_inactivityTimer !== null) {
-    clearTimeout(_inactivityTimer)
-    _inactivityTimer = null
-  }
-}
-
-function scheduleInactivityTimer(
-  conversationId: string,
-  get: () => ConversationStore,
-  addMessage: (msg: ConversationMessage) => void,
-  setStore: (partial: Partial<ConversationStore>) => void,
-) {
-  clearInactivityTimer()
-  _inactivityTimer = setTimeout(() => {
-    _inactivityTimer = null
-    if (get().isWaitingForResponse && get().activeConversationId === conversationId) {
-      console.warn('[ConversationStore] Inactivity timeout: no Claude activity for 5 minutes')
-      addMessage({
-        role: 'assistant',
-        type: 'text',
-        content: '⚠️ No response activity for 5 minutes. The request may have stalled — try sending your message again or starting a new conversation.',
-        timestamp: Date.now(),
-      })
-      setStore({ isWaitingForResponse: false, streaming: { ...emptyStreaming }, hasActiveSession: false })
-      api.claude.abort(conversationId)
-    }
-  }, INACTIVITY_TIMEOUT_MS)
-}
 
 /** Parse text into agent-attributed segments for team mode */
 function parseAgentSegments(
@@ -341,10 +306,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     const turnStartTime = Date.now()
     set({ isWaitingForResponse: true, streaming: { ...emptyStreaming, isStreaming: true, _turnStartTime: turnStartTime, _lastActivityTime: turnStartTime } })
 
-    // Start the inactivity watchdog. It resets on every streaming event so only
-    // a genuine hang (no activity for 5 minutes) triggers it.
-    scheduleInactivityTimer(conversationId, get, get().addMessage, set)
-
     // Always start a new session if none is active for this conversation
     if (!get().hasActiveSession) {
       const hasHistory = get().messages.length > 1
@@ -442,7 +403,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   },
 
   abortSession: () => {
-    clearInactivityTimer()
     const id = get().activeConversationId
     if (id) {
       api.claude.abort(id)
@@ -598,8 +558,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
     switch (event.type) {
       case 'session:started': {
-        // Session is alive — reset inactivity watchdog
-        scheduleInactivityTimer(get().activeConversationId ?? '', get, get().addMessage, set)
         set({ hasActiveSession: true, processLogs: [] })
         break
       }
@@ -779,8 +737,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
       case 'content_block_start': {
         const block = event.content_block as ContentBlock
-        // Activity received — reset inactivity watchdog
-        scheduleInactivityTimer(get().activeConversationId ?? '', get, get().addMessage, set)
         set((s) => ({
           streaming: {
             ...s.streaming,
@@ -793,8 +749,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       }
 
       case 'content_block_delta': {
-        // Activity received — reset inactivity watchdog on every chunk
-        scheduleInactivityTimer(get().activeConversationId ?? '', get, get().addMessage, set)
         const delta = event.delta as { type: string; text?: string; thinking?: string; partial_json?: string }
         if (delta.type === 'text_delta' && delta.text) {
           const tab = getActiveProjectTab()
@@ -1053,7 +1007,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       }
 
       case 'session:ended': {
-        clearInactivityTimer()
         set({
           isWaitingForResponse: false,
           hasActiveSession: false,
@@ -1064,7 +1017,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       }
 
       case 'session:error': {
-        clearInactivityTimer()
         const error = (event.error as string) || 'Unknown error'
         get().addMessage({
           role: 'assistant',
