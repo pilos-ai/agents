@@ -162,6 +162,10 @@ export class Database {
     if (!columns.some((c) => c.name === 'cli_session_id')) {
       this.db!.exec("ALTER TABLE conversations ADD COLUMN cli_session_id TEXT")
     }
+    // Migration: track which model was used for the stored cli_session_id
+    if (!columns.some((c) => c.name === 'cli_session_model')) {
+      this.db!.exec("ALTER TABLE conversations ADD COLUMN cli_session_model TEXT")
+    }
 
     // Migration: add agent and content_blocks columns to messages
     const msgColumns = this.db!.prepare("PRAGMA table_info(messages)").all() as Array<{ name: string }>
@@ -243,17 +247,18 @@ export class Database {
     ).run(title, id)
   }
 
-  updateConversationCliSessionId(id: string, cliSessionId: string): void {
+  updateConversationCliSessionId(id: string, cliSessionId: string, model?: string): void {
     this.db!.prepare(
-      'UPDATE conversations SET cli_session_id = ? WHERE id = ?'
-    ).run(cliSessionId, id)
+      'UPDATE conversations SET cli_session_id = ?, cli_session_model = ? WHERE id = ?'
+    ).run(cliSessionId, model || null, id)
   }
 
-  getConversationCliSessionId(id: string): string | null {
+  getConversationCliSessionId(id: string): { cliSessionId: string; model: string | null } | null {
     const row = this.db!.prepare(
-      'SELECT cli_session_id FROM conversations WHERE id = ?'
-    ).get(id) as { cli_session_id: string | null } | undefined
-    return row?.cli_session_id || null
+      'SELECT cli_session_id, cli_session_model FROM conversations WHERE id = ?'
+    ).get(id) as { cli_session_id: string | null; cli_session_model: string | null } | undefined
+    if (!row?.cli_session_id) return null
+    return { cliSessionId: row.cli_session_id, model: row.cli_session_model }
   }
 
   deleteConversation(id: string): void {

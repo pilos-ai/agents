@@ -719,6 +719,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       ),
     })
     api.projects.setSettings(dirPath, { model })
+    // Abort any in-flight session so the next message starts fresh with the new model
+    const convStore = useConversationStore.getState()
+    if (convStore.hasActiveSession || convStore.isWaitingForResponse) {
+      convStore.abortSession()
+    }
   },
 
   setProjectPermissionMode: (mode: string) => {

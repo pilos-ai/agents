@@ -24,6 +24,7 @@ interface StreamingState {
   thinking: string
   isStreaming: boolean
   currentAgentName: string | null
+  retrying: boolean
   _partialJson: string
   _turnTokens: number
   _turnStartTime: number
@@ -83,6 +84,7 @@ const emptyStreaming: StreamingState = {
   thinking: '',
   isStreaming: false,
   currentAgentName: null,
+  retrying: false,
   _partialJson: '',
   _turnTokens: 0,
   _turnStartTime: 0,
@@ -1034,11 +1036,20 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       }
 
       case 'rate_limit_event':
-      case 'system':
       case 'raw':
       case 'stderr':
         // Informational events — no UI action needed
         break
+
+      case 'system': {
+        const subtype = (event as Record<string, unknown>).subtype as string | undefined
+        if (subtype === 'api_retry') {
+          set((s) => ({ streaming: { ...s.streaming, retrying: true } }))
+        } else if (subtype === 'init') {
+          set((s) => ({ streaming: { ...s.streaming, retrying: false } }))
+        }
+        break
+      }
 
       case 'stderr_error': {
         // Claude CLI printed something error-like to stderr (e.g. context window exceeded)

@@ -179,17 +179,20 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow, settingsSto
 
     // Look up stored CLI session ID for resume
     if (options.resume) {
-      const storedCliId = database.getConversationCliSessionId(sessionId)
-      if (storedCliId) {
-        options.cliSessionId = storedCliId
-        console.log(`[IPC] Resuming session ${sessionId} with CLI session ${storedCliId}`)
+      const stored = database.getConversationCliSessionId(sessionId)
+      const requestedModel = options.model || 'sonnet'
+      if (stored && (!stored.model || stored.model === requestedModel)) {
+        options.cliSessionId = stored.cliSessionId
+        console.log(`[IPC] Resuming session ${sessionId} with CLI session ${stored.cliSessionId}`)
+      } else if (stored) {
+        console.log(`[IPC] Model changed (${stored.model} → ${requestedModel}), starting fresh session`)
       }
     }
 
     const cliSessionId = await claudeProcess.startSession(sessionId, options)
 
-    // Store the CLI session ID for future resume
-    database.updateConversationCliSessionId(sessionId, cliSessionId)
+    // Store the CLI session ID and model for future resume
+    database.updateConversationCliSessionId(sessionId, cliSessionId, options.model || 'sonnet')
     return cliSessionId
   })
 

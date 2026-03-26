@@ -369,14 +369,15 @@ export class RelayClient {
 
         // Look up stored CLI session ID for resume (mirrors ipc-handlers.ts logic)
         if (options.resume) {
-          const storedCliId = this.database.getConversationCliSessionId(sessionId)
-          if (storedCliId) {
-            options.cliSessionId = storedCliId
+          const stored = this.database.getConversationCliSessionId(sessionId)
+          const requestedModel = (options.model as string) || 'sonnet'
+          if (stored && (!stored.model || stored.model === requestedModel)) {
+            options.cliSessionId = stored.cliSessionId
           }
         }
 
         const cliSessionId = await this.claudeProcess.startSession(sessionId, options as any)
-        this.database.updateConversationCliSessionId(sessionId, cliSessionId)
+        this.database.updateConversationCliSessionId(sessionId, cliSessionId, (options.model as string) || 'sonnet')
         return cliSessionId
       }
 
@@ -406,15 +407,16 @@ export class RelayClient {
             projectPath: (conv?.project_path as string) || '',
           }
 
-          // Resume existing CLI session if available
-          const storedCliId = this.database.getConversationCliSessionId(sessionId)
-          if (storedCliId) {
+          // Resume existing CLI session if available (only if model hasn't changed)
+          const stored = this.database.getConversationCliSessionId(sessionId)
+          const requestedModel = (options.model as string) || 'sonnet'
+          if (stored && (!stored.model || stored.model === requestedModel)) {
             options.resume = true
-            options.cliSessionId = storedCliId
+            options.cliSessionId = stored.cliSessionId
           }
 
           const cliSessionId = await this.claudeProcess.startSession(sessionId, options as any)
-          this.database.updateConversationCliSessionId(sessionId, cliSessionId)
+          this.database.updateConversationCliSessionId(sessionId, cliSessionId, requestedModel)
           return cliSessionId
         }
 

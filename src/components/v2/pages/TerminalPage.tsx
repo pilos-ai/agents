@@ -12,6 +12,7 @@ import { WorkflowSuggestionBanner } from '../components/WorkflowSuggestionBanner
 import { useLicenseStore } from '../../../store/useLicenseStore'
 import { ProBadge } from '../../common/ProBadge'
 import type { ImageAttachment } from '../../../types'
+import { SessionInfoPanel } from '../../session/SessionInfoPanel'
 
 // Reuse existing chat components
 import { MessageBubble } from '../../chat/MessageBubble'
@@ -19,6 +20,18 @@ import { PermissionBanner } from '../../chat/PermissionBanner'
 
 const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf']
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
+
+function getCaretOffset(el: HTMLElement): number {
+  const sel = window.getSelection()
+  if (!sel || !sel.rangeCount) return 0
+  const { endContainer, endOffset } = sel.getRangeAt(0)
+  const range = document.createRange()
+  range.setStart(el, 0)
+  range.setEnd(endContainer, endOffset)
+  const tmp = document.createElement('div')
+  tmp.appendChild(range.cloneContents())
+  return tmp.innerText.length
+}
 
 function fileToBase64(file: File | Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -191,7 +204,7 @@ function ConversationSidebar() {
   )
 }
 
-function TerminalControls({ onSaveAsTask }: { onSaveAsTask: () => void }) {
+function TerminalControls({ onSaveAsTask, showLogs, onToggleLogs }: { onSaveAsTask: () => void; showLogs: boolean; onToggleLogs: () => void }) {
   const messages = useConversationStore((s) => s.messages)
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
   const conversations = useConversationStore((s) => s.conversations)
@@ -266,6 +279,15 @@ function TerminalControls({ onSaveAsTask }: { onSaveAsTask: () => void }) {
         Save as Task
         {!isPro && <ProBadge />}
       </button>
+      <div className="flex-1" />
+      <button
+        onClick={onToggleLogs}
+        className={`px-2 py-1 text-[10px] rounded transition-colors flex items-center gap-1 ${showLogs ? 'bg-zinc-700 text-zinc-200' : 'text-zinc-500 hover:text-white hover:bg-zinc-800'}`}
+        title="Toggle process logs"
+      >
+        <Icon icon="lucide:terminal" className="text-[10px]" />
+        Logs
+      </button>
     </div>
   )
 }
@@ -287,7 +309,7 @@ function TerminalInput() {
   const respondPermission = useConversationStore((s) => s.respondPermission)
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
   const isLoading = isWaitingForResponse || isStreaming
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const editorRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Agents + model from active tab
@@ -325,21 +347,44 @@ function TerminalInput() {
     : []
 
   const selectMention = useCallback((agentName: string) => {
-    if (!mention) return
-    const el = textareaRef.current
-    const before = text.slice(0, mention.cursorStart)
-    const after = text.slice(mention.cursorStart + 1 + mention.query.length)
-    const newText = before + '@' + agentName + ' ' + after
-    setText(newText)
+    if (!mention || !editorRef.current) return
+    const el = editorRef.current
+    const sel = window.getSelection()
+    if (!sel || !sel.rangeCount) return
+    const range = sel.getRangeAt(0)
+    if (range.endContainer.nodeType !== Node.TEXT_NODE) return
+
+    const replaceLen = 1 + mention.query.length
+    const startOffset = Math.max(0, range.endOffset - replaceLen)
+    const replaceRange = document.createRange()
+    replaceRange.setStart(range.endContainer, startOffset)
+    replaceRange.setEnd(range.endContainer, range.endOffset)
+    replaceRange.deleteContents()
+
+    const agent = agents.find((a) => a.name === agentName)
+    const colors = AGENT_COLORS[agent?.color || 'blue'] || AGENT_COLORS.blue
+    const chip = document.createElement('span')
+    chip.contentEditable = 'false'
+    chip.className = [
+      'inline-flex items-center rounded px-1.5 leading-5 text-xs font-semibold border select-none',
+      colors.bgLight, colors.text, colors.border,
+    ].join(' ')
+    chip.style.verticalAlign = 'middle'
+    chip.dataset.mention = agentName
+    chip.textContent = '@' + agentName
+    replaceRange.insertNode(chip)
+
+    const after = document.createRange()
+    after.setStartAfter(chip)
+    after.collapse(true)
+    sel.removeAllRanges()
+    sel.addRange(after)
+    document.execCommand('insertText', false, ' ')
+
+    setText(el.innerText.replace(/^\n$/, ''))
     setMention(null)
     setMentionIndex(0)
-    requestAnimationFrame(() => {
-      if (!el) return
-      el.focus()
-      const pos = mention.cursorStart + agentName.length + 2
-      el.setSelectionRange(pos, pos)
-    })
-  }, [mention, text])
+  }, [mention, agents])
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     const newImages: ImageAttachment[] = []
@@ -374,8 +419,8 @@ function TerminalInput() {
     }
     setText('')
     setImages([])
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
+    if (editorRef.current) {
+      editorRef.current.innerHTML = ''
     }
   }
 
@@ -393,15 +438,13 @@ function TerminalInput() {
     }
   }
 
-  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value
+  const handleInput = useCallback(() => {
+    const el = editorRef.current
+    if (!el) return
+    const val = el.innerText.replace(/^\n$/, '')
     setText(val)
-    const el = e.target
-    el.style.height = 'auto'
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px'
-    // @mention detection
     if (agents.length > 0) {
-      const cursor = el.selectionStart ?? val.length
+      const cursor = getCaretOffset(el)
       const textBeforeCursor = val.slice(0, cursor)
       const atIndex = textBeforeCursor.lastIndexOf('@')
       if (atIndex !== -1) {
@@ -416,7 +459,7 @@ function TerminalInput() {
       }
     }
     setMention(null)
-  }
+  }, [agents])
 
   const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items
@@ -433,7 +476,25 @@ function TerminalInput() {
     if (imageFiles.length > 0) {
       e.preventDefault()
       await addFiles(imageFiles)
+      return
     }
+    // Strip rich-text formatting — insert as plain text, converting \n to <br>
+    e.preventDefault()
+    const plain = e.clipboardData.getData('text/plain')
+    const sel2 = window.getSelection()
+    if (!sel2 || !sel2.rangeCount) return
+    const r = sel2.getRangeAt(0)
+    r.deleteContents()
+    const lines = plain.split('\n')
+    const frag = document.createDocumentFragment()
+    lines.forEach((line, i) => {
+      if (i > 0) frag.appendChild(document.createElement('br'))
+      if (line) frag.appendChild(document.createTextNode(line))
+    })
+    r.insertNode(frag)
+    r.collapse(false)
+    sel2.removeAllRanges()
+    sel2.addRange(r)
   }, [addFiles])
 
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -591,22 +652,28 @@ function TerminalInput() {
         {/* @ mention button */}
         {agents.length > 0 && (
           <button
-            onClick={() => {
-              const el = textareaRef.current
+            onMouseDown={(e) => {
+              e.preventDefault()
+              const el = editorRef.current
               if (!el) return
-              const pos = el.selectionStart ?? text.length
-              const before = text.slice(0, pos)
-              const needsSpace = before.length > 0 && !before.endsWith(' ')
-              const insert = needsSpace ? ' @' : '@'
-              const newText = before + insert + text.slice(pos)
-              setText(newText)
-              requestAnimationFrame(() => {
-                el.focus()
-                const newPos = pos + insert.length
-                el.setSelectionRange(newPos, newPos)
-                setMention({ query: '', cursorStart: newText.lastIndexOf('@', newPos - 1) })
-                setMentionIndex(0)
-              })
+              el.focus()
+              const sel = window.getSelection()
+              if (!sel) return
+              if (!sel.rangeCount || !el.contains(sel.getRangeAt(0).endContainer)) {
+                const range = document.createRange()
+                range.selectNodeContents(el)
+                range.collapse(false)
+                sel.removeAllRanges()
+                sel.addRange(range)
+              }
+              const raw = el.innerText.replace(/^\n$/, '')
+              const offset = getCaretOffset(el)
+              const before = raw.slice(0, offset)
+              const insert = before.length > 0 && !before.endsWith(' ') ? ' @' : '@'
+              document.execCommand('insertText', false, insert)
+              setMention({ query: '', cursorStart: getCaretOffset(el) - 1 })
+              setMentionIndex(0)
+              setText(el.innerText.replace(/^\n$/, ''))
             }}
             className="p-2 h-[32px] w-[32px] flex items-center justify-center text-zinc-500 hover:text-blue-400 hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0 font-medium text-sm cursor-pointer"
             title="Mention an agent"
@@ -615,55 +682,28 @@ function TerminalInput() {
           </button>
         )}
 
-        {/* Textarea + highlight backdrop */}
-        <div className="relative flex-1" style={{ maxHeight: 120 }}>
-          {/* Backdrop: renders @mention with color, invisible text so textarea text shows on top */}
-          <div
-            aria-hidden
-            className="absolute inset-0 text-sm font-mono leading-relaxed pointer-events-none whitespace-pre-wrap break-words overflow-hidden text-transparent"
-            dangerouslySetInnerHTML={{
-              __html: (() => {
-                const escaped = text
-                  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-                // Split by @word tokens, render mentions in color, rest in white
-                const parts = escaped.split(/(@\w+)/g)
-                return parts.map((part) => {
-                  if (part.startsWith('@')) {
-                    const name = part.slice(1)
-                    const agent = agents.find((a) => a.name.toLowerCase() === name.toLowerCase())
-                    if (agent) {
-                      const colors = AGENT_COLORS[agent.color] || AGENT_COLORS.blue
-                      return `<span class="font-semibold ${colors.text}">${part}</span>`
-                    }
-                  }
-                  return `<span class="text-white">${part}</span>`
-                }).join('') + '&nbsp;'
-              })(),
-            }}
-          />
-          <textarea
-            ref={textareaRef}
-            value={text}
-            onChange={handleInput}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            placeholder={
-              isLoading
-                ? 'Type to queue a message...'
-                : images.length > 0
-                  ? 'Add a message about the attachment...'
-                  : agents.length > 0
-                    ? 'Message the team... (@ to mention)'
-                    : activeConversationId
-                      ? 'Send a message...'
-                      : 'Create a conversation first...'
-            }
-            disabled={!activeConversationId}
-            rows={1}
-            className="relative w-full bg-transparent text-sm placeholder-zinc-600 outline-none resize-none font-mono leading-relaxed disabled:opacity-50"
-            style={{ maxHeight: 120, color: 'transparent', caretColor: 'white' }}
-          />
-        </div>
+        {/* Contenteditable rich input */}
+        <div
+          ref={editorRef}
+          contentEditable={!!activeConversationId}
+          suppressContentEditableWarning
+          data-placeholder={
+            isLoading
+              ? 'Type to queue a message...'
+              : images.length > 0
+                ? 'Add a message about the attachment...'
+                : agents.length > 0
+                  ? 'Message the team... (@ to mention)'
+                  : activeConversationId
+                    ? 'Send a message...'
+                    : 'Create a conversation first...'
+          }
+          onInput={handleInput}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          className={`flex-1 min-w-0 text-sm text-zinc-100 font-mono leading-relaxed outline-none min-h-[20px] max-h-[120px] overflow-y-auto overflow-x-hidden break-words empty:before:content-[attr(data-placeholder)] empty:before:text-zinc-600 empty:before:pointer-events-none ${!activeConversationId ? 'opacity-40 pointer-events-none' : ''}`}
+          style={{ wordBreak: 'break-word' }}
+        />
 
         {/* Skills button */}
         {agents.length > 0 && (
@@ -781,6 +821,7 @@ export default function TerminalPage() {
   // Workflow detection
   const { showSuggestion, dismiss: dismissSuggestion } = useWorkflowDetection()
   const [showConvertModal, setShowConvertModal] = useState(false)
+  const [showLogs, setShowLogs] = useState(false)
 
   // Mark as "just switched" whenever the active conversation changes
   useEffect(() => {
@@ -836,13 +877,17 @@ export default function TerminalPage() {
               <div className="flex items-center gap-2">
                 <GradientAvatar gradient={currentAgent.color} icon={currentAgent.icon} size="sm" />
                 <span className="text-xs font-bold text-white">{currentAgent.name}</span>
-                <StatusDot color="green" pulse />
-                <span className="text-[10px] text-zinc-500">{streaming.isStreaming ? 'Processing...' : 'Thinking...'}</span>
+                <StatusDot color={streaming.retrying ? 'orange' : 'green'} pulse />
+                <span className="text-[10px] text-zinc-500">
+                  {streaming.retrying ? 'Rate limited, retrying...' : streaming.isStreaming ? 'Processing...' : 'Thinking...'}
+                </span>
               </div>
             ) : (streaming.isStreaming || isWaitingForResponse) ? (
               <div className="flex items-center gap-2">
-                <StatusDot color="green" pulse />
-                <span className="text-xs text-zinc-400">{streaming.isStreaming ? 'Agent processing...' : 'Agent thinking...'}</span>
+                <StatusDot color={streaming.retrying ? 'orange' : 'green'} pulse />
+                <span className="text-xs text-zinc-400">
+                  {streaming.retrying ? 'Rate limited, retrying...' : streaming.isStreaming ? 'Agent processing...' : 'Agent thinking...'}
+                </span>
               </div>
             ) : (
               <span className="text-xs text-zinc-600">
@@ -852,7 +897,7 @@ export default function TerminalPage() {
           </div>
         </div>
 
-        <TerminalControls onSaveAsTask={() => setShowConvertModal(true)} />
+        <TerminalControls onSaveAsTask={() => setShowConvertModal(true)} showLogs={showLogs} onToggleLogs={() => setShowLogs((v) => !v)} />
 
         {/* Workflow suggestion banner */}
         {showSuggestion && !showConvertModal && (
@@ -928,6 +973,21 @@ export default function TerminalPage() {
             </div>
           )}
         </div>
+
+        {/* Process logs panel */}
+        {showLogs && (
+          <div className="h-52 border-t border-pilos-border bg-neutral-950 flex-shrink-0 flex flex-col">
+            <div className="flex items-center justify-between px-3 py-1 border-b border-neutral-800 flex-shrink-0">
+              <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">Process Logs</span>
+              <button onClick={() => setShowLogs(false)} className="text-zinc-600 hover:text-zinc-400 transition-colors">
+                <Icon icon="lucide:x" className="text-xs" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <SessionInfoPanel />
+            </div>
+          </div>
+        )}
 
         {/* Input — only show when a conversation is active */}
         {activeConversationId && <TerminalInput />}
