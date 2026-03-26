@@ -90,7 +90,7 @@ export const MCP_SERVER_TEMPLATES: McpServerTemplate[] = [
     ],
   },
   {
-    id: 'computer-use',
+    id: 'pilos-computer-use',
     name: 'Computer Use',
     icon: 'lucide:monitor',
     description: 'Desktop automation: screenshots, mouse, keyboard, and window management (macOS)',

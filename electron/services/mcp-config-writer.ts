@@ -130,7 +130,7 @@ export function writeMcpConfig(projectPath: string, servers: McpServerEntry[], s
       const cuNodeCommand = app.isPackaged ? process.execPath : 'node'
       const cuNodeEnv: Record<string, string> = app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}
 
-      mcpServers['computer-use'] = {
+      mcpServers['pilos-computer-use'] = {
         type: 'stdio',
         command: cuNodeCommand,
         args: [mcpServerScript],
