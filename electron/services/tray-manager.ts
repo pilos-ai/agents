@@ -43,9 +43,11 @@ export class TrayManager {
     // Try packaged path first, then dev path
     const appPath = app.getAppPath()
     const iconPaths = [
+      path.join(process.resourcesPath || appPath, 'tray-icon.png'),
+      path.join(appPath, 'resources', 'tray-icon.png'),
+      path.join(appPath, '..', 'resources', 'tray-icon.png'),
       path.join(process.resourcesPath || appPath, 'icon.png'),
       path.join(appPath, 'resources', 'icon.png'),
-      path.join(appPath, '..', 'resources', 'icon.png'),
     ]
 
     // macOS uses 16x16 (retina handled automatically), Windows/Linux use 32x32

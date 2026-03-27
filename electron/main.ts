@@ -42,6 +42,7 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: true,
+      backgroundThrottling: false,
     },
     show: false,
   })
@@ -146,8 +147,8 @@ async function createWindow() {
   })
 
   // Set up auto-updater
-  setupAutoUpdater(mainWindow)
-  ipcMain.handle('update:install', () => installUpdate())
+    setupAutoUpdater(mainWindow)
+
 
 
   // Hide-to-tray on close — keeps scheduler running in background (all platforms)
@@ -161,10 +162,10 @@ async function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
-
   // Initialize tray (menu bar icon)
   trayManager = new TrayManager(mainWindow, settings)
-  trayManager.init()
+
+    trayManager.init()
 
   // Initialize task scheduler
   taskScheduler = new TaskScheduler(mainWindow, settings, trayManager)

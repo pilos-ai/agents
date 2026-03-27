@@ -228,15 +228,41 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       }
 
       if (Array.isArray(stored)) {
-        const tasks = (stored as Record<string, unknown>[]).map((t) => ({
-          ...t,
-          projectPath: (t.projectPath as string) || projectPath,
-          template: (t.template as string) || 'custom',
-          integrations: (t.integrations as unknown[]) || [],
-          schedule: (t.schedule as TaskSchedule) || { interval: 'manual', enabled: false, nextRunAt: null, lastRunAt: null },
-          runs: (t.runs as unknown[]) || [],
-          status: t.status === 'queued' && !(t.runs as unknown[] | undefined)?.length ? 'idle' : t.status,
-        })) as Task[]
+        const tasks = (stored as Record<string, unknown>[]).map((t) => {
+          // Normalize status: running/queued tasks left over from a crashed/restarted session
+          // have no active execution — reset them to 'failed' so the UI is consistent
+          let status = t.status as TaskStatus
+          if (status === 'running') {
+            status = 'failed'
+          } else if (status === 'queued' && !(t.runs as unknown[] | undefined)?.length) {
+            status = 'idle'
+          }
+
+          // Clean up orphaned in-progress run records (app was killed mid-run)
+          const runs = ((t.runs as unknown[]) || []).map((r) => {
+            const run = r as Record<string, unknown>
+            if (run.completedAt === null) {
+              return {
+                ...run,
+                completedAt: run.startedAt,
+                duration: 0,
+                status: 'failed' as RunStatus,
+                summary: 'Run interrupted (app restarted)',
+              }
+            }
+            return run
+          })
+
+          return {
+            ...t,
+            projectPath: (t.projectPath as string) || projectPath,
+            template: (t.template as string) || 'custom',
+            integrations: (t.integrations as unknown[]) || [],
+            schedule: (t.schedule as TaskSchedule) || { interval: 'manual', enabled: false, nextRunAt: null, lastRunAt: null },
+            runs,
+            status,
+          }
+        }) as unknown as Task[]
         set({ tasks })
       } else {
         set({ tasks: [] })
@@ -603,6 +629,12 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     const sessionId = get()._activeTaskSessions[taskId]
     if (sessionId) {
       api.claude.abort(sessionId)
+    }
+
+    // 3. If there is no live execution (e.g. task got stuck from a previous session),
+    //    directly reset status so the UI reflects the stop immediately.
+    if (!get().activeExecutions[taskId]) {
+      get().updateTask(taskId, { status: 'failed', progress: 0 })
     }
   },
 }))

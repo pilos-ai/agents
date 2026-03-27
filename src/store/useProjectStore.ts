@@ -52,6 +52,7 @@ interface StreamingSnapshot {
   thinking: string
   isStreaming: boolean
   currentAgentName: string | null
+  retrying: boolean
   _partialJson: string
   _turnTokens: number
   _turnStartTime: number
@@ -127,6 +128,7 @@ const emptyStreaming: StreamingSnapshot = {
   thinking: '',
   isStreaming: false,
   currentAgentName: null,
+  retrying: false,
   _partialJson: '',
   _turnTokens: 0,
   _turnStartTime: 0,

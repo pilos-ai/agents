@@ -315,6 +315,10 @@ export class ClaudeProcess {
       // Process already dead
     }
     this.sessions.delete(sessionId)
+
+    // Emit a synthetic result event so any awaiting Promise in the renderer
+    // (executeAgent / executeAiPrompt) unblocks and the workflow can call onFail.
+    this.emit(sessionId, { type: 'result', subtype: 'success', result: 'aborted', is_error: false })
   }
 
   private handleClaudeEvent(sessionId: string, event: Record<string, unknown>): void {
