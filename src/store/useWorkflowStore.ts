@@ -872,7 +872,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   stopExecution: () => {
-    const { debugResolve } = get()
+    const { debugResolve, editingTaskId } = get()
     // If paused in debug mode, resolve the promise so the executor unblocks and sees the abort
     if (debugResolve) {
       debugResolve('continue')
@@ -886,6 +886,11 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       debugPaused: false,
       debugResolve: null,
     }))
+    // Kill any active Claude session for immediate abort (stopTask guards against re-entry
+    // since execution.status is now 'failed', breaking any potential call cycle)
+    if (editingTaskId) {
+      useTaskStore.getState().stopTask(editingTaskId)
+    }
   },
 
   advanceExecution: (nodeId, status) => {

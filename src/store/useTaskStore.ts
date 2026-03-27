@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { api } from '../api'
 import { executeWorkflow } from '../utils/workflow-executor'
 import type { WorkflowDefinition, WorkflowStepResult } from '../types/workflow'
+import { useWorkflowStore } from './useWorkflowStore'
 
 // ── Schedule Types ──
 
@@ -472,7 +473,6 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     const allLogs: string[] = []
 
     // Get working directory from task's projectPath (not active project — task may belong to a different project)
-    const { useWorkflowStore } = await import('./useWorkflowStore')
     const workingDirectory = task.projectPath || get().currentProjectPath || undefined
     const jiraProjectKey = useWorkflowStore.getState().jiraProjectKey || undefined
 
@@ -635,6 +635,13 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     //    directly reset status so the UI reflects the stop immediately.
     if (!get().activeExecutions[taskId]) {
       get().updateTask(taskId, { status: 'failed', progress: 0 })
+    }
+
+    // 4. If the workflow editor is open for this task and its execution is still running,
+    //    stop it too so the workflow page reflects the stop immediately.
+    const wfState = useWorkflowStore.getState()
+    if (wfState.editingTaskId === taskId && wfState.execution?.status === 'running') {
+      wfState.stopExecution()
     }
   },
 }))
