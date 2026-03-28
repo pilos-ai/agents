@@ -844,6 +844,12 @@ export function WorkflowNodeConfig() {
                 onChange={(e) => updateNodeData(node.id, { agentMaxTurns: parseInt(e.target.value) || 25 })}
                 placeholder="25"
               />
+              <FormInput
+                label="Timeout (seconds)"
+                value={String(data.agentTimeoutSeconds ?? 600)}
+                onChange={(e) => updateNodeData(node.id, { agentTimeoutSeconds: parseInt(e.target.value) || 600 })}
+                placeholder="600"
+              />
               <TemplatePreview value={data.agentPrompt || ''} />
               <p className="text-[9px] text-zinc-700">
                 Full Claude Code session with tool access (file editing, bash, git, MCP tools). Use for complex multi-step tasks.

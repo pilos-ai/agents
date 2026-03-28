@@ -765,6 +765,7 @@ IMPORTANT: You are running as an autonomous agent in a workflow. Execute the tas
 
   const model = node.data.agentModel || 'sonnet'
   const maxTurns = node.data.agentMaxTurns || 25
+  const timeoutMs = (node.data.agentTimeoutSeconds || 600) * 1000
   const permissionMode = node.data.agentPermissionMode || 'bypass'
   callbacks.onLog(`[${timestamp()}] [INFO] Agent session (${model}, max ${maxTurns} turns): ${resolvedPrompt.slice(0, 150)}${resolvedPrompt.length > 150 ? '...' : ''}`)
 
@@ -873,15 +874,15 @@ Never skip this. Never wrap in markdown. The workflow engine parses this JSON to
       reject(new Error(`Agent session failed: ${err instanceof Error ? err.message : 'Unknown error'}`))
     })
 
-    // Agent sessions get a longer timeout (10 min) since they do multi-step work
+    // Agent sessions get a configurable timeout (default 10 min)
     setTimeout(() => {
       if (!ctx.aborted) {
         api.claude.abort(sessionId)
         unsub()
         cleanup()
-        reject(new Error('Agent session timed out (600s)'))
+        reject(new Error(`Agent session timed out (${timeoutMs / 1000}s)`))
       }
-    }, 600_000)
+    }, timeoutMs)
   })
 }
 

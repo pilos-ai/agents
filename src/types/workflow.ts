@@ -78,6 +78,7 @@ export interface WorkflowNodeData {
   agentPrompt?: string
   agentModel?: 'haiku' | 'sonnet' | 'opus'
   agentMaxTurns?: number
+  agentTimeoutSeconds?: number
   agentPermissionMode?: 'default' | 'bypass'
   executionStatus?: 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
   executionError?: string
