@@ -71,6 +71,7 @@ export class RelayClient {
     console.log(`[RelayClient] Connecting to ${relayUrl}`)
 
     try {
+      this.ws?.removeAllListeners()
       this.ws = new WebSocket(relayUrl)
     } catch (err) {
       console.error('[RelayClient] Failed to create WebSocket:', err)
@@ -90,10 +91,11 @@ export class RelayClient {
         machineId,
       })
 
-      // Start ping interval
+      // Start ping interval (unref so it doesn't block Node.js exit)
       this.pingTimer = setInterval(() => {
         this.safeSend({ type: 'ping' })
       }, 25000)
+      this.pingTimer.unref()
     })
 
     this.ws.on('message', (data) => {
@@ -123,6 +125,7 @@ export class RelayClient {
     this.intentionalClose = true
     this.cleanup()
     if (this.ws) {
+      this.ws.removeAllListeners()
       this.ws.close(1000, 'User disconnect')
       this.ws = null
     }

@@ -1,8 +1,10 @@
-import { app, BrowserWindow, ipcMain, Menu } from 'electron'
-import crypto from 'crypto'
+import { app, BrowserWindow, Menu } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { registerIpcHandlers } from './ipc-handlers'
+import { registerMobileHandlers } from './handlers/mobile'
+import { registerMetricsHandlers } from './handlers/metrics'
+import { registerSchedulerHandlers } from './handlers/scheduler'
 import { SettingsStore } from './services/settings-store'
 import { MetricsCollector } from './services/metrics-collector'
 import { TrayManager } from './services/tray-manager'
@@ -10,7 +12,7 @@ import { TaskScheduler } from './services/task-scheduler'
 import { Database } from './core/database'
 import { setupMenu } from './menu'
 import { ensureGlobalClaudeConfig } from './services/claude-config'
-import { setupAutoUpdater, installUpdate } from './services/auto-updater'
+import { setupAutoUpdater } from './services/auto-updater'
 import { RelayClient } from './services/relay-client'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -47,7 +49,6 @@ async function createWindow() {
     show: false,
   })
 
-  // Load the page first so ready-to-show fires even if IPC setup fails
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
   } else {
@@ -58,23 +59,34 @@ async function createWindow() {
     mainWindow!.show()
   })
 
-  // Create shared settings instance and set up application menu
   const settings = new SettingsStore()
-  const database = new Database()
+  let database: Database
+  try {
+    database = new Database()
+  } catch (err) {
+    console.error('Failed to open database:', err)
+    // Show error in renderer and quit — the app cannot function without a database
+    const safeErr = String(err).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    mainWindow.webContents.once('did-finish-load', () => {
+      mainWindow!.webContents.executeJavaScript(
+        `document.body.innerHTML = '<div style="color:#f87171;padding:2rem;font-family:monospace">Failed to open database: ${safeErr}.<br>Check that the app data directory is writable.</div>'`
+      )
+    })
+    app.quit()
+    return
+  }
   setupMenu(mainWindow, settings)
 
-  // Metrics collector
   metricsCollector = new MetricsCollector(database, settings)
   metricsCollector.init()
 
-  // Store last right-click spell params so IPC menu can include suggestions
+  // Store last right-click spell params so IPC shell:showContextMenu can include suggestions
   let lastSpellParams: { misspelledWord: string; suggestions: string[] } | null = null
   mainWindow.webContents.on('context-menu', (_event, params) => {
     lastSpellParams = params.misspelledWord
       ? { misspelledWord: params.misspelledWord, suggestions: params.dictionarySuggestions.slice(0, 5) }
       : null
 
-    // Show native menu for editable elements (textarea) — handles spell check + Writing Tools
     if (params.isEditable) {
       const items: Electron.MenuItemConstructorOptions[] = []
       if (params.misspelledWord) {
@@ -90,7 +102,6 @@ async function createWindow() {
     }
   })
 
-  // Register IPC after loadURL so a failure doesn't block the window
   let claudeProcess, db
   try {
     const refs = await registerIpcHandlers(mainWindow, settings, database, metricsCollector, () => lastSpellParams)
@@ -100,58 +111,17 @@ async function createWindow() {
     console.error('Failed to register IPC handlers:', err)
   }
 
-  // Initialize mobile relay client
   if (claudeProcess && db) {
     relayClient = new RelayClient(mainWindow, settings, claudeProcess, db)
-    const licenseKey = settings.get('licenseKey') as string
-    if (licenseKey) {
-      relayClient.connect()
-    }
+    const pilosAuth = settings.get('pilos_auth') as { licenseKey?: string; features?: string[] } | null
+    if (pilosAuth?.features?.includes('devices')) relayClient.connect()
   }
 
-  // IPC: mobile relay control
-  ipcMain.handle('mobile:connect', () => relayClient?.connect())
-  ipcMain.handle('mobile:disconnect', () => relayClient?.disconnect())
-  ipcMain.handle('mobile:getStatus', () => ({
-    connected: relayClient?.isConnected() ?? false,
-    mobileCount: relayClient?.getMobileCount() ?? 0,
-  }))
+  registerMobileHandlers(() => relayClient)
+  registerMetricsHandlers(settings, () => metricsCollector, () => relayClient)
 
-  // IPC: mobile pairing
-  ipcMain.handle('mobile:requestPairingToken', () => relayClient?.requestPairingToken())
-  ipcMain.handle('mobile:approvePairing', (_event, requestId: string) => relayClient?.approvePairing(requestId))
-  ipcMain.handle('mobile:denyPairing', (_event, requestId: string) => relayClient?.denyPairing(requestId))
-  ipcMain.handle('mobile:listPairedDevices', () => relayClient?.listPairedDevices())
-  ipcMain.handle('mobile:revokeDevice', (_event, deviceId: string) => relayClient?.revokeDevice(deviceId))
-  ipcMain.handle('mobile:broadcastUserMessage', (_event, conversationId: string, message: string, images?: Array<{ data: string; mediaType: string }>) => {
-    relayClient?.broadcastUserMessage(conversationId, message, images)
-  })
+  setupAutoUpdater(mainWindow)
 
-  // IPC: forward license key to metrics collector (and reconnect relay)
-  ipcMain.handle('metrics:setLicenseKey', (_event, key: string) => {
-    metricsCollector?.setLicenseKey(key)
-    // Auto-connect relay when license key is set
-    if (key && relayClient && !relayClient.isConnected()) {
-      relayClient.connect()
-    }
-  })
-
-  // IPC: expose machineId to renderer for license enforcement
-  ipcMain.handle('metrics:getMachineId', () => {
-    let id = settings.get('machineId') as string | null
-    if (!id) {
-      id = crypto.randomUUID()
-      settings.set('machineId', id)
-    }
-    return id
-  })
-
-  // Set up auto-updater
-    setupAutoUpdater(mainWindow)
-
-
-
-  // Hide-to-tray on close — keeps scheduler running in background (all platforms)
   mainWindow.on('close', (event) => {
     if (!isQuitting && settings.get('backgroundMode') !== false) {
       event.preventDefault()
@@ -162,22 +132,14 @@ async function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
-  // Initialize tray (menu bar icon)
+
   trayManager = new TrayManager(mainWindow, settings)
+  trayManager.init()
 
-    trayManager.init()
-
-  // Initialize task scheduler
   taskScheduler = new TaskScheduler(mainWindow, settings, trayManager)
   taskScheduler.start()
 
-  // Scheduler IPC: renderer reports task lifecycle events
-  ipcMain.on('scheduler:task-started', (_event, data: { taskId: string; taskTitle: string }) => {
-    taskScheduler?.onTaskStarted(data.taskId, data.taskTitle)
-  })
-  ipcMain.on('scheduler:task-completed', (_event, data: { taskId: string; status: string; summary: string; taskTitle: string }) => {
-    taskScheduler?.onTaskCompleted(data.taskId, data)
-  })
+  registerSchedulerHandlers(() => taskScheduler)
 }
 
 app.on('before-quit', async () => {
@@ -196,7 +158,6 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  // Don't quit when background mode is active (tray keeps the app alive)
   if (process.platform !== 'darwin' && !trayManager) app.quit()
 })
 

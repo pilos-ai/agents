@@ -6,6 +6,7 @@ import { useAnalyticsStore } from './useAnalyticsStore'
 import { buildTeamSystemPrompt, buildMessageContextHint } from '../utils/team-prompt-builder'
 import { restoreAgentIds } from '../utils/agent-names'
 import { AGENT_COLORS } from '../data/agent-templates'
+import { parseAgentSegments, detectLastAgent } from '../utils/agent-segments'
 import type { Conversation, ConversationMessage, ContentBlock, ClaudeEvent, ImageAttachment, AgentDefinition, ToolUseBlock, ToolResultBlock, AskUserQuestionData, ExitPlanModeData } from '../types'
 
 export interface ProcessLogEntry {
@@ -92,54 +93,6 @@ const emptyStreaming: StreamingState = {
 }
 
 // ── Inactivity timeout ────────────────────────────────────────────────────────
-
-/** Parse text into agent-attributed segments for team mode */
-function parseAgentSegments(
-  text: string,
-  agents: AgentDefinition[]
-): Array<{ agentName: string | null; agentId?: string; agentIcon?: string; agentColor?: string; text: string }> {
-  const agentNameSet = new Set(agents.map((a) => a.name))
-  const lines = text.split('\n')
-  const segments: Array<{ agentName: string | null; agentId?: string; agentIcon?: string; agentColor?: string; text: string }> = []
-  let current: { agentName: string | null; agentId?: string; agentIcon?: string; agentColor?: string; lines: string[] } = {
-    agentName: null,
-    lines: [],
-  }
-
-  for (const line of lines) {
-    const match = line.match(/^\[([A-Za-z_\s]+)\]\s*$/)
-    if (match) {
-      const name = match[1].trim()
-      if (agentNameSet.has(name)) {
-        // Flush current segment
-        if (current.lines.length > 0 || current.agentName) {
-          const text = current.lines.join('\n').trim()
-          if (text) {
-            segments.push({ agentName: current.agentName, agentId: current.agentId, agentIcon: current.agentIcon, agentColor: current.agentColor, text })
-          }
-        }
-        const agent = agents.find((a) => a.name === name)
-        current = {
-          agentName: name,
-          agentId: agent?.id,
-          agentIcon: agent?.icon,
-          agentColor: agent?.color,
-          lines: [],
-        }
-        continue
-      }
-    }
-    current.lines.push(line)
-  }
-
-  // Flush last segment
-  const lastText = current.lines.join('\n').trim()
-  if (lastText) {
-    segments.push({ agentName: current.agentName, agentId: current.agentId, agentIcon: current.agentIcon, agentColor: current.agentColor, text: lastText })
-  }
-
-  return segments
-}
 
 export const useConversationStore = create<ConversationStore>((set, get) => ({
   conversations: [],
@@ -302,8 +255,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     }
     set((s) => ({ messages: [...s.messages, userMsg] }))
 
-    // Broadcast user message to mobile clients
-    api.mobile?.broadcastUserMessage(conversationId, text, images)
+    // Broadcast user message to mobile clients (best-effort, non-blocking)
+    api.mobile?.broadcastUserMessage(conversationId, text, images)?.catch(() => {})
 
     const turnStartTime = Date.now()
     set({ isWaitingForResponse: true, streaming: { ...emptyStreaming, isStreaming: true, _turnStartTime: turnStartTime, _lastActivityTime: turnStartTime } })
@@ -407,7 +360,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   abortSession: () => {
     const id = get().activeConversationId
     if (id) {
-      api.claude.abort(id)
+      api.claude.abort(id).catch((err) => console.error('[abortSession] Failed to abort:', err))
       set((s) => {
         const bg = { ...s.bgSessions }
         delete bg[id]
@@ -420,6 +373,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     const perm = get().permissionRequest
     if (perm) {
       api.claude.respondPermission(perm.sessionId, allowed, always)
+        .catch((err) => console.error('[respondPermission] Failed to respond:', err))
       // Pop next from queue, or null if empty
       const queue = [...get().permissionQueue]
       const next = queue.shift() || null
@@ -431,6 +385,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     const q = get().askUserQuestion
     if (q) {
       api.claude.respondToQuestion(q.sessionId, answers)
+        .catch((err) => console.error('[respondToQuestion] Failed to respond:', err))
       set((s) => {
         const ids = new Set(s.answeredQuestionIds)
         ids.add(q.toolUseId)
@@ -448,6 +403,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     const p = get().exitPlanMode
     if (p) {
       api.claude.respondToPlanExit(p.sessionId, approved, feedback)
+        .catch((err) => console.error('[respondToPlanExit] Failed to respond:', err))
       set({
         exitPlanMode: null,
         isWaitingForResponse: true,
@@ -497,10 +453,11 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
               api.conversations.saveMessage(bgId, {
                 role: 'assistant', type: 'text', content: seg.text,
                 agentName: seg.agentName || undefined, agentIcon: seg.agentIcon, agentColor: seg.agentColor,
-              })
+              }).catch((err) => console.error('[bgSession] Failed to save message:', err))
             }
           } else {
             api.conversations.saveMessage(bgId, { role: 'assistant', type: 'text', content: finalText })
+              .catch((err) => console.error('[bgSession] Failed to save message:', err))
           }
         }
         // Session work is done — remove from bgSessions
@@ -625,17 +582,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
           set((s) => {
             let currentAgentName = s.streaming.currentAgentName
 
-            // Detect [AgentName] markers in team mode
             if (tab?.mode === 'team' && tab.agents.length > 0 && textContent) {
-              const agentNameSet = new Set(tab.agents.map((a) => a.name))
-              const lines = textContent.split('\n')
-              for (let i = lines.length - 1; i >= 0; i--) {
-                const m = lines[i].match(/^\[([A-Za-z_\s]+)\]\s*$/)
-                if (m && agentNameSet.has(m[1].trim())) {
-                  currentAgentName = m[1].trim()
-                  break
-                }
-              }
+              currentAgentName = detectLastAgent(textContent, tab.agents) ?? currentAgentName
             }
 
             return {
@@ -758,17 +706,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
             const newText = s.streaming.text + delta.text
             let currentAgentName = s.streaming.currentAgentName
 
-            // Detect [AgentName] markers in team mode
             if (tab?.mode === 'team' && tab.agents.length > 0) {
-              const agentNameSet = new Set(tab.agents.map((a) => a.name))
-              const lines = newText.split('\n')
-              for (let i = lines.length - 1; i >= 0; i--) {
-                const m = lines[i].match(/^\[([A-Za-z_\s]+)\]\s*$/)
-                if (m && agentNameSet.has(m[1].trim())) {
-                  currentAgentName = m[1].trim()
-                  break
-                }
-              }
+              currentAgentName = detectLastAgent(newText, tab.agents) ?? currentAgentName
             }
 
             return {

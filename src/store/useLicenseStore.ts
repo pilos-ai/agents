@@ -127,7 +127,7 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
             isAuthenticated: true,
             machineMismatch: false,
           })
-          api.metrics.setLicenseKey(key).catch(() => {})
+          api.metrics.setLicenseKey(key).catch((err) => console.error('[LicenseStore]', err))
           return { valid: true }
         } else {
           set({ isValidating: false, error: result.error || 'Invalid license key' })
@@ -155,11 +155,11 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
 
       const pro = await loadProModule()
       if (pro) {
-        pro.registerFreeUser(email, machineId).catch(() =>
-          registerFree(email, machineId).catch(() => {})
+        pro.registerFreeUser(email, machineId).catch((err: unknown) =>
+          registerFree(email, machineId).catch((err) => console.error('[LicenseStore]', err))
         )
       } else {
-        registerFree(email, machineId).catch(() => {})
+        registerFree(email, machineId).catch((err) => console.error('[LicenseStore]', err))
       }
 
       const features = await fetchFreeFeatures(email)
@@ -186,7 +186,7 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
         const pro = await loadProModule()
         if (pro) await pro.deactivateLicense()
       } catch { /* best effort */ }
-      api.metrics.setLicenseKey('').catch(() => {})
+      api.metrics.setLicenseKey('').catch((err) => console.error('[LicenseStore]', err))
     }
 
     await api.settings.set('pilos_auth', null)
@@ -232,7 +232,7 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
         const tier = result.license.plan as LicenseTier
         const features = result.features || []
         const authData: PilosAuth = { email: get().email || result.license.email || '', licenseKey: result.license.key, tier, features }
-        api.settings.set('pilos_auth', authData).catch(() => {})
+        api.settings.set('pilos_auth', authData).catch((err) => console.error('[LicenseStore]', err))
         set({
           tier,
           licenseKey: result.license.key,
@@ -241,7 +241,7 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
           isValidating: false,
           machineMismatch: false,
         })
-        api.metrics.setLicenseKey(result.license.key).catch(() => {})
+        api.metrics.setLicenseKey(result.license.key).catch((err) => console.error('[LicenseStore]', err))
       } else if (result.error === 'No license key found' || result.error === 'No offline cache' || result.error?.startsWith('Server error')) {
         // Infrastructure issue — preserve current tier from settings
         set({ isValidating: false })
@@ -283,7 +283,7 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
           isValidating: false,
           machineMismatch: false,
         })
-        api.metrics.setLicenseKey(result.license.key).catch(() => {})
+        api.metrics.setLicenseKey(result.license.key).catch((err) => console.error('[LicenseStore]', err))
         return { valid: true }
       } else {
         set({ isValidating: false, error: result.error || 'Activation failed' })
@@ -309,7 +309,7 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
     }
 
     const email = get().email
-    api.metrics.setLicenseKey('').catch(() => {})
+    api.metrics.setLicenseKey('').catch((err) => console.error('[LicenseStore]', err))
 
     // Keep authenticated but downgrade to free
     const authData: PilosAuth = { email: email || '', tier: 'free' }

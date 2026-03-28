@@ -88,8 +88,9 @@ export function WorkflowCanvas() {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey
       const target = e.target as HTMLElement
-      // Don't intercept when typing in inputs
+      // Don't intercept when typing in inputs or contenteditable elements
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return
+      if (target.isContentEditable) return
 
       if (mod && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
       else if (mod && e.key === 'z' && e.shiftKey) { e.preventDefault(); redo() }

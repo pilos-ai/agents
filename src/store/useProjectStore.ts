@@ -3,6 +3,7 @@ import { api } from '../api'
 import { useConversationStore } from './useConversationStore'
 import { useAppStore, type AppView } from './useAppStore'
 import { useLicenseStore } from './useLicenseStore'
+import { useTaskStore } from './useTaskStore'
 import type { Project, Conversation, ConversationMessage, ContentBlock, ClaudeEvent, ProjectMode, AgentDefinition, McpServer, McpServerStdio, ImageAttachment, ToolUseBlock, ToolResultBlock } from '../types'
 
 /** Migration map: old fake @anthropic/* MCP packages → real npm packages */
@@ -578,13 +579,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     })
 
     // Restore view for the new tab
-    useAppStore.getState().setActiveView('chat')
+    useAppStore.getState().setActiveView('dashboard')
 
     // Load conversations for this project into the conversation store
     await useConversationStore.getState().loadConversations(dirPath)
 
     // Load tasks for this project
-    const { useTaskStore } = await import('./useTaskStore')
     await useTaskStore.getState().loadTasks(dirPath)
 
     // Add to recent projects
@@ -628,9 +628,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         useAppStore.getState().setActiveView(nextTab.activeView || 'chat')
 
         // Load tasks for the next project
-        import('./useTaskStore').then(({ useTaskStore }) => {
-          useTaskStore.getState().loadTasks(nextTab.projectPath)
-        })
+        useTaskStore.getState().loadTasks(nextTab.projectPath)
       } else {
         activeProjectPath = null
         // Clear conversation store
@@ -645,9 +643,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         })
 
         // Clear tasks (no project open)
-        import('./useTaskStore').then(({ useTaskStore }) => {
-          useTaskStore.setState({ tasks: [], currentProjectPath: null, selectedTaskId: null })
-        })
+        useTaskStore.setState({ tasks: [], currentProjectPath: null, selectedTaskId: null })
       }
     }
 
@@ -703,11 +699,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       await useConversationStore.getState().loadConversations(dirPath)
     }
 
-    // Phase 3: Restore the tab's active view
-    useAppStore.getState().setActiveView(tab?.activeView || 'chat')
+    // Phase 3: Restore the tab's active view (guard against stale views like 'chat' that no longer exist)
+    const VALID_VIEWS = new Set(['dashboard', 'terminal', 'tasks', 'results', 'config', 'analytics', 'mcp', 'settings'])
+    const restoredView = tab?.activeView && VALID_VIEWS.has(tab.activeView) ? tab.activeView : 'dashboard'
+    useAppStore.getState().setActiveView(restoredView)
 
     // Load tasks for the new project
-    const { useTaskStore } = await import('./useTaskStore')
     await useTaskStore.getState().loadTasks(dirPath)
   },
 

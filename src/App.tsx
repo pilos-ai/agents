@@ -1,5 +1,6 @@
 import { useEffect, lazy, Suspense } from 'react'
 import { V2Layout } from './components/v2/V2Layout'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { useProjectStore } from './store/useProjectStore'
 import { useConversationStore } from './store/useConversationStore'
 import { useAppStore } from './store/useAppStore'
@@ -38,6 +39,7 @@ export default function App() {
       if (pm) {
         pm.initPmStores({
           api: {
+            // pm only loads in full Electron context where jira/stories are always wired
             jira: api.jira!,
             stories: api.stories!,
           },
@@ -156,28 +158,38 @@ export default function App() {
   }, [])
 
   return (
-    <div className="h-screen w-screen bg-pilos-bg text-[#fafafa] font-sans flex flex-col overflow-hidden">
-      {/* macOS drag region */}
-      <div className="titlebar-drag h-8 flex-shrink-0" />
+    <ErrorBoundary>
+      <div className="h-screen w-screen bg-pilos-bg text-[#fafafa] font-sans flex flex-col overflow-hidden">
+        {/* macOS drag region */}
+        <div className="titlebar-drag h-8 flex-shrink-0" />
 
-      {setupStatus !== 'ready' ? (
-        <Suspense fallback={<div className="flex-1" />}>
-          <OnboardingPage />
-        </Suspense>
-      ) : !authLoaded ? (
-        <div className="flex-1" />
-      ) : !isAuthenticated ? (
-        <Suspense fallback={<div className="flex-1" />}>
-          <LoginPage />
-        </Suspense>
-      ) : workspaceSetupLoaded && !workspaceSetupComplete ? (
-        <Suspense fallback={<div className="flex-1" />}>
-          <RoleWizardPage />
-        </Suspense>
-      ) : (
-        <V2Layout />
-      )}
-      <UpdateNotification />
-    </div>
+        {setupStatus !== 'ready' ? (
+          <ErrorBoundary>
+            <Suspense fallback={<div className="flex-1" />}>
+              <OnboardingPage />
+            </Suspense>
+          </ErrorBoundary>
+        ) : !authLoaded ? (
+          <div className="flex-1" />
+        ) : !isAuthenticated ? (
+          <ErrorBoundary>
+            <Suspense fallback={<div className="flex-1" />}>
+              <LoginPage />
+            </Suspense>
+          </ErrorBoundary>
+        ) : workspaceSetupLoaded && !workspaceSetupComplete ? (
+          <ErrorBoundary>
+            <Suspense fallback={<div className="flex-1" />}>
+              <RoleWizardPage />
+            </Suspense>
+          </ErrorBoundary>
+        ) : (
+          <ErrorBoundary>
+            <V2Layout />
+          </ErrorBoundary>
+        )}
+        <UpdateNotification />
+      </div>
+    </ErrorBoundary>
   )
 }

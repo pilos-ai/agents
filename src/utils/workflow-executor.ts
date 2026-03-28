@@ -4,6 +4,40 @@ import type { ClaudeEvent } from '../types'
 import type { WorkflowNodeData, WorkflowParameter, WorkflowStepResult } from '../types/workflow'
 import { WORKFLOW_TOOL_CATEGORIES } from '../data/workflow-tools'
 
+/**
+ * Safely parse a value that may be a JSON string.
+ * Returns the parsed object/array if successful, or the original value if not.
+ * Never throws.
+ */
+export function safeParseJson(value: unknown): unknown {
+  if (typeof value !== 'string') return value
+  const trimmed = value.trim()
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return value
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    return value
+  }
+}
+
+/**
+ * Recursively walk an object and parse any string values that look like JSON.
+ * Depth-limited to avoid infinite loops.
+ */
+export function deepParseJsonStrings(obj: unknown, depth = 0): unknown {
+  if (depth > 4) return obj
+  if (typeof obj === 'string') return safeParseJson(obj)
+  if (Array.isArray(obj)) return obj.map((v) => deepParseJsonStrings(v, depth + 1))
+  if (obj && typeof obj === 'object') {
+    const result: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+      result[k] = deepParseJsonStrings(v, depth + 1)
+    }
+    return result
+  }
+  return obj
+}
+
 // ── Execution Context ──
 
 export interface ExecutionContext {
@@ -93,12 +127,11 @@ function timestamp(): string {
 async function executeDelay(node: Node<WorkflowNodeData>, ctx: ExecutionContext): Promise<unknown> {
   const ms = delayToMs(node.data.delayMs ?? 1, node.data.delayUnit as string ?? 's')
   await new Promise<void>((resolve) => {
-    const timer = setTimeout(resolve, ms)
+    const timer = setTimeout(() => { clearInterval(check); resolve() }, ms)
     // Allow early abort
     const check = setInterval(() => {
       if (ctx.aborted) { clearTimeout(timer); clearInterval(check); resolve() }
     }, 200)
-    setTimeout(() => clearInterval(check), ms + 100)
   })
   return { delayed: ms }
 }
@@ -109,9 +142,11 @@ function executeVariable(node: Node<WorkflowNodeData>, ctx: ExecutionContext): u
   const op = node.data.variableOperation || 'set'
 
   switch (op) {
-    case 'set':
-      ctx.variables[name] = value
+    case 'set': {
+      const resolved = typeof value === 'string' ? resolveTemplates(value, ctx) : value
+      ctx.variables[name] = safeParseJson(resolved)
       break
+    }
     case 'append':
       ctx.variables[name] = String(ctx.variables[name] ?? '') + String(value)
       break
@@ -119,8 +154,7 @@ function executeVariable(node: Node<WorkflowNodeData>, ctx: ExecutionContext): u
       ctx.variables[name] = (Number(ctx.variables[name]) || 0) + (Number(value) || 1)
       break
     case 'transform':
-      // Simple template replacement: {{varName}} → value
-      ctx.variables[name] = String(value).replace(/\{\{(\w+)\}\}/g, (_, k) => String(ctx.variables[k] ?? ''))
+      ctx.variables[name] = resolveTemplates(String(value), ctx)
       break
   }
 
@@ -141,7 +175,8 @@ export function resolvePath(obj: unknown, path: string): unknown {
 export function resolveRef(ref: string, ctx: ExecutionContext): string | undefined {
   // Check variables first (simple key)
   if (ctx.variables[ref] !== undefined) {
-    return String(ctx.variables[ref])
+    const v = ctx.variables[ref]
+    return typeof v === 'object' ? JSON.stringify(v) : String(v)
   }
   // Try dotted path: "NODE_ID.prop.subprop" or "varName.prop"
   const dotIdx = ref.indexOf('.')
@@ -151,7 +186,7 @@ export function resolveRef(ref: string, ctx: ExecutionContext): string | undefin
     for (const store of [ctx.nodeOutputs, ctx.variables]) {
       if (store[root] !== undefined) {
         const val = resolvePath(store[root], path)
-        if (val !== undefined) return String(val)
+        if (val !== undefined) return typeof val === 'object' ? JSON.stringify(val) : String(val)
       }
     }
   }
@@ -268,12 +303,18 @@ async function executeDirectTool(
   ctx: ExecutionContext,
   callbacks: ExecutionCallbacks,
 ): Promise<unknown> {
-  return Promise.race([
-    executeDirectToolInner(node, ctx, callbacks),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`Direct tool "${node.data.label || node.data.toolId}" timed out after ${DIRECT_TOOL_TIMEOUT_MS / 1000}s`)), DIRECT_TOOL_TIMEOUT_MS)
-    ),
-  ])
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error(`Direct tool "${node.data.label || node.data.toolId}" timed out after ${DIRECT_TOOL_TIMEOUT_MS / 1000}s`)),
+      DIRECT_TOOL_TIMEOUT_MS,
+    )
+  })
+  try {
+    return await Promise.race([executeDirectToolInner(node, ctx, callbacks), timeoutPromise])
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 async function executeDirectToolInner(
@@ -303,14 +344,15 @@ async function executeDirectToolInner(
   callbacks.onLog(`[${timestamp()}] [INFO] Direct API call: ${tool.direct.handler} (${paramSummary})`)
 
   // Ensure Jira API is available for jira.* handlers
-  if (tool.direct.handler.startsWith('jira.') && !api.jira) {
+  const jira = api.jira
+  if (tool.direct.handler.startsWith('jira.') && !jira) {
     throw new Error('Jira API is not available — check Jira connection')
   }
 
   switch (tool.direct.handler) {
     case 'jira.getIssues': {
       const jql = String(resolvedParams.jql || '')
-      const results = await api.jira!.getIssues(jql)
+      const results = await jira!.getIssues(jql)
       const issues = Array.isArray(results) ? results : []
       callbacks.onLog(`[${timestamp()}] [INFO] Jira search returned ${issues.length} issues`)
       return { status: 'success', count: issues.length, results: issues }
@@ -318,7 +360,7 @@ async function executeDirectToolInner(
 
     case 'jira.getIssue': {
       const issueKey = String(resolvedParams.issueKey || '')
-      const issue = await api.jira!.getIssue(issueKey)
+      const issue = await jira!.getIssue(issueKey)
       return { status: 'success', issue }
     }
 
@@ -346,7 +388,7 @@ async function executeDirectToolInner(
       try {
         const escapedSummary = summary.replace(/"/g, '\\"')
         const jql = `project = "${projectKey}" AND summary ~ "${escapedSummary}" ORDER BY created DESC`
-        const existing = await api.jira!.getIssues(jql)
+        const existing = await jira!.getIssues(jql)
         const exactMatch = existing.find((issue) => issue.summary === summary)
         if (exactMatch) {
           callbacks.onLog(`[${timestamp()}] [INFO] Skipped duplicate: "${summary.slice(0, 80)}" already exists as ${exactMatch.key}`)
@@ -356,7 +398,7 @@ async function executeDirectToolInner(
         // If search fails, proceed with creation (best-effort dedup)
       }
 
-      const result = await api.jira!.createIssue(projectKey, summary, description, issueType)
+      const result = await jira!.createIssue(projectKey, summary, description, issueType)
       ctx.createdIssueSummaries.add(dedupKey)
       callbacks.onLog(`[${timestamp()}] [INFO] Created Jira issue in ${projectKey}`)
       return { status: 'success', result }
@@ -370,7 +412,7 @@ async function executeDirectToolInner(
       if (!targetStatus) return { status: 'error', message: 'Target status is required' }
 
       // Resolve transition name → ID
-      const transitions = await api.jira!.getTransitions(issueKey)
+      const transitions = await jira!.getTransitions(issueKey)
       const transArr = Array.isArray(transitions) ? transitions : []
       const match = transArr.find((t: { id: string; name?: string; to?: { name?: string } }) =>
         t.name?.toLowerCase() === targetStatus.toLowerCase() ||
@@ -390,14 +432,14 @@ async function executeDirectToolInner(
         }
       }
 
-      await api.jira!.transitionIssue(issueKey, match.id)
+      await jira!.transitionIssue(issueKey, match.id)
       callbacks.onLog(`[${timestamp()}] [INFO] Transitioned ${issueKey} → ${targetStatus}`)
       return { status: 'success', issueKey, newStatus: targetStatus, transitionId: match.id }
     }
 
     case 'jira.getTransitions': {
       const issueKey = String(resolvedParams.issueKey || '')
-      const transitions = await api.jira!.getTransitions(issueKey)
+      const transitions = await jira!.getTransitions(issueKey)
       return { status: 'success', issueKey, transitions }
     }
 
@@ -575,6 +617,8 @@ async function executeMcpTool(
 
   const jiraLine = ctx.jiraProjectKey ? `\nJira Project Key: ${ctx.jiraProjectKey} (use this for ALL Jira operations)\n` : ''
 
+  const cwdLine = ctx.workingDirectory ? `\nWorking Directory: ${ctx.workingDirectory} (run ALL file/git commands in this directory)\n` : ''
+
   const prompt = `Execute this tool operation immediately. Do NOT ask questions or request confirmation — just execute it.
 
 Tool: ${toolName}
@@ -582,7 +626,7 @@ Category: ${node.data.toolCategory || 'General'}
 Description: ${node.data.description || ''}
 Parameters:
 ${paramDesc || '(none)'}
-${jiraLine}
+${cwdLine}${jiraLine}
 Current loop item: ${JSON.stringify(ctx.variables['_loopItem'] ?? null)}
 Context variables: ${JSON.stringify(ctx.variables)}
 
@@ -647,6 +691,8 @@ IMPORTANT: Execute this operation right now using the available MCP tools or sys
           lowerText.includes('is not available as a tool') ||
           lowerText.includes('tool is not available')
         if (isToolMissing) {
+          unsub()
+          cleanup()
           reject(new Error(`MCP tool unavailable: ${toolName} — ${finalText.slice(0, 200)}`))
           return
         }
@@ -775,18 +821,34 @@ IMPORTANT: You are running as an autonomous agent in a workflow. Execute the tas
 
         callbacks.onLog(`[${timestamp()}] [INFO] Agent completed. Tools used: ${toolsUsed.join(', ') || 'none'}`)
 
-        // Try to parse as JSON, otherwise return as text with metadata
+        // Extract JSON from the response — check code block first, then last bare {...} block
         let textToParse = finalText
         const codeBlockMatch = finalText.match(/```(?:json)?\s*\n?([\s\S]*?)```/)
         if (codeBlockMatch) {
           textToParse = codeBlockMatch[1].trim()
+        } else {
+          // Find the last {...} block in the text (Claude often appends JSON after prose)
+          const lastBraceMatch = finalText.match(/({\s*"success"\s*:[\s\S]*})\s*$/)
+          if (lastBraceMatch) {
+            textToParse = lastBraceMatch[1].trim()
+          }
         }
 
         try {
           const parsed = JSON.parse(textToParse)
-          resolve({ ...parsed, toolsUsed })
+          if (parsed.success === false) {
+            unsub()
+            cleanup()
+            reject(new Error(parsed.error || 'Agent reported failure'))
+            return
+          }
+          // Deeply parse any JSON strings in the result so downstream nodes
+          // can access fields like {{nodeId.result.fixBranch}} instead of
+          // getting a raw string back.
+          resolve(deepParseJsonStrings({ ...parsed, toolsUsed }))
         } catch {
-          resolve({ result: finalText, toolsUsed })
+          // Response wasn't JSON — store as plain text, still try to parse it
+          resolve({ result: safeParseJson(finalText), toolsUsed })
         }
       }
     })
@@ -799,6 +861,12 @@ IMPORTANT: You are running as an autonomous agent in a workflow. Execute the tas
       permissionMode,
       mcpConfigPath: ctx.mcpConfigPath,
       maxTurns,
+      appendSystemPrompt: `You are running inside an automated workflow. You MUST always end your response with a raw JSON object (no markdown, no extra text before or after) in exactly one of these two formats:
+
+If everything succeeded: {"success": true, "result": "<summary>"}
+If anything failed (command error, not a git repo, directory not found, permission denied, etc.): {"success": false, "error": "<what failed and why>"}
+
+Never skip this. Never wrap in markdown. The workflow engine parses this JSON to determine success or failure.`,
     }).catch((err) => {
       unsub()
       cleanup()

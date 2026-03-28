@@ -5,6 +5,7 @@ import { FormTextarea } from '../components/FormTextarea'
 import { FormSelect } from '../components/FormSelect'
 import { FormToggle } from '../components/FormToggle'
 import { DataPicker } from './DataPicker'
+import { PromptEditor } from './PromptEditor'
 import { useWorkflowStore } from '../../../store/useWorkflowStore'
 import { resolveTemplates } from '../../../utils/workflow-executor'
 import { api } from '../../../api'
@@ -256,17 +257,19 @@ function ParameterField({ param, onChange, nodeId }: { param: WorkflowParameter;
       return (
         <div>
           <RequiredLabel label={param.label} required={param.required} />
-          <div className="flex gap-1.5">
-            <input
-              type="text"
-              value={String(param.value || '')}
-              onChange={(e) => onChange(e.target.value)}
-              placeholder={`Enter ${param.label.toLowerCase()}...`}
-              className={`form-input flex-1 min-w-0 ${showHint ? 'border-red-500/30' : ''}`}
-            />
-            {param.key === 'jql' && <AiJqlButton onChange={onChange} />}
-            <DataPickerButton nodeId={nodeId} onSelect={(ref) => onChange(String(param.value || '') + ref)} />
-          </div>
+          {param.key === 'jql' && (
+            <div className="flex justify-end mb-1">
+              <AiJqlButton onChange={onChange} />
+            </div>
+          )}
+          <PromptEditor
+            key={`${nodeId}-${param.key}`}
+            compact
+            defaultValue={String(param.value || '')}
+            onChange={(v) => onChange(v)}
+            placeholder={`Enter ${param.label.toLowerCase()}...`}
+            nodeId={nodeId}
+          />
           <RequiredHint show={!!showHint} />
           <TemplatePreview value={String(param.value || '')} />
         </div>
@@ -294,15 +297,13 @@ function ParameterField({ param, onChange, nodeId }: { param: WorkflowParameter;
     case 'json':
       return (
         <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <RequiredLabel label={param.label} required={param.required} />
-            <DataPickerButton nodeId={nodeId} onSelect={(ref) => onChange(String(param.value || '') + ref)} />
-          </div>
-          <FormTextarea
-            codeEditor
-            value={String(param.value || '{}')}
-            onChange={(e) => onChange(e.target.value)}
-            rows={4}
+          <RequiredLabel label={param.label} required={param.required} />
+          <PromptEditor
+            key={`${nodeId}-${param.key}`}
+            defaultValue={String(param.value || '{}')}
+            onChange={(v) => onChange(v)}
+            placeholder="{}"
+            nodeId={nodeId}
           />
           <TemplatePreview value={String(param.value || '')} />
           {param.format && (
@@ -503,6 +504,7 @@ export function WorkflowNodeConfig() {
   const retryNode = useWorkflowStore((s) => s.retryNode)
 
   const node = useMemo(() => nodes.find((n) => n.id === selectedNodeId), [nodes, selectedNodeId])
+
   const stepResult = useMemo(() => {
     if (!selectedNodeId || !execution?.stepResults) return null
     // Get the last result for this node (loops may have multiple)
@@ -697,14 +699,61 @@ export function WorkflowNodeConfig() {
                 onChange={(e) => updateNodeData(node.id, { variableName: e.target.value })}
                 placeholder="e.g. jqlQuery"
               />
-              <FormTextarea
+              <PromptEditor
+                key={`${node.id}-val`}
                 label="Value"
-                value={data.variableValue || ''}
-                onChange={(e) => updateNodeData(node.id, { variableValue: e.target.value })}
-                rows={3}
-                placeholder="e.g. project = KAN AND sprint in openSprints()"
-                codeEditor
+                compact
+                defaultValue={data.variableValue || ''}
+                onChange={(v) => updateNodeData(node.id, { variableValue: v })}
+                placeholder="e.g. {{upstream.result}} or plain text"
+                nodeId={node.id}
               />
+              {/* JSON hint: shown when value looks like JSON */}
+              {(() => {
+                const raw = (data.variableValue || '').trim()
+                const looksLikeJson = raw.startsWith('{') || raw.startsWith('[')
+                if (!looksLikeJson) return null
+                try {
+                  const parsed = JSON.parse(raw)
+                  const name = data.variableName || 'VAR'
+                  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    const allKeys = Object.keys(parsed)
+                    const keys = allKeys.slice(0, 6)
+                    return (
+                      <div className="rounded-md bg-emerald-950/40 border border-emerald-800/30 px-2.5 py-2">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <p className="text-[10px] text-emerald-400 font-medium">Valid JSON</p>
+                          <span className="text-[9px] text-emerald-700 font-mono">{`{{${name}.field}}`}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {keys.map((k) => (
+                            <span key={k} className="inline-block px-1.5 py-0.5 rounded bg-emerald-900/50 text-[9px] text-emerald-300 font-mono border border-emerald-800/40">{k}</span>
+                          ))}
+                          {allKeys.length > 6 && (
+                            <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-900/30 text-[9px] text-emerald-700 font-mono">+{allKeys.length - 6}</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  }
+                  if (Array.isArray(parsed)) {
+                    return (
+                      <div className="rounded-md bg-emerald-950/40 border border-emerald-800/30 px-2.5 py-2">
+                        <p className="text-[10px] text-emerald-400 font-medium">Valid JSON array ({parsed.length} items)</p>
+                        <code className="block text-[10px] text-emerald-300 font-mono">{`{{${data.variableName || 'VAR'}}}`}</code>
+                      </div>
+                    )
+                  }
+                } catch {
+                  return (
+                    <div className="rounded-md bg-red-950/40 border border-red-800/30 px-2.5 py-2">
+                      <p className="text-[10px] text-red-400 font-medium">Invalid JSON — keys must be quoted</p>
+                      <code className="block text-[10px] text-red-300 font-mono mt-0.5">{`{"key": "value"}`}</code>
+                    </div>
+                  )
+                }
+                return null
+              })()}
             </div>
           </div>
         )}
@@ -750,19 +799,14 @@ export function WorkflowNodeConfig() {
                   { value: 'opus', label: 'Opus (Powerful)' },
                 ]}
               />
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-medium text-zinc-400">Prompt</label>
-                  <DataPickerButton nodeId={node.id} onSelect={(ref) => updateNodeData(node.id, { aiPrompt: (data.aiPrompt || '') + ref })} />
-                </div>
-                <FormTextarea
-                  value={data.aiPrompt || ''}
-                  onChange={(e) => updateNodeData(node.id, { aiPrompt: e.target.value })}
-                  rows={6}
-                  placeholder="Describe what AI should do...&#10;&#10;Click the { } button to reference upstream data"
-                  codeEditor
-                />
-              </div>
+              <PromptEditor
+                key={node.id}
+                label="Prompt"
+                defaultValue={data.aiPrompt || ''}
+                onChange={(v) => updateNodeData(node.id, { aiPrompt: v })}
+                placeholder={'Describe what AI should do...\n\nType {{ to reference upstream data'}
+                nodeId={node.id}
+              />
               <TemplatePreview value={data.aiPrompt || ''} />
               <p className="text-[9px] text-zinc-700">
                 Claude will have access to MCP tools and upstream outputs.
@@ -786,19 +830,14 @@ export function WorkflowNodeConfig() {
                   { value: 'opus', label: 'Opus (Powerful)' },
                 ]}
               />
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-medium text-zinc-400">Agent Prompt</label>
-                  <DataPickerButton nodeId={node.id} onSelect={(ref) => updateNodeData(node.id, { agentPrompt: (data.agentPrompt || '') + ref })} />
-                </div>
-                <FormTextarea
-                  value={data.agentPrompt || ''}
-                  onChange={(e) => updateNodeData(node.id, { agentPrompt: e.target.value })}
-                  rows={8}
-                  placeholder="Describe what the agent should accomplish...&#10;&#10;The agent gets a full Claude Code session with file editing, bash, git, and all MCP tools.&#10;&#10;Click the { } button to reference upstream data"
-                  codeEditor
-                />
-              </div>
+              <PromptEditor
+                key={node.id}
+                label="Agent Prompt"
+                defaultValue={data.agentPrompt || ''}
+                onChange={(v) => updateNodeData(node.id, { agentPrompt: v })}
+                placeholder={'Describe what the agent should accomplish...\n\nThe agent gets a full Claude Code session with file editing, bash, git, and all MCP tools.\n\nType {{ to insert a variable'}
+                nodeId={node.id}
+              />
               <FormInput
                 label="Max Turns"
                 value={String(data.agentMaxTurns ?? 25)}
@@ -824,16 +863,14 @@ export function WorkflowNodeConfig() {
                 placeholder="e.g. Search Results"
               />
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-medium text-zinc-400">Data Source</label>
-                  <DataPickerButton nodeId={node.id} onSelect={(ref) => updateNodeData(node.id, { displaySource: (data.displaySource || '') + ref })} />
-                </div>
-                <input
-                  type="text"
-                  value={(data.displaySource as string) || ''}
-                  onChange={(e) => updateNodeData(node.id, { displaySource: e.target.value })}
+                <PromptEditor
+                  key={`${node.id}-src`}
+                  label="Data Source"
+                  compact
+                  defaultValue={(data.displaySource as string) || ''}
+                  onChange={(v) => updateNodeData(node.id, { displaySource: v })}
                   placeholder="Auto (upstream output) or {{NODE_ID.field}}"
-                  className="form-input w-full"
+                  nodeId={node.id}
                 />
                 <p className="text-[9px] text-zinc-700 mt-1">Leave empty to auto-collect from connected nodes.</p>
               </div>

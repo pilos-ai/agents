@@ -1,6 +1,6 @@
 {
   "name": "pilos-agents",
-  "version": "3.0.3",
+  "version": "4.0.0",
   "description": "Pilos Agents — AI-powered multi-agent desktop app",
   "author": "Vahe Saroyan <vahe.saroyan.web@gmail.com>",
   "license": "MIT",
@@ -59,6 +59,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^4.1.2",
     "autoprefixer": "^10.4.20",
     "electron": "^40.6.0",
     "electron-builder": "^25.1.8",

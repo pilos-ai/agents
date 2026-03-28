@@ -123,4 +123,22 @@ describe('restoreAgentIds', () => {
     const restored = restoreAgentIds(text)
     expect(restored).toBe('task a1b2c3d waiting on e4f5a6b7')
   })
+
+  it('leaves text unchanged when nameToId is populated but text has no known names', () => {
+    // Seed the map with at least one ID
+    replaceAgentIds('agent a1b2c3d started')
+    // Text that has no known friendly names — passes through unmodified (exercises the
+    // populated-map path at line 51 but the replacement finds nothing)
+    const unrelated = 'nothing to restore here'
+    expect(restoreAgentIds(unrelated)).toBe(unrelated)
+  })
+
+  it('performs replacement when nameToId has entries and text contains a known name', () => {
+    // Explicitly exercise the branch where nameToId.size > 0 AND a match is found
+    const original = 'agent fa01234 started'
+    const replaced = replaceAgentIds(original)
+    // Verify that restoreAgentIds reverses the replacement (not the early-return path)
+    const restored = restoreAgentIds(replaced)
+    expect(restored).toContain('fa01234')
+  })
 })

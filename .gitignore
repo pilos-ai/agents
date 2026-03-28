@@ -28,3 +28,5 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+/coverage/
+/.claude/

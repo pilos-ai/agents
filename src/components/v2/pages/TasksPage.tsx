@@ -122,6 +122,13 @@ export default function TasksPage() {
   const [showGenerateModal, setShowGenerateModal] = useState(false)
   const [showImportMenu, setShowImportMenu] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
+  const [, setTick] = useState(0)
+
+  // Keep relative timestamps live
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30_000)
+    return () => clearInterval(id)
+  }, [])
 
   const handleImportFile = useCallback(async () => {
     setShowImportMenu(false)

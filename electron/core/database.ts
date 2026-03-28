@@ -20,6 +20,7 @@ export interface Conversation {
   title: string
   model: string
   working_directory: string
+  project_path: string
   created_at: string
   updated_at: string
 }
@@ -44,19 +45,16 @@ export interface Message {
 export class Database {
   private db: BetterSqlite3Database | null = null
 
-  constructor() {
-    try {
-      this.init()
-    } catch (err) {
-      console.error('Database init failed:', err)
-    }
+  /** Pass ':memory:' for an in-memory database (tests). Omit to use the default userData path. */
+  constructor(dbPath?: string) {
+    this.init(dbPath)
   }
 
-  private init(): void {
+  private init(dbPath?: string): void {
     const BetterSqlite3 = require('better-sqlite3')
-    const dbPath = path.join(app.getPath('userData'), 'claude-code.db')
-    console.log('Opening database at:', dbPath)
-    this.db = new BetterSqlite3(dbPath)
+    const resolvedPath = dbPath ?? path.join(app.getPath('userData'), 'claude-code.db')
+    if (!dbPath) console.log('Opening database at:', resolvedPath)
+    this.db = new BetterSqlite3(resolvedPath)
     this.db!.pragma('journal_mode = WAL')
     this.db!.pragma('foreign_keys = ON')
     this.createTables()

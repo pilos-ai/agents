@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { Icon } from '../../common/Icon'
 import { useWorkflowStore } from '../../../store/useWorkflowStore'
 import { WORKFLOW_TOOL_CATEGORIES, LOOP_COLLECTION_OUTPUT, LOOP_COUNT_OUTPUT, VARIABLE_OUTPUT, CONDITION_OUTPUT, DELAY_OUTPUT, AI_PROMPT_OUTPUT, AGENT_OUTPUT } from '../../../data/workflow-tools'
+import { safeParseJson } from '../../../utils/workflow-executor'
 import type { OutputField, WorkflowNodeData } from '../../../types/workflow'
 import type { Node, Edge } from '@xyflow/react'
 
@@ -20,7 +21,7 @@ interface PickerNode {
   fields: PickerField[]
 }
 
-interface PickerField {
+export interface PickerField {
   key: string
   label: string
   type: OutputField['type']
@@ -30,7 +31,7 @@ interface PickerField {
 }
 
 /** Walk graph backwards from currentNodeId to find all upstream nodes */
-function getUpstreamNodes(currentNodeId: string, nodes: Node<WorkflowNodeData>[], edges: Edge[]): Node<WorkflowNodeData>[] {
+export function getUpstreamNodes(currentNodeId: string, nodes: Node<WorkflowNodeData>[], edges: Edge[]): Node<WorkflowNodeData>[] {
   const visited = new Set<string>()
   const queue = [currentNodeId]
   const result: Node<WorkflowNodeData>[] = []
@@ -54,7 +55,7 @@ function getUpstreamNodes(currentNodeId: string, nodes: Node<WorkflowNodeData>[]
 }
 
 /** Get output schema for a node based on its type and tool definition */
-function getNodeOutputSchema(node: Node<WorkflowNodeData>): OutputField[] {
+export function getNodeOutputSchema(node: Node<WorkflowNodeData>): OutputField[] {
   const d = node.data
   if (d.type === 'mcp_tool' && d.toolId) {
     for (const cat of WORKFLOW_TOOL_CATEGORIES) {
@@ -66,7 +67,28 @@ function getNodeOutputSchema(node: Node<WorkflowNodeData>): OutputField[] {
   if (d.type === 'loop') {
     return d.loopType === 'collection' ? LOOP_COLLECTION_OUTPUT : LOOP_COUNT_OUTPUT
   }
-  if (d.type === 'variable') return VARIABLE_OUTPUT
+  if (d.type === 'variable') {
+    // If the variable value is valid JSON, expose its keys as children of 'value'
+    // so the user can pick them statically without needing a workflow run.
+    const raw = (d.variableValue || '').trim()
+    if (raw.startsWith('{') || raw.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          const jsonChildren: OutputField[] = Object.entries(parsed).map(([k, v]) => ({
+            key: k,
+            label: k,
+            type: (Array.isArray(v) ? 'array' : typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'boolean' : v && typeof v === 'object' ? 'object' : 'string') as OutputField['type'],
+          }))
+          return [
+            { key: 'variable', label: 'Variable Name', type: 'string' },
+            { key: 'value', label: 'Value', type: 'object', children: jsonChildren },
+          ]
+        }
+      } catch { /* not valid JSON — fall through to default */ }
+    }
+    return VARIABLE_OUTPUT
+  }
   if (d.type === 'condition') return CONDITION_OUTPUT
   if (d.type === 'delay') return DELAY_OUTPUT
   if (d.type === 'ai_prompt') return AI_PROMPT_OUTPUT
@@ -75,7 +97,7 @@ function getNodeOutputSchema(node: Node<WorkflowNodeData>): OutputField[] {
 }
 
 /** Convert OutputField[] to PickerField[] with full dotted paths */
-function schemaToPickerFields(schema: OutputField[], prefix: string): PickerField[] {
+export function schemaToPickerFields(schema: OutputField[], prefix: string): PickerField[] {
   return schema.map((field) => ({
     key: field.key,
     label: field.label,
@@ -86,55 +108,65 @@ function schemaToPickerFields(schema: OutputField[], prefix: string): PickerFiel
 }
 
 /** Merge runtime execution data into picker fields (adds previews) */
-function mergeRuntimeData(fields: PickerField[], output: unknown, prefix: string): PickerField[] {
+export function mergeRuntimeData(fields: PickerField[], output: unknown, prefix: string): PickerField[] {
   if (!output || typeof output !== 'object') return fields
 
   const obj = output as Record<string, unknown>
+
+  /** Describe a runtime value as a PickerField, safely parsing JSON strings */
+  function valueToField(key: string, rawVal: unknown, path: string): PickerField {
+    const val = typeof rawVal === 'string' ? safeParseJson(rawVal) : rawVal
+    const isArr = Array.isArray(val)
+    const isObj = val && typeof val === 'object' && !isArr
+    let preview = ''
+    if (isArr) preview = `array[${(val as unknown[]).length}]`
+    else if (typeof val === 'string') preview = val.length > 30 ? val.slice(0, 30) + '...' : val
+    else if (typeof val === 'number' || typeof val === 'boolean') preview = String(val)
+    else if (isObj) preview = '{...}'
+    const type = (isArr ? 'array' : typeof val === 'number' ? 'number' : typeof val === 'boolean' ? 'boolean' : isObj ? 'object' : 'string') as OutputField['type']
+    return {
+      key,
+      label: key,
+      type,
+      path,
+      preview,
+      children: isObj ? mergeRuntimeData([], val as Record<string, unknown>, path) : undefined,
+    }
+  }
 
   // If schema is empty but we have runtime data, build fields from runtime
   if (fields.length === 0) {
     return Object.entries(obj).map(([key, val]) => {
       const path = prefix ? `${prefix}.${key}` : key
-      const isArr = Array.isArray(val)
-      let preview = ''
-      if (isArr) preview = `array[${val.length}]`
-      else if (typeof val === 'string') preview = val.length > 30 ? val.slice(0, 30) + '...' : val
-      else if (typeof val === 'number' || typeof val === 'boolean') preview = String(val)
-      else if (val && typeof val === 'object') preview = '{...}'
-
-      return {
-        key,
-        label: key,
-        type: (isArr ? 'array' : typeof val === 'number' ? 'number' : typeof val === 'boolean' ? 'boolean' : typeof val === 'object' ? 'object' : 'string') as OutputField['type'],
-        path,
-        preview,
-        children: val && typeof val === 'object' && !isArr ? mergeRuntimeData([], val, path) : undefined,
-      }
+      return valueToField(key, val, path)
     })
   }
 
   // Merge previews into existing schema fields
   return fields.map((field) => {
-    const val = obj[field.key]
+    const rawVal = obj[field.key]
+    if (rawVal === undefined) return field
+    const val = typeof rawVal === 'string' ? safeParseJson(rawVal) : rawVal
+    const isArr = Array.isArray(val)
+    const isObj = val && typeof val === 'object' && !isArr
     let preview = field.preview || ''
-    if (val !== undefined) {
-      if (Array.isArray(val)) preview = `array[${val.length}]`
-      else if (typeof val === 'string') preview = val.length > 30 ? val.slice(0, 30) + '...' : val
-      else if (typeof val === 'number' || typeof val === 'boolean') preview = String(val)
-      else if (val && typeof val === 'object') preview = '{...}'
-    }
+    if (isArr) preview = `array[${(val as unknown[]).length}]`
+    else if (typeof val === 'string') preview = val.length > 30 ? val.slice(0, 30) + '...' : val
+    else if (typeof val === 'number' || typeof val === 'boolean') preview = String(val)
+    else if (isObj) preview = '{...}'
 
     return {
       ...field,
+      type: isObj ? 'object' as OutputField['type'] : field.type,
       preview,
-      children: field.children && val && typeof val === 'object' && !Array.isArray(val)
-        ? mergeRuntimeData(field.children, val, field.path)
+      children: isObj
+        ? mergeRuntimeData(field.children || [], val as Record<string, unknown>, field.path)
         : field.children,
     }
   })
 }
 
-const TYPE_COLORS: Record<string, string> = {
+export const TYPE_COLORS: Record<string, string> = {
   string: 'text-emerald-500',
   number: 'text-blue-500',
   boolean: 'text-amber-500',
