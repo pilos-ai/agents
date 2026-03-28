@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { registerIpcHandlers } from './ipc-handlers'
@@ -12,7 +12,7 @@ import { TaskScheduler } from './services/task-scheduler'
 import { Database } from './core/database'
 import { setupMenu } from './menu'
 import { ensureGlobalClaudeConfig } from './services/claude-config'
-import { setupAutoUpdater } from './services/auto-updater'
+import { setupAutoUpdater, installUpdate } from './services/auto-updater'
 import { RelayClient } from './services/relay-client'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -121,6 +121,7 @@ async function createWindow() {
   registerMetricsHandlers(settings, () => metricsCollector, () => relayClient)
 
   setupAutoUpdater(mainWindow)
+  ipcMain.handle('update:install', () => installUpdate())
 
   mainWindow.on('close', (event) => {
     if (!isQuitting && settings.get('backgroundMode') !== false) {
