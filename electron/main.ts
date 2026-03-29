@@ -121,7 +121,10 @@ async function createWindow() {
   registerMetricsHandlers(settings, () => metricsCollector, () => relayClient)
 
   setupAutoUpdater(mainWindow)
-  ipcMain.handle('update:install', () => installUpdate())
+  ipcMain.handle('update:install', () => {
+    isQuitting = true
+    installUpdate()
+  })
 
   mainWindow.on('close', (event) => {
     if (!isQuitting && settings.get('backgroundMode') !== false) {
