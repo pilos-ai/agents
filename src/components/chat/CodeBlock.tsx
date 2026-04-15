@@ -26,7 +26,7 @@ export function CodeBlock({ language, code }: Props) {
   }
 
   return (
-    <div className="relative group rounded-md overflow-hidden my-2">
+    <div className="relative group rounded-md overflow-hidden my-2 max-w-full">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-neutral-800 text-neutral-400 text-xs">
         <span>{language || 'text'}</span>
@@ -49,6 +49,7 @@ export function CodeBlock({ language, code }: Props) {
           fontSize: '0.8125rem',
           lineHeight: '1.5',
           background: '#1a1a2e',
+          overflowX: 'auto',
         }}
       >
         {code}

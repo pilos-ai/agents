@@ -89,7 +89,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isLast }: Pr
           <span className={`text-xs font-semibold ${colors.text}`}>{message.agentName}</span>
         </div>
         {message.content && (
-          <div className={`group/bubble relative max-w-[85%] rounded-lg px-4 py-2.5 select-text ${colors.bgLight} border-l-2 ${colors.border} text-neutral-100`}>
+          <div className={`group/bubble relative max-w-[85%] min-w-0 overflow-hidden rounded-lg px-4 py-2.5 select-text ${colors.bgLight} border-l-2 ${colors.border} text-neutral-100`}>
             <div className="markdown-content text-sm">
               <MarkdownRenderer content={message.content} />
             </div>
@@ -111,7 +111,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isLast }: Pr
   if (message.type === 'thinking' && message.content) {
     return (
       <div className="flex flex-col items-start">
-        <div className="max-w-[85%] rounded-lg px-4 py-2.5 bg-neutral-800/30 text-neutral-400 text-xs italic border-l-2 border-neutral-600 select-text">
+        <div className="max-w-[85%] min-w-0 overflow-hidden rounded-lg px-4 py-2.5 bg-neutral-800/30 text-neutral-400 text-xs italic border-l-2 border-neutral-600 select-text">
           <div className="mb-1 text-neutral-500 text-[10px] uppercase tracking-wider font-medium">Thinking</div>
           <div className="whitespace-pre-wrap break-words select-text">{message.content}</div>
         </div>
@@ -134,7 +134,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isLast }: Pr
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
       {message.replyToId && <MessageReference replyToId={message.replyToId} />}
       <div
-        className={`group/bubble relative max-w-[85%] rounded-lg px-4 py-2.5 select-text ${
+        className={`group/bubble relative max-w-[85%] min-w-0 overflow-hidden rounded-lg px-4 py-2.5 select-text ${
           isUser
             ? 'bg-blue-600 text-white'
             : 'bg-neutral-800/60 text-neutral-100'
@@ -237,7 +237,7 @@ function renderContentBlock(block: ContentBlock, index: number, isLastBlock?: bo
       const options = isLastBlock ? detectOptions(block.text) : []
       return (
         <div key={index} className="flex flex-col items-start">
-          <div className="max-w-[85%] rounded-lg px-4 py-2.5 bg-neutral-800/60 text-neutral-100 select-text">
+          <div className="max-w-[85%] min-w-0 overflow-hidden rounded-lg px-4 py-2.5 bg-neutral-800/60 text-neutral-100 select-text">
             <div className="markdown-content text-sm">
               <MarkdownRenderer content={block.text} />
             </div>

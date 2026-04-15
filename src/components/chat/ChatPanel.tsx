@@ -232,7 +232,7 @@ export function ChatPanel() {
                 )}
 
                 {/* Text / thinking bubble */}
-                <div className={`max-w-[85%] rounded-lg px-4 py-3 text-neutral-100 select-text ${
+                <div className={`max-w-[85%] min-w-0 overflow-hidden rounded-lg px-4 py-3 text-neutral-100 select-text ${
                   agentColors
                     ? `${agentColors.bgLight} border-l-2 ${agentColors.border}`
                     : 'bg-neutral-800/60'
