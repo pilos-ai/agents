@@ -5,7 +5,7 @@
 <h1 align="center">Pilos Agents</h1>
 
 <p align="center">
-  <strong>The visual desktop app for Claude Code — multi-agent teams, MCP integrations, and project tabs in one native UI.</strong>
+  <strong>Turn AI conversations into automated workflows — a native desktop app for Claude Code with multi-agent teams, visual workflow builder, and one-click MCP integrations.</strong>
 </p>
 
 <p align="center">
@@ -15,23 +15,23 @@
   <a href="https://pilos.net"><img src="https://img.shields.io/badge/website-pilos.net-blue" alt="Website" /></a>
   <a href="https://discord.gg/Qzs6MQkUY8"><img src="https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
   <a href="https://x.com/pilosdotnet"><img src="https://img.shields.io/badge/follow-@pilosdotnet-black?logo=x" alt="Twitter" /></a>
-  <a href="https://dev.to/pilosdotnet"><img src="https://img.shields.io/badge/dev.to-pilosdotnet-0A0A0A?logo=devdotto" alt="Dev.to" /></a>
 </p>
 
 <p align="center"><img src="resources/demo.gif" width="800" alt="Pilos Agents demo" /></p>
 
 ---
 
-## Why Pilos?
+## What is Pilos?
 
-Claude Code is powerful, but it lives in the terminal. Pilos gives it a native desktop home:
+Pilos is a native desktop app that sits on top of Claude Code. Instead of typing the same prompts over and over in a terminal, you chat once — then save, schedule, and automate that workflow for next time.
 
-- **See all your projects at once** — multi-tab interface, switch between projects without losing context
-- **Multi-agent collaboration** — PM, Architect, Developer, Designer, and Product agents work together on your tasks
-- **One-click MCP tools** — connect GitHub, Jira, Supabase, Sentry, browser automation, and more without editing JSON configs
-- **Everything persists** — conversations, project memory, and agent context survive restarts
+- **Chat → Workflow** — describe a task in plain English, convert the conversation into a reusable workflow
+- **Schedule it** — run workflows on a schedule (daily standups, weekly reports, nightly code reviews)
+- **Multi-agent teams** — PM, Architect, Developer, Designer, and Product agents collaborate with distinct perspectives
+- **One-click MCP tools** — connect GitHub, Jira, Supabase, Sentry, and more without editing JSON configs
+- **Everything persists** — conversations, memory, and context survive restarts
 
-No lock-in. Your Claude Code CLI does all the AI work. Pilos is the visual layer on top.
+No lock-in. Claude Code CLI does all the AI work. Pilos is the visual layer on top.
 
 ## Download
 
@@ -54,22 +54,23 @@ No lock-in. Your Claude Code CLI does all the AI work. Pilos is the visual layer
 
 ### Free (MIT)
 
-- **Multi-Agent Teams** — 5 built-in roles (PM, Architect, Developer, Designer, Product) that collaborate on tasks with distinct perspectives
-- **Multi-Project Tabs** — Work on multiple projects simultaneously, each with isolated conversations and context
-- **Integrated Terminal** — Full terminal emulator (xterm.js) embedded alongside agent output
-- **MCP Integrations** — Built-in servers for GitHub, Supabase, and Filesystem — one-click setup, no JSON editing
+- **Workflow Builder** — convert any agent conversation into a reusable, shareable workflow
+- **Multi-Agent Teams** — 5 built-in roles (PM, Architect, Developer, Designer, Product) that collaborate on tasks
+- **Multi-Project Tabs** — work on multiple projects simultaneously with isolated conversations and context
+- **Integrated Terminal** — full terminal emulator (xterm.js) embedded alongside agent output
+- **MCP Integrations** — built-in servers for GitHub, Supabase, and Filesystem — one-click setup, no JSON editing
 - **Persistent Memory** — SQLite-backed project memory that carries across sessions and restarts
-- **Permission Modes** — Auto-approve, ask-before-running, or read-only — you control what agents can do
-- **Native Context Menu** — Spell check, Look Up, and standard macOS/Windows edit actions
-- **Auto Updates** — Automatic update checks with in-app install
+- **Permission Modes** — auto-approve, ask-before-running, or read-only — you control what agents can do
+- **Auto Updates** — automatic update checks with in-app install
 
 ### Pro
 
-- **Browser MCP** — Let Claude see and interact with your browser via a Chrome extension
+- **Scheduled Automation** — run workflows on a cron schedule (daily, weekly, on push, etc.)
+- **Browser MCP** — let Claude see and interact with your browser via a Chrome extension
 - **Computer Use** — macOS screen automation (screenshot, click, type) for visual tasks
-- **Jira Integration** — Read and update Jira issues directly from the agent conversation
-- **Sentry Integration** — Query errors, issues, and AI-powered root cause analysis
-- **Premium MCP Templates** — One-click setup for Notion, Linear, Slack, and more
+- **Jira Integration** — read and update Jira issues directly from the agent conversation
+- **Sentry Integration** — query errors, issues, and AI-powered root cause analysis
+- **Premium MCP Templates** — one-click setup for Notion, Linear, Slack, and more
 
 See [pilos.net/pricing](https://pilos.net/pricing) for plans.
 
@@ -123,10 +124,10 @@ See [open issues](https://github.com/pilos-ai/agents/issues) for ideas on where 
 
 ## Community
 
-- [Website](https://pilos.net) — Download, docs, and pricing
-- [GitHub Issues](https://github.com/pilos-ai/agents/issues) — Bug reports and feature requests
-- [Discord](https://discord.gg/Qzs6MQkUY8) — Chat with the team
-- [X / Twitter](https://x.com/pilosdotnet) — Updates and announcements
+- [Website](https://pilos.net) — download, docs, and pricing
+- [GitHub Issues](https://github.com/pilos-ai/agents/issues) — bug reports and feature requests
+- [Discord](https://discord.gg/Qzs6MQkUY8) — chat with the team
+- [X / Twitter](https://x.com/pilosdotnet) — updates and announcements
 
 ## License
 
