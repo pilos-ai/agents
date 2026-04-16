@@ -10,46 +10,7 @@ import { MCP_SERVER_TEMPLATES } from '../../../data/mcp-server-templates'
 import { api } from '../../../api'
 import type { StorageStats } from '../../../types'
 
-const LICENSE_SERVER = 'https://license.pilos.net/v1/licenses'
-
-const PLANS = [
-  { id: 'pro_monthly',     label: 'Pro · Monthly',    price: '$12/mo',  plan: 'pro',   billing: 'monthly' },
-  { id: 'pro_semi_annual', label: 'Pro · 6 Months',   price: '$60',     plan: 'pro',   billing: 'semi-annual' },
-  { id: 'pro_annual',      label: 'Pro · Annual',     price: '$96/yr',  plan: 'pro',   billing: 'annual' },
-]
-
 function UpgradeModal({ onClose }: { onClose: () => void }) {
-  const [email, setEmail] = useState('')
-  const [selectedPlan, setSelectedPlan] = useState('pro_monthly')
-  const [loading, setLoading] = useState<'coinbase' | 'nowpayments' | null>(null)
-  const [error, setError] = useState('')
-
-  const handlePay = async (provider: 'coinbase' | 'nowpayments') => {
-    if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
-      setError('Please enter a valid email address')
-      return
-    }
-    setLoading(provider)
-    setError('')
-    try {
-      const plan = PLANS.find(p => p.id === selectedPlan)!
-      const endpoint = provider === 'coinbase' ? 'create-coinbase-charge' : 'create-nowpayments-invoice'
-      const res = await fetch(`${LICENSE_SERVER}/${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), plan: plan.plan, billing: plan.billing }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to create payment')
-      api.dialog.openExternal(data.hostedUrl || data.invoiceUrl)
-      onClose()
-    } catch (e: any) {
-      setError(e.message || 'Something went wrong. Please try again.')
-    } finally {
-      setLoading(null)
-    }
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-pilos-card border border-pilos-border rounded-2xl p-6 w-full max-w-sm mx-4 space-y-4" onClick={e => e.stopPropagation()}>
@@ -63,55 +24,28 @@ function UpgradeModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <div className="space-y-2">
-          {PLANS.map(plan => (
-            <button
-              key={plan.id}
-              onClick={() => setSelectedPlan(plan.id)}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border transition-all text-xs ${
-                selectedPlan === plan.id
-                  ? 'border-amber-500 bg-amber-500/10 text-white'
-                  : 'border-pilos-border bg-pilos-bg text-zinc-400 hover:border-zinc-500'
-              }`}
-            >
-              <span className="font-medium">{plan.label}</span>
-              <span className={selectedPlan === plan.id ? 'text-amber-400 font-bold' : ''}>{plan.price}</span>
-            </button>
-          ))}
+        <div className="space-y-1 text-xs text-zinc-400">
+          <div className="flex justify-between py-1.5 border-b border-pilos-border">
+            <span>Pro · Monthly</span><span className="text-white font-semibold">$12/mo</span>
+          </div>
+          <div className="flex justify-between py-1.5 border-b border-pilos-border">
+            <span>Pro · Annual</span><span className="text-white font-semibold">$96/yr <span className="text-green-400 text-[10px]">Save 33%</span></span>
+          </div>
+          <div className="flex justify-between py-1.5">
+            <span>Teams · Monthly</span><span className="text-white font-semibold">$19/seat</span>
+          </div>
         </div>
 
-        <input
-          type="email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          placeholder="your@email.com"
-          className="w-full bg-pilos-bg text-white text-xs rounded-lg px-3 py-2.5 outline-none border border-pilos-border focus:border-amber-500 placeholder:text-zinc-600"
-        />
-
-        {error && <p className="text-xs text-red-400">{error}</p>}
-
-        <div className="space-y-2">
-          <button
-            onClick={() => handlePay('coinbase')}
-            disabled={loading !== null}
-            className="w-full px-3 py-2.5 bg-gradient-to-r from-blue-700 to-blue-600 hover:from-blue-600 hover:to-blue-500 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2"
-          >
-            <Icon icon="lucide:bitcoin" className="text-sm" />
-            {loading === 'coinbase' ? 'Creating payment...' : 'Coinbase — BTC / ETH / USDC'}
-          </button>
-
-          <button
-            onClick={() => handlePay('nowpayments')}
-            disabled={loading !== null}
-            className="w-full px-3 py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2"
-          >
-            <Icon icon="lucide:coins" className="text-sm" />
-            {loading === 'nowpayments' ? 'Creating payment...' : 'NOWPayments — 300+ coins'}
-          </button>
-        </div>
+        <button
+          onClick={() => { api.dialog.openExternal('https://pilos.net/pricing'); onClose() }}
+          className="w-full px-3 py-2.5 bg-gradient-to-r from-blue-700 to-blue-600 hover:from-blue-600 hover:to-blue-500 text-white text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2"
+        >
+          <Icon icon="lucide:credit-card" className="text-sm" />
+          Pay with Card — pilos.net/pricing
+        </button>
 
         <p className="text-[10px] text-zinc-600 text-center">
-          License key delivered instantly to your email after payment.
+          Secure checkout via Stripe. License key delivered to your email instantly.
         </p>
       </div>
     </div>
