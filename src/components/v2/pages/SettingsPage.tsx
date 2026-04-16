@@ -105,6 +105,7 @@ function AccountSection() {
   const [keyInput, setKeyInput] = useState('')
   const [showKeyInput, setShowKeyInput] = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [portalLoading, setPortalLoading] = useState(false)
 
   const tierColors: Record<string, string> = {
     free: 'bg-zinc-700 text-zinc-400',
@@ -118,6 +119,24 @@ function AccountSection() {
     if (result.valid) {
       setKeyInput('')
       setShowKeyInput(false)
+    }
+  }
+
+  const handleManageSubscription = async () => {
+    if (!licenseKey) return
+    setPortalLoading(true)
+    try {
+      const res = await fetch('https://license.pilos.net/v1/licenses/customer-portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ licenseKey }),
+      })
+      const data = await res.json()
+      if (data.url) api.dialog.openExternal(data.url)
+    } catch {
+      // silently fail
+    } finally {
+      setPortalLoading(false)
     }
   }
 
@@ -177,13 +196,24 @@ function AccountSection() {
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">License</h3>
           {licenseKey && (
-            <button
-              onClick={deactivateLicense}
-              disabled={isValidating}
-              className="text-[10px] text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
-            >
-              Deactivate
-            </button>
+            <div className="flex items-center gap-3">
+              {tier !== 'free' && (
+                <button
+                  onClick={handleManageSubscription}
+                  disabled={portalLoading}
+                  className="text-[10px] text-blue-400 hover:text-blue-300 transition-colors disabled:opacity-50"
+                >
+                  {portalLoading ? 'Loading...' : 'Manage subscription'}
+                </button>
+              )}
+              <button
+                onClick={deactivateLicense}
+                disabled={isValidating}
+                className="text-[10px] text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
+              >
+                Deactivate
+              </button>
+            </div>
           )}
         </div>
 
