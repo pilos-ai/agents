@@ -1,4 +1,4 @@
-import { app, Menu, shell, BrowserWindow, ipcMain, MenuItemConstructorOptions } from 'electron'
+import { app, Menu, shell, BrowserWindow, ipcMain, clipboard, MenuItemConstructorOptions } from 'electron'
 import { SettingsStore } from './services/settings-store'
 import { checkForUpdates } from './services/auto-updater'
 
@@ -84,7 +84,15 @@ function rebuildMenu() {
       { type: 'separator' },
       { role: 'cut' },
       { role: 'copy' },
-      { role: 'paste' },
+      {
+        // Custom paste: Electron's role:'paste' in Chromium 40+ doesn't always
+        // fire native `input`/`paste` events on React-controlled textareas,
+        // so the controlled state goes stale. We route through IPC and let
+        // the renderer splice at the cursor with a React-aware value setter.
+        label: 'Paste',
+        accelerator: 'CmdOrCtrl+V',
+        click: () => send('paste:text', clipboard.readText()),
+      },
       { role: 'selectAll' },
     ],
   })

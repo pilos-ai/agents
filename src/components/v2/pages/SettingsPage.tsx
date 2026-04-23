@@ -8,6 +8,7 @@ import { useProjectStore } from '../../../store/useProjectStore'
 import { useLicenseStore } from '../../../store/useLicenseStore'
 import { MCP_SERVER_TEMPLATES } from '../../../data/mcp-server-templates'
 import { api } from '../../../api'
+import { PluginsSection } from '../../settings/PluginsSection'
 import type { StorageStats } from '../../../types'
 
 function UpgradeModal({ onClose }: { onClose: () => void }) {
@@ -79,12 +80,13 @@ async function loadJiraStore() {
   }
 }
 
-type SettingsNav = 'account' | 'general' | 'integrations' | 'devices' | 'security' | 'advanced'
+type SettingsNav = 'account' | 'general' | 'integrations' | 'plugins' | 'devices' | 'security' | 'advanced'
 
 const allNavItems: { id: SettingsNav; label: string; icon: string; featureFlag?: string }[] = [
   { id: 'account', label: 'Account', icon: 'lucide:user' },
   { id: 'general', label: 'General', icon: 'lucide:settings' },
   { id: 'integrations', label: 'Integrations', icon: 'lucide:plug-zap' },
+  { id: 'plugins', label: 'Plugins', icon: 'lucide:puzzle' },
   { id: 'devices', label: 'Devices', icon: 'lucide:smartphone', featureFlag: 'devices' },
   { id: 'security', label: 'Security', icon: 'lucide:shield-check' },
   { id: 'advanced', label: 'Advanced', icon: 'lucide:code' },
@@ -338,7 +340,6 @@ function GeneralSection() {
   })
   const setProjectModel = useProjectStore((s) => s.setProjectModel)
   const setProjectPermissionMode = useProjectStore((s) => s.setProjectPermissionMode)
-  const setProjectMode = useProjectStore((s) => s.setProjectMode)
   const terminalFontSize = useAppStore((s) => s.terminalFontSize)
   const setTerminalFontSize = useAppStore((s) => s.setTerminalFontSize)
 
@@ -352,7 +353,6 @@ function GeneralSection() {
 
   const model = activeTab?.model || 'sonnet'
   const permissionMode = activeTab?.permissionMode || 'default'
-  const mode = activeTab?.mode || 'solo'
 
   return (
     <div className="space-y-6">
@@ -386,16 +386,6 @@ function GeneralSection() {
                   { value: 'plan', label: 'Plan Mode' },
                 ]}
               />
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-zinc-300">Team Mode</p>
-                  <p className="text-[10px] text-zinc-600">Enable multi-agent collaboration</p>
-                </div>
-                <FormToggle
-                  checked={mode === 'team'}
-                  onChange={(checked) => setProjectMode(checked ? 'team' : 'solo')}
-                />
-              </div>
             </div>
           </div>
         </>
@@ -1054,6 +1044,16 @@ function SecuritySection() {
   )
 }
 
+function PluginsSectionWrapper() {
+  const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
+  if (!activeProjectPath) {
+    return (
+      <div className="text-sm text-zinc-500">Open a project to manage plugins.</div>
+    )
+  }
+  return <PluginsSection projectPath={activeProjectPath} />
+}
+
 function AdvancedSection() {
   const [stats, setStats] = useState<StorageStats | null>(null)
 
@@ -1180,6 +1180,7 @@ export default function SettingsPage() {
           {activeNav === 'account' && <AccountSection />}
           {activeNav === 'general' && <GeneralSection />}
           {activeNav === 'integrations' && <IntegrationsSection />}
+          {activeNav === 'plugins' && <PluginsSectionWrapper />}
           {activeNav === 'devices' && <DevicesSection />}
           {activeNav === 'security' && <SecuritySection />}
           {activeNav === 'advanced' && <AdvancedSection />}

@@ -51,7 +51,6 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         label: 'New Chat',
         icon: 'lucide:message-square-plus',
         category: 'action',
-        shortcut: '⌘+N',
         onSelect: () => {
           if (activeProjectPath) {
             setActiveView('terminal')
@@ -97,7 +96,9 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     if (open) {
       setQuery('')
       setSelectedIndex(0)
-      setTimeout(() => inputRef.current?.focus(), 50)
+      // rAF ensures the input exists (palette returns null when closed)
+      const raf = requestAnimationFrame(() => inputRef.current?.focus())
+      return () => cancelAnimationFrame(raf)
     }
   }, [open])
 
@@ -123,9 +124,11 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault()
+      if (filtered.length === 0) return
       setSelectedIndex((i) => (i + 1) % filtered.length)
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
+      if (filtered.length === 0) return
       setSelectedIndex((i) => (i - 1 + filtered.length) % filtered.length)
     } else if (e.key === 'Enter') {
       e.preventDefault()
@@ -188,11 +191,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                     key={cmd.id}
                     data-index={idx}
                     onClick={() => runCommand(cmd)}
-                    onMouseEnter={() => setSelectedIndex(idx)}
-                    className={`w-full flex items-center gap-3 px-4 py-2 text-left text-sm transition-colors ${
-                      isSelected
-                        ? 'bg-blue-500/10 text-blue-400'
-                        : 'text-zinc-300 hover:bg-zinc-800/50'
+                    className={`w-full flex items-center gap-3 px-4 py-2 text-left text-sm transition-colors text-zinc-300 hover:bg-zinc-800/50 ${
+                      isSelected ? 'bg-blue-500/10 !text-blue-400' : ''
                     }`}
                   >
                     <Icon icon={cmd.icon} className={`text-sm ${isSelected ? 'text-blue-400' : 'text-zinc-500'}`} />

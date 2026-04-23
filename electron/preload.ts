@@ -1,5 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron')
-import { bridgeRepetitionApi } from '../src/utils/repetition-detection/adapters/electron-preload'
+import { bridgeRepetitionApi } from '@pilos/repetition-detection/adapters/electron-preload'
 
 contextBridge.exposeInMainWorld('api', {
   // CLI Checker

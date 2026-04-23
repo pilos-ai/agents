@@ -348,6 +348,22 @@ export function generateWorkflowSummaryLocally(
 /** Hydrate AI-generated mcp_tool nodes with structured parameters from the tool catalog */
 export function hydrateToolNodes(nodes: Node<WorkflowNodeData>[]): Node<WorkflowNodeData>[] {
   return nodes.map((node) => {
+    // ── Variable nodes: derive a sensible variableName if the AI left it blank ──
+    if (node.data.type === 'variable') {
+      const hasName = typeof node.data.variableName === 'string' && node.data.variableName.trim().length > 0
+      const hasOp = typeof node.data.variableOperation === 'string'
+      if (hasName && hasOp) return node
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          variableName: hasName ? node.data.variableName : deriveVariableName(node.data.label, node.id),
+          variableOperation: hasOp ? node.data.variableOperation : 'set',
+          variableValue: node.data.variableValue ?? '',
+        },
+      }
+    }
+
     if (node.data.type !== 'mcp_tool' || !node.data.toolId) return node
 
     const tool = findTool(node.data.toolId)
@@ -377,4 +393,19 @@ export function hydrateToolNodes(nodes: Node<WorkflowNodeData>[]): Node<Workflow
       },
     }
   })
+}
+
+function deriveVariableName(label: string | undefined, fallbackId: string): string {
+  const source = (label || fallbackId).trim()
+  if (!source) return 'variable'
+  // "Old Term" -> "oldTerm", "Project Path" -> "projectPath", "VAR_01" -> "var01"
+  const words = source
+    .replace(/[_\-]+/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .split(/\s+/)
+    .filter(Boolean)
+  if (words.length === 0) return 'variable'
+  const [first, ...rest] = words
+  const camel = first.toLowerCase() + rest.map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('')
+  return camel.replace(/[^a-zA-Z0-9_]/g, '') || 'variable'
 }

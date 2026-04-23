@@ -109,6 +109,17 @@ ABSTRACTION RULES:
 - If the assistant performed similar operations on multiple items, use a "loop" node with loopCollection referencing the data source
 - Keep the workflow general enough to rerun with different inputs
 
+VARIABLE NODE RULES (CRITICAL — do not leave blank):
+- Every "variable" node MUST set data.variableName, data.variableValue, and data.variableOperation
+- data.variableName: camelCase identifier derived from the role the value played in the conversation (e.g. "projectPath", "oldTerm", "newTerm", "branchName", "ticketId")
+- data.variableValue: the CONCRETE value observed in the conversation — copy it verbatim. If the conversation was renaming "foo" → "bar" in /Users/x/site, then oldTerm="foo", newTerm="bar", projectPath="/Users/x/site". Never leave this empty.
+- data.variableOperation: usually "set". Use "append" only if the conversation showed accumulation, "increment" for counters, "transform" when the value is a template like "{{NODE_ID.field}}.backup"
+- Variable nodes are ONLY for values that could plausibly change on re-run. Don't create one for constants that are hard-wired to this workflow's meaning
+- Downstream nodes reference variables by the variableName you chose, via {{variables.projectPath}} or {{VAR_NODE_ID.value}}
+
+Example of a properly filled variable node:
+{"id":"VAR_OLD_TERM","type":"variable","position":{"x":100,"y":200},"data":{"type":"variable","label":"Old Term","variableName":"oldTerm","variableValue":"foo","variableOperation":"set"}}
+
 OUTPUT ONLY THE RAW JSON OBJECT. No markdown fences. No explanation. Start with { and end with }.
 
 JSON schema:
@@ -120,7 +131,7 @@ JSON schema:
     "interval": "manual|15min|30min|1h|2h|4h|8h|12h|1d|1w"
   },
   "workflow": {
-    "nodes": [{"id":"NODE_START_01","type":"start|end|mcp_tool|ai_prompt|agent|condition|loop|delay|variable|note","position":{"x":300,"y":50},"data":{"type":"(same as node type)","label":"short name","toolId":"optional tool id for mcp_tool","toolCategory":"optional","toolIcon":"optional: lucide:icon-name","aiPrompt":"for ai_prompt nodes","aiModel":"haiku|sonnet|opus","agentPrompt":"for agent nodes - detailed instruction of what to accomplish","agentModel":"haiku|sonnet|opus","agentMaxTurns":25,"conditionExpression":"for condition","conditionOperator":"equals|contains|greater_than|less_than|regex","conditionValue":"for condition","loopType":"count|collection|while","loopCount":3,"loopCollection":"{{NODE_ID.arrayField}}","parameters":{"key":{"value":"..."}}}}],
+    "nodes": [{"id":"NODE_START_01","type":"start|end|mcp_tool|ai_prompt|agent|condition|loop|delay|variable|note","position":{"x":300,"y":50},"data":{"type":"(same as node type)","label":"short name","toolId":"optional tool id for mcp_tool","toolCategory":"optional","toolIcon":"optional: lucide:icon-name","aiPrompt":"for ai_prompt nodes","aiModel":"haiku|sonnet|opus","agentPrompt":"for agent nodes - detailed instruction of what to accomplish","agentModel":"haiku|sonnet|opus","agentMaxTurns":25,"conditionExpression":"for condition","conditionOperator":"equals|contains|greater_than|less_than|regex","conditionValue":"for condition","loopType":"count|collection|while","loopCount":3,"loopCollection":"{{NODE_ID.arrayField}}","variableName":"for variable nodes - camelCase identifier","variableValue":"for variable nodes - concrete value copied from the conversation","variableOperation":"set|append|increment|transform","parameters":{"key":{"value":"..."}}}}],
     "edges": [{"id":"edge_01","source":"node id","target":"node id","sourceHandle":"null or yes/no for condition, body/done for loop","type":"dashed"}]
   }
 }

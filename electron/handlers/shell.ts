@@ -34,7 +34,10 @@ export function registerShellHandlers(getSpellParams?: () => SpellParams) {
     }
     if (isEditable) {
       if (text) items.push({ type: 'separator' })
-      items.push({ role: 'paste' })
+      items.push({
+        label: 'Paste',
+        click: () => win?.webContents.send('paste:text', clipboard.readText()),
+      })
     }
     items.push({ role: 'selectAll' })
     Menu.buildFromTemplate(items).popup({ window: win ?? undefined })

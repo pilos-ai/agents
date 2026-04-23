@@ -18,6 +18,7 @@ files:
   - dist-electron/**/*
   - node_modules/**/*
   - packages/pro/**/*
+  - packages/repetition-detection/**/*
   - package.json
 
 asarUnpack:

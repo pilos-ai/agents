@@ -4,7 +4,7 @@ import type { DependencyCheckResult, DependencyName } from '../types'
 
 export type CliStatus = 'checking' | 'ready' | 'missing' | 'installing' | 'install_failed' | 'error' | 'needs_login' | 'logging_in'
 export type SetupStatus = 'checking_deps' | 'deps_missing' | 'checking_cli' | 'ready' | 'missing' | 'installing' | 'install_failed' | 'error' | 'needs_login' | 'logging_in'
-export type SettingsSection = 'project' | 'agents' | 'mcp' | 'integrations' | 'license' | 'general'
+export type SettingsSection = 'project' | 'agents' | 'mcp' | 'plugins' | 'integrations' | 'license' | 'general'
 export type AppView = 'dashboard' | 'terminal' | 'tasks' | 'results' | 'config' | 'analytics' | 'settings' | (string & {})
 
 interface AppStore {

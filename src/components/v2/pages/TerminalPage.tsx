@@ -6,9 +6,10 @@ import { StatusDot } from '../components/StatusDot'
 import { GradientAvatar } from '../components/GradientAvatar'
 import { useConversationStore } from '../../../store/useConversationStore'
 import { useProjectStore } from '../../../store/useProjectStore'
-import { useWorkflowDetection } from '../../../hooks/useWorkflowDetection'
+import { useTaskStore } from '../../../store/useTaskStore'
 import { ConvertConversationModal } from '../components/ConvertConversationModal'
 import { WorkflowSuggestionBanner } from '../components/WorkflowSuggestionBanner'
+import { parseLoopInterval, LOOP_INTERVAL_PRESETS } from '../../../utils/loop-interval'
 import { useLicenseStore } from '../../../store/useLicenseStore'
 import { ProBadge } from '../../common/ProBadge'
 import type { ImageAttachment } from '../../../types'
@@ -295,6 +296,10 @@ function TerminalControls({ onSaveAsTask, showLogs, onToggleLogs }: { onSaveAsTa
 function TerminalInput() {
   const [text, setText] = useState('')
   const [images, setImages] = useState<ImageAttachment[]>([])
+  const [loopMode, setLoopMode] = useState(false)
+  const [loopInterval, setLoopInterval] = useState<string | null>(null)
+  const [showLoopMenu, setShowLoopMenu] = useState(false)
+  const loopMenuRef = useRef<HTMLDivElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   const sendMessage = useConversationStore((s) => s.sendMessage)
   const queueMessage = useConversationStore((s) => s.queueMessage)
@@ -330,10 +335,19 @@ function TerminalInput() {
     return () => document.removeEventListener('mousedown', handler)
   }, [showModelMenu])
 
+  useEffect(() => {
+    if (!showLoopMenu) return
+    const handler = (e: MouseEvent) => {
+      if (!loopMenuRef.current?.contains(e.target as Node)) setShowLoopMenu(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showLoopMenu])
+
   const MODELS = [
-    { value: 'sonnet', label: 'Sonnet', desc: 'Fast & smart' },
-    { value: 'opus', label: 'Opus', desc: 'Most capable' },
-    { value: 'haiku', label: 'Haiku', desc: 'Fastest' },
+    { value: 'opus', label: 'Opus 4.7', desc: 'Most capable (default)' },
+    { value: 'sonnet', label: 'Sonnet 4.6', desc: 'Fast & smart' },
+    { value: 'haiku', label: 'Haiku 4.5', desc: 'Fastest' },
   ]
 
   // Skills panel
@@ -410,7 +424,16 @@ function TerminalInput() {
   const handleSend = () => {
     const trimmed = text.trim()
     if ((!trimmed && images.length === 0) || !activeConversationId) return
-    const messageText = trimmed || 'What is in this image?'
+    const baseText = trimmed || 'What is in this image?'
+
+    let messageText = baseText
+    if (loopMode && !baseText.startsWith('/loop ')) {
+      const parsed = parseLoopInterval(baseText)
+      const interval = parsed?.interval ?? loopInterval
+      const body = parsed?.cleanText || baseText
+      messageText = interval ? `/loop ${interval} ${body}` : `/loop ${body}`
+    }
+
     const messageImages = images.length > 0 ? images : undefined
     if (isLoading) {
       queueMessage(messageText, messageImages)
@@ -419,6 +442,9 @@ function TerminalInput() {
     }
     setText('')
     setImages([])
+    setLoopMode(false)
+    setLoopInterval(null)
+    setShowLoopMenu(false)
     if (editorRef.current) {
       editorRef.current.innerHTML = ''
     }
@@ -718,6 +744,70 @@ function TerminalInput() {
           </button>
         )}
 
+        {/* Loop toggle — prefixes message with /loop so Claude re-runs it on a schedule */}
+        <div ref={loopMenuRef} className="relative flex-shrink-0">
+          <button
+            onClick={() => {
+              if (isLoading) return
+              if (loopMode) {
+                setLoopMode(false)
+                setLoopInterval(null)
+                setShowLoopMenu(false)
+                return
+              }
+              // If text already encodes an interval, activate loop directly.
+              if (parseLoopInterval(text)) {
+                setLoopMode(true)
+                setLoopInterval(null)
+                return
+              }
+              setShowLoopMenu((v) => !v)
+            }}
+            disabled={isLoading}
+            title={loopMode ? 'Loop on — click to turn off' : 'Loop this message on a schedule'}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 h-[32px] rounded-lg border text-xs font-medium transition-all ${
+              isLoading
+                ? 'opacity-40 cursor-not-allowed border-zinc-700 bg-zinc-800/50 text-zinc-500'
+                : loopMode
+                  ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-200 hover:bg-indigo-500/25 cursor-pointer'
+                  : 'border-zinc-700 bg-zinc-800/80 text-zinc-400 hover:border-zinc-500 hover:bg-zinc-800 hover:text-white cursor-pointer'
+            }`}
+          >
+            <Icon icon="lucide:repeat" className="text-[10px]" />
+            {loopMode && loopInterval ? `Loop · ${loopInterval}` : 'Loop'}
+          </button>
+
+          {showLoopMenu && (
+            <div className="absolute bottom-full mb-2 right-0 w-52 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-50">
+              <div className="px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-500 border-b border-zinc-800">
+                Repeat every
+              </div>
+              {LOOP_INTERVAL_PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  onClick={() => {
+                    setLoopMode(true)
+                    setLoopInterval(preset.value)
+                    setShowLoopMenu(false)
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-zinc-800 transition-colors"
+                >
+                  <Icon
+                    icon={preset.value === null ? 'lucide:sparkles' : 'lucide:clock'}
+                    className="text-indigo-300 text-xs flex-shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-zinc-200">{preset.label}</div>
+                    {preset.desc && (
+                      <div className="text-[10px] text-zinc-500">{preset.desc}</div>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Model selector */}
         <div ref={modelMenuRef} className="relative flex-shrink-0">
           <button
@@ -726,7 +816,7 @@ function TerminalInput() {
             className={`flex items-center gap-1.5 px-2.5 py-1.5 h-[32px] rounded-lg border text-xs font-medium transition-all ${isLoading ? 'opacity-40 cursor-not-allowed border-zinc-700 bg-zinc-800/50 text-zinc-500' : 'border-zinc-700 bg-zinc-800/80 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800 hover:text-white cursor-pointer'}`}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
-            {MODELS.find((m) => m.value === model)?.label ?? 'Sonnet'}
+            {MODELS.find((m) => m.value === model)?.label ?? 'Opus 4.7'}
             <svg className="w-3 h-3 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M6 9l6 6 6-6"/>
             </svg>
@@ -818,8 +908,24 @@ export default function TerminalPage() {
     return () => document.removeEventListener('contextmenu', handler)
   }, [])
 
-  // Workflow detection
-  const { showSuggestion, dismiss: dismissSuggestion } = useWorkflowDetection()
+  // Workflow detection — unified store-driven suggestion (repeated | candidate)
+  const workflowSuggestion = useConversationStore((s) => s.workflowSuggestion)
+  const dismissWorkflowSuggestion = useConversationStore((s) => s.dismissWorkflowSuggestion)
+
+  // Active /loop indicator — persistent Stop button across scheduled iterations.
+  // Derived from message history (source of truth) + explicit stop override,
+  // so the banner survives aborts, restarts, and state-sync quirks.
+  const stopLoop = useConversationStore((s) => s.stopLoop)
+  const isLoopActive = useConversationStore((s) => {
+    const cid = s.activeConversationId
+    if (!cid || s.stoppedLoops[cid]) return false
+    for (let i = s.messages.length - 1; i >= 0; i--) {
+      const m = s.messages[i]
+      if (m.role !== 'user' || m.type !== 'text') continue
+      return m.content.trimStart().startsWith('/loop ')
+    }
+    return false
+  })
   const [showConvertModal, setShowConvertModal] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
 
@@ -899,11 +1005,46 @@ export default function TerminalPage() {
 
         <TerminalControls onSaveAsTask={() => setShowConvertModal(true)} showLogs={showLogs} onToggleLogs={() => setShowLogs((v) => !v)} />
 
+        {/* Active loop banner — persistent Stop control between scheduled iterations */}
+        {isLoopActive && (
+          <div className="mx-4 mt-2 flex items-center gap-3 px-4 py-2 rounded-lg border border-indigo-500/30 bg-indigo-500/5">
+            <Icon icon="lucide:repeat" className="text-indigo-300 text-sm flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-indigo-200">Loop active</p>
+              <p className="text-[10px] text-zinc-500 truncate">
+                Stop aborts the current turn. If hellos keep arriving, ask Claude to cancel its scheduled jobs.
+              </p>
+            </div>
+            <button
+              onClick={() => stopLoop()}
+              className="px-3 py-1 rounded-lg text-xs font-medium border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 transition-colors flex items-center gap-1.5 whitespace-nowrap"
+            >
+              <Icon icon="lucide:square" className="text-xs" />
+              Stop loop
+            </button>
+          </div>
+        )}
+
         {/* Workflow suggestion banner */}
-        {showSuggestion && !showConvertModal && (
+        {workflowSuggestion && !showConvertModal && (
           <WorkflowSuggestionBanner
-            onConvert={() => { setShowConvertModal(true); dismissSuggestion() }}
-            onDismiss={dismissSuggestion}
+            suggestion={workflowSuggestion}
+            onConvert={() => { setShowConvertModal(true); void dismissWorkflowSuggestion('later') }}
+            onDismiss={() => { void dismissWorkflowSuggestion('later') }}
+            onNever={
+              workflowSuggestion.tier === 'repeated' || workflowSuggestion.tier === 'matched_workflow'
+                ? () => { void dismissWorkflowSuggestion('never') }
+                : undefined
+            }
+            onRun={
+              workflowSuggestion.tier === 'matched_workflow'
+                ? () => {
+                    const taskId = workflowSuggestion.taskId
+                    void useTaskStore.getState().runTaskWorkflow(taskId, 'manual')
+                    void dismissWorkflowSuggestion('later')
+                  }
+                : undefined
+            }
           />
         )}
 

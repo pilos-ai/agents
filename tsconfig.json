@@ -20,9 +20,11 @@
       "@pilos/agents-pm": ["packages/pm"],
       "@pilos/agents-pm/*": ["packages/pm/*"],
       "@pilos/computer-use": ["packages/computer-use"],
-      "@pilos/computer-use/*": ["packages/computer-use/*"]
+      "@pilos/computer-use/*": ["packages/computer-use/*"],
+      "@pilos/repetition-detection": ["packages/repetition-detection"],
+      "@pilos/repetition-detection/*": ["packages/repetition-detection/*"]
     }
   },
-  "include": ["src/**/*", "electron/**/*", "packages/pm/**/*", "packages/computer-use/**/*"],
+  "include": ["src/**/*", "electron/**/*", "packages/pm/**/*", "packages/computer-use/**/*", "packages/repetition-detection/**/*"],
   "exclude": ["node_modules", "dist", "dist-electron"]
 }

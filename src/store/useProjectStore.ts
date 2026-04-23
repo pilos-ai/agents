@@ -555,7 +555,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       snapshot: null,
       model: settings.model || 'sonnet',
       permissionMode: settings.permissionMode || 'bypass',
-      mode: settings.mode || 'solo',
+      mode: useLicenseStore.getState().flags.teamMode ? 'team' : 'solo',
       agents: settings.agents || [],
       mcpServers: settings.mcpServers || [],
       draftText: '',

@@ -6,3 +6,7 @@
 	path = packages/pm
 	url = git@github.com:pilos-ai/agents-pm.git
 	branch = main
+[submodule "packages/repetition-detection"]
+	path = packages/repetition-detection
+	url = git@github.com:pilos-ai/agents-repetition-detection.git
+	branch = main

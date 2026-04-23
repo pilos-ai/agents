@@ -1,6 +1,7 @@
 import path from 'path'
 import { createRequire } from 'module'
 import { app } from 'electron'
+import { applyRepetitionMigrations, purgeConversation as purgeRepetitionData } from '@pilos/repetition-detection/adapters/sqlite-storage'
 
 const require = createRequire(import.meta.url)
 
@@ -184,6 +185,9 @@ export class Database {
       this.db!.exec("ALTER TABLE messages ADD COLUMN reply_to_id INTEGER REFERENCES messages(id) ON DELETE SET NULL")
     }
 
+    // Repetition detection tables — owned by the private submodule
+    applyRepetitionMigrations(this.db!)
+
     // FTS5 virtual table for full-text message search (external content mode)
     this.db!.exec(`
       CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
@@ -261,6 +265,14 @@ export class Database {
 
   deleteConversation(id: string): void {
     this.db!.prepare('DELETE FROM conversations WHERE id = ?').run(id)
+    // Cascade into submodule-owned tables (no FK back to conversations).
+    purgeRepetitionData(this.db!, id)
+  }
+
+  /** Raw better-sqlite3 handle — used to wire the repetition-detection submodule. */
+  get raw(): BetterSqlite3Database {
+    if (!this.db) throw new Error('Database not initialized')
+    return this.db
   }
 
   getMessages(conversationId: string): Message[] {

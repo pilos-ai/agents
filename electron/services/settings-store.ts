@@ -29,6 +29,7 @@ interface ProjectSettings {
     enabled: boolean
     config: Record<string, unknown>
   }>
+  pluginsInstalled?: string[]
 }
 
 interface Settings {
@@ -49,7 +50,7 @@ const DEFAULTS: Settings = {
 }
 
 const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
-  model: 'sonnet',
+  model: 'opus',
   permissionMode: 'bypass',
   mode: 'solo',
   agents: [],

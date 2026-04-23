@@ -611,9 +611,9 @@ export interface ElectronAPI {
   }
   /**
    * Owned by the `repetition-detection` private submodule.
-   * Shape defined in `src/utils/repetition-detection/adapters/electron-preload.ts`.
+   * Shape defined in `packages/repetition-detection/adapters/electron-preload.ts`.
    */
-  repetition?: import('./utils/repetition-detection/adapters/electron-preload').RepetitionRendererApi
+  repetition?: import('@pilos/repetition-detection/adapters/electron-preload').RepetitionRendererApi
   metrics: {
     setLicenseKey: (key: string) => Promise<void>
     getMachineId: () => Promise<string>

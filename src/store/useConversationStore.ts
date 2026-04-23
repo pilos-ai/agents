@@ -1,13 +1,131 @@
 import { create } from 'zustand'
 import { api } from '../api'
 import { useProjectStore, getActiveProjectTab } from './useProjectStore'
+import { useTaskStore } from './useTaskStore'
 import { useUsageStore } from './useUsageStore'
 import { useAnalyticsStore } from './useAnalyticsStore'
 import { buildTeamSystemPrompt, buildMessageContextHint } from '../utils/team-prompt-builder'
 import { restoreAgentIds } from '../utils/agent-names'
 import { AGENT_COLORS } from '../data/agent-templates'
 import { parseAgentSegments, detectLastAgent } from '../utils/agent-segments'
+import {
+  createDetector,
+  createRendererStorage,
+  type InputMessage,
+  type RepetitionMatch,
+} from '@pilos/repetition-detection'
+
+/**
+ * Workflow suggestion shape exposed to the UI. Three tiers, strongest first:
+ *  - `matched_workflow` → repetition detector matched a prior conversation that
+ *                         was already saved as a Task. We can skip "build a
+ *                         workflow" and offer to run the existing one.
+ *  - `repeated`         → cross-conversation repetition detector found ≥N similar
+ *                         prior conversations. Strong signal; copy emphasises
+ *                         "you've done this before" — offer to save as workflow.
+ *  - `candidate`        → no prior match, but the conversation is substantial
+ *                         enough (≥3 tool calls, ≥2 turns each side) that it's
+ *                         probably worth offering to save as a workflow.
+ */
+export type WorkflowSuggestion =
+  | {
+      tier: 'matched_workflow'
+      conversationId: string
+      projectPath: string
+      taskId: string
+      taskTitle: string
+      nodeCount: number
+      /** Re-use the underlying repetition match so dismiss() can mute by bagHash. */
+      match: RepetitionMatch
+    }
+  | {
+      tier: 'repeated'
+      conversationId: string
+      projectPath: string
+      match: RepetitionMatch
+    }
+  | {
+      tier: 'candidate'
+      conversationId: string
+      projectPath: string
+      toolCount: number
+      uniqueTools: string[]
+    }
+
+const CANDIDATE_MIN_TOOL_USE = 3
+const CANDIDATE_MIN_USER_MSGS = 2
+const CANDIDATE_MIN_ASSISTANT_MSGS = 2
+const CANDIDATE_DISMISSED_KEY = 'pilos:dismissed-workflow-suggestions'
+
+function getDismissedConversationIds(): Set<string> {
+  if (typeof localStorage === 'undefined') return new Set()
+  try {
+    const raw = localStorage.getItem(CANDIDATE_DISMISSED_KEY)
+    return raw ? new Set(JSON.parse(raw)) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+function addDismissedConversationId(id: string) {
+  if (typeof localStorage === 'undefined') return
+  try {
+    const ids = getDismissedConversationIds()
+    ids.add(id)
+    const arr = [...ids].slice(-200)
+    localStorage.setItem(CANDIDATE_DISMISSED_KEY, JSON.stringify(arr))
+  } catch {
+    /* storage disabled — dismiss is best-effort */
+  }
+}
+
+function passesCandidateHeuristic(messages: ConversationMessage[]): boolean {
+  let toolUse = 0
+  let userText = 0
+  let assistantText = 0
+  for (const m of messages) {
+    if (m.type === 'tool_use') toolUse++
+    else if (m.type === 'text') {
+      if (m.role === 'user') userText++
+      else if (m.role === 'assistant') assistantText++
+    }
+  }
+  return (
+    toolUse >= CANDIDATE_MIN_TOOL_USE &&
+    userText >= CANDIDATE_MIN_USER_MSGS &&
+    assistantText >= CANDIDATE_MIN_ASSISTANT_MSGS
+  )
+}
+
+function collectUniqueTools(messages: ConversationMessage[]): string[] {
+  const set = new Set<string>()
+  for (const m of messages) {
+    if (m.type !== 'tool_use') continue
+    const block = m.contentBlocks?.[0] as ToolUseBlock | undefined
+    const name = block?.type === 'tool_use' ? block.name : m.toolName
+    if (name) set.add(name)
+  }
+  return [...set]
+}
 import type { Conversation, ConversationMessage, ContentBlock, ClaudeEvent, ImageAttachment, AgentDefinition, ToolUseBlock, ToolResultBlock, AskUserQuestionData, ExitPlanModeData } from '../types'
+
+/** Adapter: map the app's ConversationMessage down to the submodule's input shape. */
+function toInputMessages(messages: ConversationMessage[]): InputMessage[] {
+  return messages.map((m) => {
+    let toolName: string | undefined
+    if (m.type === 'tool_use') {
+      const block = m.contentBlocks?.[0] as ToolUseBlock | undefined
+      toolName = block?.type === 'tool_use' ? block.name : m.toolName
+    }
+    return { role: m.role, type: m.type, content: m.content, toolName }
+  })
+}
+
+const repetitionDetector = (() => {
+  const api = (typeof window !== 'undefined' ? window.api?.repetition : undefined)
+  if (!api) return null
+  return createDetector(createRendererStorage(api))
+})()
 
 export interface ProcessLogEntry {
   timestamp: number
@@ -57,6 +175,11 @@ interface ConversationStore {
   replyToMessage: ConversationMessage | null
   scrollToMessageId: number | null
   messageQueue: QueuedMessage[]
+  workflowSuggestion: WorkflowSuggestion | null
+  /** Conversations where the user explicitly stopped the loop. Presence of
+   * `/loop` in the message history is the source of truth for "loop active";
+   * this set lets us override that to hide the banner once the user stops. */
+  stoppedLoops: Record<string, boolean>
 
   // Actions
   loadConversations: (projectPath?: string) => Promise<void>
@@ -68,6 +191,7 @@ interface ConversationStore {
   queueMessage: (text: string, images?: ImageAttachment[]) => void
   clearMessageQueue: () => void
   abortSession: () => void
+  stopLoop: (conversationId?: string) => void
   respondPermission: (allowed: boolean, always?: boolean) => void
   respondToQuestion: (answers: Record<string, string>) => void
   respondToPlanExit: (approved: boolean, feedback?: string) => void
@@ -77,6 +201,7 @@ interface ConversationStore {
   resetStreaming: () => void
   setReplyTo: (msg: ConversationMessage | null) => void
   setScrollToMessageId: (id: number | null) => void
+  dismissWorkflowSuggestion: (mode: 'later' | 'never') => Promise<void>
 }
 
 const emptyStreaming: StreamingState = {
@@ -112,6 +237,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   replyToMessage: null,
   scrollToMessageId: null,
   messageQueue: [],
+  workflowSuggestion: null,
+  stoppedLoops: {},
 
   loadConversations: async (projectPath?: string) => {
     const conversations = await api.conversations.list(projectPath)
@@ -154,6 +281,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         replyToMessage: null,
         scrollToMessageId: null,
         messageQueue: [],
+        workflowSuggestion: null,
       }
     })
 
@@ -208,9 +336,13 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
   deleteConversation: async (id) => {
     await api.conversations.delete(id)
-    if (get().activeConversationId === id) {
-      set({ activeConversationId: null, messages: [] })
-    }
+    set((s) => {
+      const stopped = { ...s.stoppedLoops }
+      delete stopped[id]
+      return s.activeConversationId === id
+        ? { activeConversationId: null, messages: [], stoppedLoops: stopped }
+        : { stoppedLoops: stopped }
+    })
     const projectPath = useProjectStore.getState().activeProjectPath || ''
     await get().loadConversations(projectPath)
   },
@@ -225,6 +357,17 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     let conversationId = get().activeConversationId
     if (!conversationId) {
       conversationId = await get().createConversation(text.slice(0, 50))
+    }
+
+    // Clear any prior "stopped" flag — sending a new /loop reactivates the banner.
+    const trimmedStart = text.trimStart()
+    if (trimmedStart.startsWith('/loop ')) {
+      set((s) => {
+        if (!s.stoppedLoops[conversationId!]) return s
+        const stopped = { ...s.stoppedLoops }
+        delete stopped[conversationId!]
+        return { stoppedLoops: stopped }
+      })
     }
 
     // Capture and clear reply-to state
@@ -367,6 +510,28 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         return { isWaitingForResponse: false, streaming: { ...emptyStreaming }, messageQueue: [], bgSessions: bg }
       })
     }
+  },
+
+  stopLoop: (conversationId) => {
+    const id = conversationId ?? get().activeConversationId
+    if (!id) return
+    if (get().activeConversationId === id && get().isWaitingForResponse) {
+      api.claude.abort(id).catch((err) => console.error('[stopLoop] Failed to abort:', err))
+    }
+    set((s) => {
+      const bg = { ...s.bgSessions }
+      delete bg[id]
+      const patch: Partial<ConversationStore> = {
+        stoppedLoops: { ...s.stoppedLoops, [id]: true },
+        bgSessions: bg,
+      }
+      if (get().activeConversationId === id) {
+        patch.isWaitingForResponse = false
+        patch.streaming = { ...emptyStreaming }
+        patch.messageQueue = []
+      }
+      return patch as Partial<ConversationStore>
+    })
   },
 
   respondPermission: (allowed, always) => {
@@ -1084,4 +1249,144 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   setScrollToMessageId: (id) => {
     set({ scrollToMessageId: id })
   },
+
+  dismissWorkflowSuggestion: async (mode) => {
+    const suggestion = get().workflowSuggestion
+    set({ workflowSuggestion: null })
+    if (!suggestion) return
+    if (suggestion.tier === 'repeated' || suggestion.tier === 'matched_workflow') {
+      if (!repetitionDetector) return
+      await repetitionDetector
+        .dismissPattern(
+          suggestion.projectPath,
+          suggestion.match.bagHash,
+          mode === 'never' ? 'permanent' : 'cooldown',
+        )
+        .catch(() => {})
+    } else {
+      // Candidate-tier: silence by conversation id so we don't re-suggest on
+      // subsequent turns of the same chat. "never" is a no-op here — there's
+      // no cross-conversation pattern to mute yet.
+      addDismissedConversationId(suggestion.conversationId)
+    }
+  },
 }))
+
+// After each turn resolves (streaming: true → false):
+//   1. Run unified workflow-suggestion detection (repeated > candidate).
+//   2. Schedule embedding indexing so this conversation contributes to future
+//      cross-conversation matches.
+let _indexTimer: ReturnType<typeof setTimeout> | null = null
+useConversationStore.subscribe((state, prev) => {
+  if (!(prev.isWaitingForResponse && !state.isWaitingForResponse)) return
+
+  const cid = state.activeConversationId
+  const msgs = state.messages
+  if (!cid) return
+
+  // ── Unified workflow-suggestion detection ──────────────────────────────────
+  // Skip if we already have a suggestion for this conversation, or if the user
+  // dismissed one earlier in the session.
+  const existing = state.workflowSuggestion
+  const alreadySuggested = existing?.conversationId === cid
+  const dismissedThisConv = getDismissedConversationIds().has(cid)
+  if (!alreadySuggested && !dismissedThisConv) {
+    const projectPath = useProjectStore.getState().activeProjectPath || ''
+    const snapshot = toInputMessages(msgs)
+
+    const evaluate = async () => {
+      // Tier 1 — repetition detector (cross-conversation match).
+      if (repetitionDetector) {
+        try {
+          const match = await repetitionDetector.detect(cid, projectPath, snapshot)
+          if (match) {
+            if (useConversationStore.getState().activeConversationId !== cid) return
+            if (getDismissedConversationIds().has(cid)) return
+
+            // Elevation: if any matched conversation was already saved as a
+            // Task with a runnable workflow, surface "run existing" instead of
+            // "build a new one". `similarConversationIds` is ordered by score
+            // DESC, so picking the first hit respects ranking.
+            const tasks = useTaskStore.getState().tasks
+            const simSet = new Set(match.similarConversationIds)
+            let matchingTask = null as null | { taskId: string; title: string; nodes: number }
+            for (const sid of match.similarConversationIds) {
+              const t = tasks.find(
+                (tk) =>
+                  tk.sourceConversationId === sid &&
+                  tk.workflow?.nodes?.length &&
+                  tk.workflow.nodes.length > 0,
+              )
+              if (t) {
+                matchingTask = { taskId: t.id, title: t.title, nodes: t.workflow!.nodes.length }
+                break
+              }
+            }
+            // Fallback: also accept tasks whose source is the *primary* match
+            // even if it somehow slipped out of similarConversationIds.
+            if (!matchingTask && !simSet.has(match.primaryConversationId)) {
+              const t = tasks.find(
+                (tk) =>
+                  tk.sourceConversationId === match.primaryConversationId &&
+                  tk.workflow?.nodes?.length &&
+                  tk.workflow.nodes.length > 0,
+              )
+              if (t) {
+                matchingTask = { taskId: t.id, title: t.title, nodes: t.workflow!.nodes.length }
+              }
+            }
+
+            if (matchingTask) {
+              useConversationStore.setState({
+                workflowSuggestion: {
+                  tier: 'matched_workflow',
+                  conversationId: cid,
+                  projectPath,
+                  taskId: matchingTask.taskId,
+                  taskTitle: matchingTask.title,
+                  nodeCount: matchingTask.nodes,
+                  match,
+                },
+              })
+              return
+            }
+
+            useConversationStore.setState({
+              workflowSuggestion: { tier: 'repeated', conversationId: cid, projectPath, match },
+            })
+            return
+          }
+        } catch {
+          /* detector unavailable — fall through to candidate tier */
+        }
+      }
+
+      // Tier 2 — candidate heuristic (substantial single conversation).
+      if (passesCandidateHeuristic(msgs)) {
+        if (useConversationStore.getState().activeConversationId !== cid) return
+        if (getDismissedConversationIds().has(cid)) return
+        const toolCount = msgs.filter((m) => m.type === 'tool_use').length
+        const uniqueTools = collectUniqueTools(msgs)
+        useConversationStore.setState({
+          workflowSuggestion: {
+            tier: 'candidate',
+            conversationId: cid,
+            projectPath,
+            toolCount,
+            uniqueTools,
+          },
+        })
+      }
+    }
+
+    void evaluate()
+  }
+
+  // ── Embedding index (unchanged) ─────────────────────────────────────────────
+  if (repetitionDetector) {
+    if (_indexTimer) clearTimeout(_indexTimer)
+    _indexTimer = setTimeout(() => {
+      void repetitionDetector.indexForFutureMatches(cid, toInputMessages(msgs)).catch(() => {})
+    }, 30_000)
+  }
+})
