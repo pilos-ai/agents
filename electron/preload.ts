@@ -1,4 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron')
+import { bridgeRepetitionApi } from '../src/utils/repetition-detection/adapters/electron-preload'
 
 contextBridge.exposeInMainWorld('api', {
   // CLI Checker
@@ -84,6 +85,17 @@ contextBridge.exposeInMainWorld('api', {
     getSettings: (dirPath: string) => ipcRenderer.invoke('projects:getSettings', dirPath),
     setSettings: (dirPath: string, settings: Record<string, unknown>) =>
       ipcRenderer.invoke('projects:setSettings', dirPath, settings),
+  },
+
+  // Plugins
+  plugins: {
+    detect: (projectPath: string) => ipcRenderer.invoke('plugins:detect', projectPath),
+    listInstalled: (projectPath: string) =>
+      ipcRenderer.invoke('plugins:listInstalled', projectPath),
+    install: (projectPath: string, pluginName: string, marketplace: string) =>
+      ipcRenderer.invoke('plugins:install', projectPath, pluginName, marketplace),
+    uninstall: (projectPath: string, pluginName: string) =>
+      ipcRenderer.invoke('plugins:uninstall', projectPath, pluginName),
   },
 
   // Terminal
@@ -188,6 +200,16 @@ contextBridge.exposeInMainWorld('api', {
     showContextMenu: (text: string, isEditable?: boolean) => ipcRenderer.invoke('shell:showContextMenu', text, isEditable),
   },
 
+  // Clipboard — paste is routed through IPC because Electron's role:'paste'
+  // doesn't reliably fire DOM input events on React-controlled textareas.
+  clipboard: {
+    onPasteText: (callback: (text: string) => void) => {
+      const handler = (_event: unknown, text: string) => callback(text)
+      ipcRenderer.on('paste:text', handler)
+      return () => ipcRenderer.removeListener('paste:text', handler)
+    },
+  },
+
   // Jira
   jira: {
     setActiveProject: (projectPath: string) => ipcRenderer.invoke('jira:setActiveProject', projectPath),
@@ -222,6 +244,9 @@ contextBridge.exposeInMainWorld('api', {
     clearConversations: () => ipcRenderer.invoke('storage:clearConversations'),
     clearAllData: () => ipcRenderer.invoke('storage:clearAllData'),
   },
+
+  // Repetition detection — wired by the private submodule.
+  repetition: bridgeRepetitionApi(ipcRenderer),
 
   // Mobile / Pairing
   mobile: {
@@ -295,6 +320,15 @@ contextBridge.exposeInMainWorld('api', {
     },
     reportTaskCompleted: (data: { taskId: string; status: string; summary: string; taskTitle: string }) => {
       ipcRenderer.send('scheduler:task-completed', data)
+    },
+  },
+
+  // Deep links (pilos:// URLs from the OS)
+  deeplink: {
+    onReceived: (callback: (data: { action: string; params: Record<string, string> }) => void) => {
+      const handler = (_event: unknown, data: { action: string; params: Record<string, string> }) => callback(data)
+      ipcRenderer.on('deeplink:received', handler)
+      return () => ipcRenderer.removeListener('deeplink:received', handler)
     },
   },
 

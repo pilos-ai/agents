@@ -41,7 +41,7 @@ const stubAPI: ElectronAPI = {
   conversations: {
     list: () => Promise.resolve([]),
     get: noopAsync,
-    create: (title: string) => Promise.resolve({ id: crypto.randomUUID(), title, model: 'sonnet', working_directory: '', project_path: '', created_at: '', updated_at: '' }),
+    create: (title: string) => Promise.resolve({ id: crypto.randomUUID(), title, model: 'opus', working_directory: '', project_path: '', created_at: '', updated_at: '' }),
     updateTitle: noopAsync,
     delete: noopAsync,
     getMessages: () => Promise.resolve([]),
@@ -53,8 +53,14 @@ const stubAPI: ElectronAPI = {
     getRecent: () => Promise.resolve([]),
     addRecent: noopAsync,
     removeRecent: noopAsync,
-    getSettings: () => Promise.resolve({ model: 'sonnet', permissionMode: 'bypass', mode: 'solo' as const, agents: [], mcpServers: [] }),
+    getSettings: () => Promise.resolve({ model: 'opus', permissionMode: 'bypass', mode: 'solo' as const, agents: [], mcpServers: [] }),
     setSettings: noopAsync,
+  },
+  plugins: {
+    detect: () => Promise.resolve([]),
+    listInstalled: () => Promise.resolve([]),
+    install: () => Promise.resolve({ ok: true, stdout: '', stderr: '' }),
+    uninstall: () => Promise.resolve({ ok: true, stdout: '', stderr: '' }),
   },
   terminal: {
     create: noopAsync,
@@ -127,6 +133,12 @@ const stubAPI: ElectronAPI = {
   shell: {
     openPath: () => Promise.resolve(''),
     showContextMenu: (_text: string, _isEditable?: boolean) => Promise.resolve(),
+  },
+  clipboard: {
+    onPasteText: noopUnsub,
+  },
+  deeplink: {
+    onReceived: noopUnsub,
   },
   scheduler: {
     onTriggerTask: noopUnsub,

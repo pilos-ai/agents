@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Icon } from '../../common/Icon'
 import { useLicenseStore } from '../../../store/useLicenseStore'
 import { api } from '../../../api'
@@ -18,6 +18,19 @@ export default function LoginPage() {
   const error = useLicenseStore((s) => s.error)
   const loginWithKey = useLicenseStore((s) => s.loginWithKey)
   const recoverLicense = useLicenseStore((s) => s.recoverLicense)
+  const pendingActivation = useLicenseStore((s) => s.pendingActivation)
+  const setPendingActivation = useLicenseStore((s) => s.setPendingActivation)
+
+  // Pre-fill email + key when a pilos://activate deep link arrives. User still
+  // clicks "Activate & Sign In" — this is intentional confirmation, not auto-login.
+  useEffect(() => {
+    if (pendingActivation?.key) {
+      setMode('login')
+      if (pendingActivation.email) setEmail(pendingActivation.email)
+      setLicenseKey(pendingActivation.key)
+      setPendingActivation(null)
+    }
+  }, [pendingActivation, setPendingActivation])
 
   const handleLogin = async () => {
     if (!email.trim()) return

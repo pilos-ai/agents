@@ -38,6 +38,11 @@ mac:
         - arm64
   darkModeSupport: true
 
+protocols:
+  - name: Pilos Agents
+    schemes:
+      - pilos
+
 win:
   target:
     - target: nsis

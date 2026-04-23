@@ -3,6 +3,7 @@ import { NavigationSidebar } from './NavigationSidebar'
 import { HeaderBar } from './HeaderBar'
 import { ViewRouter } from './ViewRouter'
 import { CommandPalette } from './CommandPalette'
+import { ExpiryBanner } from './ExpiryBanner'
 import { SearchPanel } from '../chat/SearchPanel'
 import { useSearchStore } from '../../store/useSearchStore'
 import { useAppStore } from '../../store/useAppStore'
@@ -119,6 +120,7 @@ export function V2Layout() {
       <NavigationSidebar />
       <main className="flex-1 flex flex-col overflow-hidden">
         <HeaderBar {...getActionProps()} onOpenPalette={openPalette} />
+        <ExpiryBanner />
         <ViewRouter view={activeView} />
       </main>
       <CommandPalette open={paletteOpen} onClose={closePalette} />

@@ -1,10 +1,24 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useLicenseStore } from '../../store/useLicenseStore'
+import { api } from '../../api'
 
 const TIER_COLORS: Record<string, string> = {
   free: 'bg-neutral-700 text-neutral-300',
   pro: 'bg-amber-500/20 text-amber-400',
   teams: 'bg-purple-500/20 text-purple-400',
+}
+
+const MS_PER_DAY = 1000 * 60 * 60 * 24
+
+function formatExpiry(expiresAt: string | null): { label: string; daysLeft: number | null; tone: 'muted' | 'warn' | 'expired' } {
+  if (!expiresAt) return { label: 'Perpetual', daysLeft: null, tone: 'muted' }
+  const date = new Date(expiresAt)
+  const daysLeft = Math.ceil((date.getTime() - Date.now()) / MS_PER_DAY)
+  const dateStr = date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  if (daysLeft <= 0) return { label: `Expired ${dateStr}`, daysLeft, tone: 'expired' }
+  const plural = daysLeft === 1 ? 'day' : 'days'
+  const tone: 'warn' | 'muted' = daysLeft <= 7 ? 'warn' : 'muted'
+  return { label: `${dateStr} · ${daysLeft} ${plural} left`, daysLeft, tone }
 }
 
 export function LicenseSection() {
@@ -16,9 +30,22 @@ export function LicenseSection() {
   const activateLicense = useLicenseStore((s) => s.activateLicense)
   const deactivateLicense = useLicenseStore((s) => s.deactivateLicense)
   const loginWithKey = useLicenseStore((s) => s.loginWithKey)
+  const pendingActivation = useLicenseStore((s) => s.pendingActivation)
+  const setPendingActivation = useLicenseStore((s) => s.setPendingActivation)
+  const expiresAt = useLicenseStore((s) => s.expiresAt)
+  const isTrial = useLicenseStore((s) => s.isTrial)
 
   const [keyInput, setKeyInput] = useState('')
   const [emailInput, setEmailInput] = useState('')
+
+  // Deep link pre-fill (user landed here via pilos://activate). Don't auto-submit.
+  useEffect(() => {
+    if (pendingActivation?.key) {
+      setKeyInput(pendingActivation.key)
+      if (pendingActivation.email && !email) setEmailInput(pendingActivation.email)
+      setPendingActivation(null)
+    }
+  }, [pendingActivation, email, setPendingActivation])
 
   const handleActivate = async () => {
     if (!keyInput.trim()) return
@@ -58,7 +85,31 @@ export function LicenseSection() {
                 <span className="text-xs text-neutral-300">{email}</span>
               </div>
             )}
+            {(() => {
+              const expiry = formatExpiry(expiresAt)
+              const toneClass = expiry.tone === 'expired'
+                ? 'text-red-400'
+                : expiry.tone === 'warn'
+                ? 'text-amber-400'
+                : 'text-neutral-300'
+              return (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-neutral-400">
+                    {isTrial ? 'Trial ends' : 'Expires'}
+                  </span>
+                  <span className={`text-xs ${toneClass}`}>{expiry.label}</span>
+                </div>
+              )
+            })()}
           </div>
+          {(isTrial || (expiresAt && formatExpiry(expiresAt).tone !== 'muted')) && (
+            <button
+              onClick={() => api.dialog.openExternal('https://pilos.net/pricing')}
+              className="w-full px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold rounded-md transition-colors"
+            >
+              {isTrial ? 'Upgrade to Keep Pro Access' : 'Renew Subscription'}
+            </button>
+          )}
           <button
             onClick={deactivateLicense}
             disabled={isValidating}

@@ -12,6 +12,37 @@ export interface ProjectSettings {
   mode: ProjectMode      // default 'solo'
   agents: AgentDefinition[] // default []
   mcpServers: McpServer[]   // default []
+  pluginsInstalled?: string[] // cached list of installed Claude Code plugin IDs
+}
+
+// ── Claude Code Plugins ──
+
+export interface DetectedPluginDto {
+  plugin: {
+    id: string
+    marketplace: string
+    name: string
+    description: string
+    category: string
+    rationale: string
+    baseline?: boolean
+  }
+  matched: boolean
+  reason: string
+}
+
+export interface InstalledPluginDto {
+  name: string
+  marketplace?: string
+  scope?: string
+  enabled?: boolean
+}
+
+export interface PluginInstallResult {
+  ok: boolean
+  stdout: string
+  stderr: string
+  error?: string
 }
 
 // ── Claude CLI Event Types ──
@@ -526,6 +557,12 @@ export interface ElectronAPI {
     getSettings: (dirPath: string) => Promise<ProjectSettings>
     setSettings: (dirPath: string, settings: Partial<ProjectSettings>) => Promise<void>
   }
+  plugins: {
+    detect: (projectPath: string) => Promise<DetectedPluginDto[]>
+    listInstalled: (projectPath: string) => Promise<InstalledPluginDto[]>
+    install: (projectPath: string, pluginName: string, marketplace: string) => Promise<PluginInstallResult>
+    uninstall: (projectPath: string, pluginName: string) => Promise<PluginInstallResult>
+  }
   terminal: {
     create: (id: string, options?: Record<string, unknown>) => Promise<void>
     write: (id: string, data: string) => Promise<void>
@@ -572,6 +609,11 @@ export interface ElectronAPI {
     clearConversations: () => Promise<void>
     clearAllData: () => Promise<void>
   }
+  /**
+   * Owned by the `repetition-detection` private submodule.
+   * Shape defined in `src/utils/repetition-detection/adapters/electron-preload.ts`.
+   */
+  repetition?: import('./utils/repetition-detection/adapters/electron-preload').RepetitionRendererApi
   metrics: {
     setLicenseKey: (key: string) => Promise<void>
     getMachineId: () => Promise<string>
@@ -583,6 +625,12 @@ export interface ElectronAPI {
   shell: {
     openPath: (path: string) => Promise<string>
     showContextMenu: (text: string, isEditable?: boolean) => Promise<void>
+  }
+  clipboard: {
+    onPasteText: (callback: (text: string) => void) => () => void
+  }
+  deeplink?: {
+    onReceived: (callback: (data: { action: string; params: Record<string, string> }) => void) => () => void
   }
   jira?: {
     setActiveProject: (projectPath: string) => Promise<void>

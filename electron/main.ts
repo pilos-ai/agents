@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, ipcMain } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain, clipboard } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { registerIpcHandlers } from './ipc-handlers'
@@ -23,12 +23,91 @@ app.setName('Pilos Agents')
 // Disable hardware acceleration to prevent GPU process crashes on macOS
 app.disableHardwareAcceleration()
 
+const PROTOCOL = 'pilos'
+
+// Single-instance lock — required so pilos:// links on Windows/Linux route to
+// the running app instead of spawning a second process.
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) {
+  app.quit()
+}
+
+// Register as default handler for pilos:// URLs. In dev, Electron needs the
+// executable path + a script arg so the OS can re-launch us with the URL.
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])])
+  }
+} else {
+  app.setAsDefaultProtocolClient(PROTOCOL)
+}
+
 let mainWindow: BrowserWindow | null = null
 let metricsCollector: MetricsCollector | null = null
 let trayManager: TrayManager | null = null
 let taskScheduler: TaskScheduler | null = null
 let relayClient: RelayClient | null = null
 let isQuitting = false
+
+// Deep link handling. URL may arrive before mainWindow / renderer is ready —
+// queue it and flush once the window reports it has loaded.
+let pendingDeepLink: string | null = null
+let rendererReady = false
+
+function parseDeepLink(url: string): { action: string; params: Record<string, string> } | null {
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== `${PROTOCOL}:`) return null
+    // pilos://activate?key=...&email=... — URL parses host as 'activate'
+    const action = parsed.hostname || parsed.pathname.replace(/^\/+/, '')
+    const params: Record<string, string> = {}
+    parsed.searchParams.forEach((v, k) => { params[k] = v })
+    return { action, params }
+  } catch {
+    return null
+  }
+}
+
+function sendDeepLinkToRenderer(url: string) {
+  const parsed = parseDeepLink(url)
+  if (!parsed) return
+  mainWindow?.webContents.send('deeplink:received', parsed)
+}
+
+function handleDeepLink(url: string) {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  }
+  if (rendererReady && mainWindow) {
+    sendDeepLinkToRenderer(url)
+  } else {
+    pendingDeepLink = url
+  }
+}
+
+// Find a pilos:// URL in the argv array (Windows/Linux pass it on launch or second-instance).
+function findProtocolUrlInArgv(argv: string[]): string | null {
+  return argv.find((arg) => arg.startsWith(`${PROTOCOL}://`)) || null
+}
+
+// macOS: URL is delivered via the open-url event (app already running or cold start).
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  handleDeepLink(url)
+})
+
+// Windows/Linux: second launch with the URL in argv — focus the running window and route the URL.
+app.on('second-instance', (_event, argv) => {
+  const url = findProtocolUrlInArgv(argv)
+  if (url) handleDeepLink(url)
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  }
+})
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -57,6 +136,14 @@ async function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow!.show()
+  })
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    rendererReady = true
+    if (pendingDeepLink) {
+      sendDeepLinkToRenderer(pendingDeepLink)
+      pendingDeepLink = null
+    }
   })
 
   const settings = new SettingsStore()
@@ -97,7 +184,13 @@ async function createWindow() {
         items.push({ label: 'Add to Dictionary', click: () => mainWindow?.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord) })
         items.push({ type: 'separator' })
       }
-      items.push({ role: 'cut' }, { role: 'copy' }, { type: 'separator' }, { role: 'paste' }, { role: 'selectAll' })
+      items.push(
+        { role: 'cut' },
+        { role: 'copy' },
+        { type: 'separator' },
+        { label: 'Paste', click: () => mainWindow?.webContents.send('paste:text', clipboard.readText()) },
+        { role: 'selectAll' },
+      )
       Menu.buildFromTemplate(items).popup({ window: mainWindow ?? undefined })
     }
   })
@@ -158,6 +251,9 @@ app.on('before-quit', async () => {
 
 app.whenReady().then(() => {
   ensureGlobalClaudeConfig()
+  // Windows/Linux cold start with pilos:// URL — capture before window exists.
+  const coldStartUrl = findProtocolUrlInArgv(process.argv)
+  if (coldStartUrl) pendingDeepLink = coldStartUrl
   createWindow()
 })
 

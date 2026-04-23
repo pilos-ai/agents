@@ -69,7 +69,46 @@ export default function App() {
       useConversationStore.getState().handleMobileMessage(conversationId, message, images)
     })
 
-    return () => { unsub(); unsubMobile() }
+    // Deep link handler — pilos://activate?key=X&email=Y opens the app with
+    // the trial/paid activation pre-filled. Navigate to Settings if user is
+    // already signed in so the LicenseSection is visible.
+    const unsubDeepLink = api.deeplink?.onReceived?.(({ action, params }) => {
+      if (action === 'activate' && params.key) {
+        useLicenseStore.getState().setPendingActivation({
+          key: params.key,
+          email: params.email || '',
+        })
+        if (useLicenseStore.getState().isAuthenticated) {
+          useAppStore.getState().setActiveView('settings')
+        }
+      }
+    }) ?? (() => {})
+
+    // Global paste handler. Main process sends `paste:text` for Cmd+V and
+    // context-menu Paste. We splice into the focused input/textarea using the
+    // native value setter + a bubbled `input` event so React's onChange fires.
+    const unsubPaste = api.clipboard?.onPasteText?.((text) => {
+      if (!text) return
+      const el = document.activeElement as HTMLElement | null
+      if (!el) return
+      if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) {
+        const start = el.selectionStart ?? el.value.length
+        const end = el.selectionEnd ?? el.value.length
+        const next = el.value.slice(0, start) + text + el.value.slice(end)
+        const proto = el instanceof HTMLTextAreaElement
+          ? HTMLTextAreaElement.prototype
+          : HTMLInputElement.prototype
+        const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set
+        setter?.call(el, next)
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+        const pos = start + text.length
+        el.setSelectionRange(pos, pos)
+      } else if (el.isContentEditable) {
+        document.execCommand('insertText', false, text)
+      }
+    }) ?? (() => {})
+
+    return () => { unsub(); unsubMobile(); unsubPaste(); unsubDeepLink() }
   }, [])
 
   // Sync active project to menu

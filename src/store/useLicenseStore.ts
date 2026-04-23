@@ -40,6 +40,8 @@ interface PilosAuth {
   licenseKey?: string
   tier: LicenseTier
   features?: string[]
+  expiresAt?: string | null
+  isTrial?: boolean
 }
 
 interface LicenseStore {
@@ -52,6 +54,9 @@ interface LicenseStore {
   machineMismatch: boolean
   error: string | null
   flags: ProFeatureFlags
+  pendingActivation: { key: string; email: string } | null
+  expiresAt: string | null
+  isTrial: boolean
 
   checkLicense: () => Promise<void>
   activateLicense: (key: string) => Promise<{ valid: boolean; error?: string }>
@@ -60,6 +65,7 @@ interface LicenseStore {
   logout: () => Promise<void>
   loadAuthState: () => Promise<void>
   recoverLicense: (email: string) => Promise<{ found: boolean; key?: string; error?: string }>
+  setPendingActivation: (data: { key: string; email: string } | null) => void
 }
 
 export const useLicenseStore = create<LicenseStore>((set, get) => ({
@@ -72,6 +78,11 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
   machineMismatch: false,
   error: null,
   flags: { ...FREE_LIMITS },
+  pendingActivation: null,
+  expiresAt: null,
+  isTrial: false,
+
+  setPendingActivation: (data) => set({ pendingActivation: data }),
 
   loadAuthState: async () => {
     try {
@@ -83,6 +94,8 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
           licenseKey: auth.licenseKey || null,
           tier: auth.tier || 'free',
           flags: applyFeatures(getFlagsForTier(auth.tier || 'free'), auth.features),
+          expiresAt: auth.expiresAt || null,
+          isTrial: !!auth.isTrial,
           isAuthenticated: true,
           authLoaded: true,
         })
@@ -115,13 +128,17 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
         if (result.valid && result.license) {
           const tier = result.license.plan as LicenseTier
           const features = result.features || []
-          const authData: PilosAuth = { email, licenseKey: key, tier, features }
+          const expiresAt = result.license.expiresAt ?? null
+          const isTrial = !!result.license.isTrial
+          const authData: PilosAuth = { email, licenseKey: key, tier, features, expiresAt, isTrial }
           await api.settings.set('pilos_auth', authData)
           set({
             tier,
             licenseKey: key,
             email,
             flags: applyFeatures(getFlagsForTier(tier), features),
+            expiresAt,
+            isTrial,
             error: null,
             isValidating: false,
             isAuthenticated: true,
@@ -195,6 +212,8 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
       licenseKey: null,
       email: null,
       flags: getFlagsForTier('free'),
+      expiresAt: null,
+      isTrial: false,
       error: null,
       isValidating: false,
       isAuthenticated: false,
@@ -231,13 +250,17 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
       if (result.valid && result.license) {
         const tier = result.license.plan as LicenseTier
         const features = result.features || []
-        const authData: PilosAuth = { email: get().email || result.license.email || '', licenseKey: result.license.key, tier, features }
+        const expiresAt = result.license.expiresAt ?? null
+        const isTrial = !!result.license.isTrial
+        const authData: PilosAuth = { email: get().email || result.license.email || '', licenseKey: result.license.key, tier, features, expiresAt, isTrial }
         api.settings.set('pilos_auth', authData).catch((err) => console.error('[LicenseStore]', err))
         set({
           tier,
           licenseKey: result.license.key,
           email: get().email || result.license.email,
           flags: applyFeatures(getFlagsForTier(tier), features),
+          expiresAt,
+          isTrial,
           isValidating: false,
           machineMismatch: false,
         })
@@ -247,7 +270,7 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
         set({ isValidating: false })
       } else {
         // Explicit invalidity from server (expired, invalid key, etc.)
-        set({ tier: 'free', licenseKey: null, flags: getFlagsForTier('free'), isValidating: false })
+        set({ tier: 'free', licenseKey: null, flags: getFlagsForTier('free'), expiresAt: null, isTrial: false, isValidating: false })
       }
     } catch {
       // Network/infrastructure error — preserve current tier from settings
@@ -272,13 +295,17 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
         const tier = result.license.plan as LicenseTier
         const features = result.features || []
         const authEmail = get().email || result.license.email
-        const authData: PilosAuth = { email: authEmail || '', licenseKey: key, tier, features }
+        const expiresAt = result.license.expiresAt ?? null
+        const isTrial = !!result.license.isTrial
+        const authData: PilosAuth = { email: authEmail || '', licenseKey: key, tier, features, expiresAt, isTrial }
         await api.settings.set('pilos_auth', authData)
         set({
           tier,
           licenseKey: result.license.key,
           email: authEmail,
           flags: applyFeatures(getFlagsForTier(tier), features),
+          expiresAt,
+          isTrial,
           error: null,
           isValidating: false,
           machineMismatch: false,
@@ -319,6 +346,8 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
       tier: 'free',
       licenseKey: null,
       flags: getFlagsForTier('free'),
+      expiresAt: null,
+      isTrial: false,
       error: null,
       isValidating: false,
       machineMismatch: false,
