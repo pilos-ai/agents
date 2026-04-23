@@ -38,6 +38,9 @@ function optionalPackageStubs(): import('vite').Plugin {
 const computerUsePath = 'packages/computer-use/electron/computer-use-mcp-server.ts'
 const hasComputerUse = fs.existsSync(path.resolve(__dirname, computerUsePath))
 
+// Required submodule — the app won't build without it. Alias is always added.
+const repetitionDetectionPath = path.resolve(__dirname, 'packages/repetition-detection')
+
 const electronEntries: Parameters<typeof electron>[0] = [
   {
     entry: 'electron/main.ts',
@@ -48,9 +51,10 @@ const electronEntries: Parameters<typeof electron>[0] = [
         'process.env.ATLASSIAN_CLIENT_SECRET': JSON.stringify(env.ATLASSIAN_CLIENT_SECRET || ''),
       },
       resolve: {
-        alias: hasPmPackage
-          ? { '@pilos/agents-pm': path.resolve(__dirname, 'packages/pm') }
-          : {},
+        alias: {
+          '@pilos/repetition-detection': repetitionDetectionPath,
+          ...(hasPmPackage ? { '@pilos/agents-pm': path.resolve(__dirname, 'packages/pm') } : {}),
+        },
       },
       build: {
         outDir: 'dist-electron',
@@ -81,6 +85,11 @@ const electronEntries: Parameters<typeof electron>[0] = [
       args.reload()
     },
     vite: {
+      resolve: {
+        alias: {
+          '@pilos/repetition-detection': repetitionDetectionPath,
+        },
+      },
       build: {
         outDir: 'dist-electron',
         rollupOptions: {
@@ -123,6 +132,7 @@ if (hasComputerUse) {
 
 const rendererAliases: Record<string, string> = {
   '@': path.resolve(__dirname, 'src'),
+  '@pilos/repetition-detection': repetitionDetectionPath,
 }
 if (hasPmPackage) rendererAliases['@pilos/agents-pm'] = path.resolve(__dirname, 'packages/pm')
 if (hasProPackage) rendererAliases['@pilos/pro'] = path.resolve(__dirname, 'packages/pro')
