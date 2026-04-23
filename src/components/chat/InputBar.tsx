@@ -201,9 +201,11 @@ export function InputBar() {
     }
   }
 
-  // Image paste only — plain text paste is handled globally in App.tsx via
-  // the main process IPC `paste:text` channel (Electron's role:'paste'
-  // doesn't reliably fire DOM events on React-controlled textareas).
+  // Images from the native paste event. When the clipboard holds an image,
+  // the main process uses webContents.paste() so the DOM event fires here.
+  // Text-only clipboards are routed through the IPC paste:text channel (see
+  // App.tsx) to work around role:'paste' missing input events on controlled
+  // textareas.
   const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items
     if (!items) return

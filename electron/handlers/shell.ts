@@ -36,7 +36,15 @@ export function registerShellHandlers(getSpellParams?: () => SpellParams) {
       if (text) items.push({ type: 'separator' })
       items.push({
         label: 'Paste',
-        click: () => win?.webContents.send('paste:text', clipboard.readText()),
+        click: () => {
+          if (!win) return
+          const image = clipboard.readImage()
+          if (!image.isEmpty()) {
+            win.webContents.paste()
+          } else {
+            win.webContents.send('paste:text', clipboard.readText())
+          }
+        },
       })
     }
     items.push({ role: 'selectAll' })

@@ -188,7 +188,18 @@ async function createWindow() {
         { role: 'cut' },
         { role: 'copy' },
         { type: 'separator' },
-        { label: 'Paste', click: () => mainWindow?.webContents.send('paste:text', clipboard.readText()) },
+        {
+          label: 'Paste',
+          click: () => {
+            if (!mainWindow) return
+            const image = clipboard.readImage()
+            if (!image.isEmpty()) {
+              mainWindow.webContents.paste()
+            } else {
+              mainWindow.webContents.send('paste:text', clipboard.readText())
+            }
+          },
+        },
         { role: 'selectAll' },
       )
       Menu.buildFromTemplate(items).popup({ window: mainWindow ?? undefined })

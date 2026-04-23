@@ -85,13 +85,24 @@ function rebuildMenu() {
       { role: 'cut' },
       { role: 'copy' },
       {
-        // Custom paste: Electron's role:'paste' in Chromium 40+ doesn't always
-        // fire native `input`/`paste` events on React-controlled textareas,
-        // so the controlled state goes stale. We route through IPC and let
-        // the renderer splice at the cursor with a React-aware value setter.
+        // Hybrid paste. For text-only clipboards we route through IPC so the
+        // renderer can splice into React-controlled textareas with a
+        // React-aware value setter (role:'paste' in Chromium 40+ sometimes
+        // misses DOM input events on controlled inputs). When the clipboard
+        // holds an image, we fall back to webContents.paste() so the native
+        // DOM paste event fires and InputBar's handlePaste can pick up the
+        // image File via clipboardData.items.
         label: 'Paste',
         accelerator: 'CmdOrCtrl+V',
-        click: () => send('paste:text', clipboard.readText()),
+        click: () => {
+          if (win.isDestroyed()) return
+          const image = clipboard.readImage()
+          if (!image.isEmpty()) {
+            win.webContents.paste()
+          } else {
+            send('paste:text', clipboard.readText())
+          }
+        },
       },
       { role: 'selectAll' },
     ],
