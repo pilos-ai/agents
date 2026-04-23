@@ -31,7 +31,7 @@ jobs:
       - name: Checkout required submodules
         run: |
           git config --global url."https://x-access-token:${{ secrets.SUBMODULE_PAT }}@github.com/".insteadOf "git@github.com:"
-          git submodule update --init packages/pro packages/pm
+          git submodule update --init packages/pro packages/pm packages/repetition-detection
 
       - uses: actions/setup-python@v5.6.0
         with:
