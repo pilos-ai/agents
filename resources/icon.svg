@@ -1,14 +1,17 @@
-<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g clip-path="url(#clip0_15_2)">
-<rect width="1024" height="1024" fill="#0B0B0E"/>
-<path d="M796 0H228C102.079 0 0 102.079 0 228V796C0 921.921 102.079 1024 228 1024H796C921.921 1024 1024 921.921 1024 796V228C1024 102.079 921.921 0 796 0Z" fill="#0B0B0E"/>
-<path d="M512 148L876 512L512 876L148 512L512 148Z" fill="#4375EF"/>
-<path d="M512 210L814 512L512 814L210 512L512 210Z" fill="#0C0F1A"/>
-<path d="M512 314L710 512L512 710L314 512L512 314Z" fill="#4375EF"/>
-</g>
-<defs>
-<clipPath id="clip0_15_2">
-<rect width="1024" height="1024" fill="white"/>
-</clipPath>
-</defs>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024"
+     xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7c7ff5"/>
+      <stop offset="1" stop-color="#4a4dc4"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="240" fill="url(#bg)"/>
+  <path d="M 260 638 L 512 386 L 764 638"
+        fill="none"
+        stroke="white"
+        stroke-width="92"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-opacity="0.95"/>
 </svg>
