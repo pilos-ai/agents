@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useRef } from 'react'
 import type { AppView } from '../../store/useAppStore'
 import { useProjectStore } from '../../store/useProjectStore'
 
@@ -35,12 +35,31 @@ export function ViewRouter({ view }: { view: AppView }) {
   // routes to chat (guards against stale per-project view memory and any
   // openProject path that didn't go through the store-layer migration).
   const v = hasProject && migrate(view) === 'dashboard' ? 'chat' : migrate(view)
+
+  // Terminal must persist its xterm.js instance across tab switches — otherwise
+  // tearing it down kills the renderer-side display state (scrollback, prompt,
+  // in-flight output) even though the PTY in main process keeps running. We
+  // mount it lazily on first visit, then keep it in the tree behind display:none.
+  const terminalVisited = useRef(false)
+  if (v === 'terminal') terminalVisited.current = true
+
   return (
     <Suspense fallback={<ViewLoading />}>
       {v === 'dashboard' && <DashboardPage />}
       {v === 'chat' && <ChatPage />}
       {v === 'workflows' && <WorkflowsPage />}
-      {v === 'terminal' && <TerminalPage />}
+      {terminalVisited.current && (
+        <div
+          className="flex flex-col"
+          style={{
+            flex: v === 'terminal' ? '1 1 0' : '0 0 0',
+            minHeight: 0,
+            display: v === 'terminal' ? 'flex' : 'none',
+          }}
+        >
+          <TerminalPage />
+        </div>
+      )}
       {v === 'analytics' && <AnalyticsPage />}
       {v === 'agents' && <AgentsPage />}
       {v === 'mcp' && <McpPage />}

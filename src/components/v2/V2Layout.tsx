@@ -55,7 +55,7 @@ export function V2Layout() {
         <PilosTitlebar />
         <div className="win-body">
           <PilosRail />
-          <main className="flex-1 min-w-0 flex flex-col overflow-hidden" key={activeView}>
+          <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
             <ExpiryBanner />
             <ViewRouter view={activeView} />
           </main>
