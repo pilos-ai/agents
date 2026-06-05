@@ -16,16 +16,17 @@ import {
 } from '@pilos/repetition-detection'
 
 /**
- * Workflow suggestion shape exposed to the UI. Three tiers, strongest first:
- *  - `matched_workflow` → repetition detector matched a prior conversation that
- *                         was already saved as a Task. We can skip "build a
- *                         workflow" and offer to run the existing one.
- *  - `repeated`         → cross-conversation repetition detector found ≥N similar
- *                         prior conversations. Strong signal; copy emphasises
- *                         "you've done this before" — offer to save as workflow.
- *  - `candidate`        → no prior match, but the conversation is substantial
- *                         enough (≥3 tool calls, ≥2 turns each side) that it's
- *                         probably worth offering to save as a workflow.
+ * Workflow suggestion shape exposed to the UI. ALL tiers are now backed by the
+ * cross-conversation repetition detector — we never nag on a one-off chat.
+ * Strongest first:
+ *  - `matched_workflow` → a similar prior conversation was already saved as a
+ *                         Task with a runnable workflow. Offer to RUN it instead
+ *                         of rebuilding it.
+ *  - `repeated`         → ≥2 similar prior conversations. Strong "you keep doing
+ *                         this" signal; offer to save it as a workflow.
+ *  - `candidate`        → exactly 1 similar prior conversation (the *second*
+ *                         time you've done something). Softer "save this for
+ *                         next time?" nudge — still real repetition, not a guess.
  */
 export type WorkflowSuggestion =
   | {
@@ -50,11 +51,10 @@ export type WorkflowSuggestion =
       projectPath: string
       toolCount: number
       uniqueTools: string[]
+      /** Present so dismiss() can mute the pattern by bagHash like the other tiers. */
+      match: RepetitionMatch
     }
 
-const CANDIDATE_MIN_TOOL_USE = 3
-const CANDIDATE_MIN_USER_MSGS = 2
-const CANDIDATE_MIN_ASSISTANT_MSGS = 2
 const CANDIDATE_DISMISSED_KEY = 'pilos:dismissed-workflow-suggestions'
 
 function getDismissedConversationIds(): Set<string> {
@@ -77,24 +77,6 @@ function addDismissedConversationId(id: string) {
   } catch {
     /* storage disabled — dismiss is best-effort */
   }
-}
-
-function passesCandidateHeuristic(messages: ConversationMessage[]): boolean {
-  let toolUse = 0
-  let userText = 0
-  let assistantText = 0
-  for (const m of messages) {
-    if (m.type === 'tool_use') toolUse++
-    else if (m.type === 'text') {
-      if (m.role === 'user') userText++
-      else if (m.role === 'assistant') assistantText++
-    }
-  }
-  return (
-    toolUse >= CANDIDATE_MIN_TOOL_USE &&
-    userText >= CANDIDATE_MIN_USER_MSGS &&
-    assistantText >= CANDIDATE_MIN_ASSISTANT_MSGS
-  )
 }
 
 function collectUniqueTools(messages: ConversationMessage[]): string[] {
@@ -165,6 +147,15 @@ interface ConversationStore {
   isWaitingForResponse: boolean
   hasActiveSession: boolean
   isLoadingMessages: boolean
+  // ── Cursor-based backwards pagination (Slack/Discord style) ────────────────
+  // `oldestLoadedMessageId` is the cursor (id of the oldest message currently
+  // in `messages`); `loadOlderMessages` requests rows older than this id.
+  // `hasMoreOlder` flips to false when the SQLite handler returns no further
+  // rows. Both reset to the initial page on `setActiveConversation` and to
+  // empty on new/cleared conversations.
+  hasMoreOlder: boolean
+  isLoadingOlder: boolean
+  oldestLoadedMessageId: number | null
   // background sessions: conversations processing while another is active
   bgSessions: Record<string, { streamingText: string; isWaiting: boolean }>
   permissionRequest: { sessionId: string; toolName: string; toolInput: Record<string, unknown> } | null
@@ -184,6 +175,8 @@ interface ConversationStore {
   // Actions
   loadConversations: (projectPath?: string) => Promise<void>
   setActiveConversation: (id: string | null) => Promise<void>
+  loadOlderMessages: () => Promise<void>
+  ensureMessageLoaded: (messageId: number) => Promise<void>
   createConversation: (title?: string) => Promise<string>
   deleteConversation: (id: string) => Promise<void>
   renameConversation: (id: string, title: string) => Promise<void>
@@ -203,6 +196,10 @@ interface ConversationStore {
   setScrollToMessageId: (id: number | null) => void
   dismissWorkflowSuggestion: (mode: 'later' | 'never') => Promise<void>
 }
+
+// Pagination tuning — exported for the UI loader threshold + tests.
+export const MESSAGES_PAGE_SIZE = 50
+const ENSURE_MESSAGE_MAX_PAGES = 10
 
 const emptyStreaming: StreamingState = {
   text: '',
@@ -228,6 +225,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   isWaitingForResponse: false,
   hasActiveSession: false,
   isLoadingMessages: false,
+  hasMoreOlder: false,
+  isLoadingOlder: false,
+  oldestLoadedMessageId: null,
   bgSessions: {},
   permissionRequest: null,
   permissionQueue: [],
@@ -274,6 +274,11 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         hasActiveSession: inProgress,
         isWaitingForResponse: inProgress,
         isLoadingMessages: !!id,
+        // Reset pagination cursor — next page load resolves these once the
+        // initial batch returns.
+        hasMoreOlder: false,
+        isLoadingOlder: false,
+        oldestLoadedMessageId: null,
         permissionRequest: null,
         permissionQueue: [],
         askUserQuestion: null,
@@ -292,10 +297,17 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     }
 
     if (id) {
-      const loaded = await api.conversations.getMessages(id)
+      // Cursor-based load: most-recent page only. `loadOlderMessages` pages backwards
+      // when the user scrolls up; `ensureMessageLoaded` does the same for search jumps.
+      const { messages: loaded, hasMore } = await api.conversations.getMessagesPage(id, MESSAGES_PAGE_SIZE)
+
+      // If the user already navigated away while we were awaiting, abort so we
+      // don't overwrite the new conversation's messages.
+      if (get().activeConversationId !== id) return
 
       // For old messages without agent attribution, re-parse [AgentName] markers
       const tab = getActiveProjectTab()
+      let finalMessages: ConversationMessage[]
       if (tab?.mode === 'team' && tab.agents.length > 0) {
         const messages: ConversationMessage[] = []
         for (const msg of loaded) {
@@ -319,10 +331,129 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
             messages.push(msg)
           }
         }
-        set({ messages, isLoadingMessages: false })
+        finalMessages = messages
       } else {
-        set({ messages: loaded, isLoadingMessages: false })
+        finalMessages = loaded
       }
+
+      // The cursor tracks the oldest *raw* DB row we've fetched — not the
+      // post-split agent segments — so we read it from `loaded[0]`.
+      const oldestId = loaded[0]?.id ?? null
+      set({
+        messages: finalMessages,
+        isLoadingMessages: false,
+        hasMoreOlder: hasMore,
+        oldestLoadedMessageId: oldestId,
+      })
+    }
+  },
+
+  /**
+   * Fetch the next batch of older messages and prepend them. No-op when there
+   * are no more rows, a load is in flight, or there's no active conversation.
+   * The ChatPage scroll handler calls this when the user scrolls within ~150px
+   * of the top.
+   */
+  loadOlderMessages: async () => {
+    const state = get()
+    const convId = state.activeConversationId
+    if (!convId) return
+    if (!state.hasMoreOlder || state.isLoadingOlder) return
+    if (state.oldestLoadedMessageId == null) return
+
+    set({ isLoadingOlder: true })
+    try {
+      const { messages: olderRaw, hasMore } = await api.conversations.getMessagesPage(
+        convId,
+        MESSAGES_PAGE_SIZE,
+        state.oldestLoadedMessageId,
+      )
+
+      // Bail if the user switched conversations mid-fetch.
+      if (get().activeConversationId !== convId) {
+        set({ isLoadingOlder: false })
+        return
+      }
+
+      if (olderRaw.length === 0) {
+        set({ isLoadingOlder: false, hasMoreOlder: false })
+        return
+      }
+
+      // Apply team-mode agent segment re-parse to the older page (same as the
+      // initial-load path) so old messages render with proper attribution.
+      const tab = getActiveProjectTab()
+      let prepend: ConversationMessage[]
+      if (tab?.mode === 'team' && tab.agents.length > 0) {
+        const out: ConversationMessage[] = []
+        for (const msg of olderRaw) {
+          if (msg.role === 'assistant' && !msg.agentName && msg.content) {
+            const segments = parseAgentSegments(msg.content, tab.agents)
+            if (segments.length > 1 || (segments.length === 1 && segments[0].agentName)) {
+              for (const seg of segments) {
+                out.push({
+                  ...msg,
+                  content: seg.text,
+                  agentId: seg.agentId,
+                  agentName: seg.agentName || undefined,
+                  agentIcon: seg.agentIcon,
+                  agentColor: seg.agentColor,
+                })
+              }
+              continue
+            }
+          }
+          out.push(msg)
+        }
+        prepend = out
+      } else {
+        prepend = olderRaw
+      }
+
+      // The DB cursor must move to the oldest *raw* id, not the oldest split
+      // segment — they share the same id since segments come from one row.
+      const newOldestId = olderRaw[0]?.id ?? state.oldestLoadedMessageId
+      set((s) => ({
+        messages: [...prepend, ...s.messages],
+        isLoadingOlder: false,
+        hasMoreOlder: hasMore,
+        oldestLoadedMessageId: newOldestId,
+      }))
+    } catch (err) {
+      console.error('[loadOlderMessages] Failed:', err)
+      set({ isLoadingOlder: false })
+    }
+  },
+
+  /**
+   * Page backwards until `messageId` is in the loaded window. Used by Search →
+   * jump-to-message so the target row exists in the DOM when ChatPage tries to
+   * scroll to it. Capped at ENSURE_MESSAGE_MAX_PAGES to avoid runaway loads on
+   * very deep histories or a missing id.
+   */
+  ensureMessageLoaded: async (messageId: number) => {
+    const isLoaded = () => get().messages.some((m) => m.id === messageId)
+    if (isLoaded()) return
+
+    let pages = 0
+    while (pages < ENSURE_MESSAGE_MAX_PAGES) {
+      const state = get()
+      if (!state.hasMoreOlder) break
+      // Wait for any in-flight load before issuing the next so we don't double-fetch.
+      if (state.isLoadingOlder) {
+        await new Promise((r) => setTimeout(r, 50))
+        if (isLoaded()) return
+        continue
+      }
+      await get().loadOlderMessages()
+      pages++
+      if (isLoaded()) return
+    }
+
+    if (!isLoaded()) {
+      console.warn(
+        `[ensureMessageLoaded] message ${messageId} not found after ${pages} page loads`,
+      )
     }
   },
 
@@ -339,8 +470,17 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     set((s) => {
       const stopped = { ...s.stoppedLoops }
       delete stopped[id]
+      // Clear pagination state alongside messages so the next opened conversation
+      // starts from a known-clean cursor.
       return s.activeConversationId === id
-        ? { activeConversationId: null, messages: [], stoppedLoops: stopped }
+        ? {
+            activeConversationId: null,
+            messages: [],
+            stoppedLoops: stopped,
+            hasMoreOlder: false,
+            oldestLoadedMessageId: null,
+            isLoadingOlder: false,
+          }
         : { stoppedLoops: stopped }
     })
     const projectPath = useProjectStore.getState().activeProjectPath || ''
@@ -1185,7 +1325,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
             set((s) => ({ permissionQueue: [...s.permissionQueue, newPerm] }))
           }
         } else {
-          console.log('[ConversationStore] Unhandled event type:', eventType, JSON.stringify(event).slice(0, 300))
+          if (import.meta.env.DEV) {
+            console.log('[ConversationStore] Unhandled event type:', eventType, JSON.stringify(event).slice(0, 300))
+          }
         }
         break
       }
@@ -1254,8 +1396,12 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     const suggestion = get().workflowSuggestion
     set({ workflowSuggestion: null })
     if (!suggestion) return
-    if (suggestion.tier === 'repeated' || suggestion.tier === 'matched_workflow') {
-      if (!repetitionDetector) return
+    // Silence this specific conversation immediately so it can't re-fire on a
+    // later turn of the same chat this session.
+    addDismissedConversationId(suggestion.conversationId)
+    // Every tier is now backed by a repetition match, so mute the underlying
+    // pattern by bagHash: "later" = 24h cooldown, "never" = permanent mute.
+    if (repetitionDetector) {
       await repetitionDetector
         .dismissPattern(
           suggestion.projectPath,
@@ -1263,11 +1409,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
           mode === 'never' ? 'permanent' : 'cooldown',
         )
         .catch(() => {})
-    } else {
-      // Candidate-tier: silence by conversation id so we don't re-suggest on
-      // subsequent turns of the same chat. "never" is a no-op here — there's
-      // no cross-conversation pattern to mute yet.
-      addDismissedConversationId(suggestion.conversationId)
     }
   },
 }))
@@ -1351,31 +1492,33 @@ useConversationStore.subscribe((state, prev) => {
               return
             }
 
-            useConversationStore.setState({
-              workflowSuggestion: { tier: 'repeated', conversationId: cid, projectPath, match },
-            })
+            // ≥2 prior similar conversations = strong repetition ("repeated").
+            // Exactly 1 = the second time you've done this — a softer
+            // "candidate" nudge. Both are real cross-conversation matches.
+            if (match.similarConversationIds.length >= 2) {
+              useConversationStore.setState({
+                workflowSuggestion: { tier: 'repeated', conversationId: cid, projectPath, match },
+              })
+            } else {
+              useConversationStore.setState({
+                workflowSuggestion: {
+                  tier: 'candidate',
+                  conversationId: cid,
+                  projectPath,
+                  toolCount: msgs.filter((m) => m.type === 'tool_use').length,
+                  uniqueTools: collectUniqueTools(msgs),
+                  match,
+                },
+              })
+            }
             return
           }
         } catch {
-          /* detector unavailable — fall through to candidate tier */
+          /* detector unavailable — no suggestion. We deliberately do NOT fall
+             back to a single-conversation heuristic: a suggestion now requires
+             genuine cross-conversation repetition, so we never nag on a one-off
+             chat. */
         }
-      }
-
-      // Tier 2 — candidate heuristic (substantial single conversation).
-      if (passesCandidateHeuristic(msgs)) {
-        if (useConversationStore.getState().activeConversationId !== cid) return
-        if (getDismissedConversationIds().has(cid)) return
-        const toolCount = msgs.filter((m) => m.type === 'tool_use').length
-        const uniqueTools = collectUniqueTools(msgs)
-        useConversationStore.setState({
-          workflowSuggestion: {
-            tier: 'candidate',
-            conversationId: cid,
-            projectPath,
-            toolCount,
-            uniqueTools,
-          },
-        })
       }
     }
 

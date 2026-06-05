@@ -298,17 +298,46 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     if (id) {
       get().loadWorkflow(id)
     } else {
+      // Persist current edits back to the task before clearing the editor
+      // state. Without this, any in-flight node/edge changes are dropped when
+      // the user navigates away with the Back button.
+      const { editingTaskId } = get()
+      if (editingTaskId) {
+        const taskExists = useTaskStore.getState().tasks.some((t) => t.id === editingTaskId)
+        if (taskExists) get().saveWorkflow()
+      }
       set({ editingTaskId: null, nodes: [], edges: [], selectedNodeId: null, history: [], historyIndex: -1, execution: null, resultsCanvasOpen: false })
     }
   },
 
   loadWorkflow: (taskId) => {
     const task = useTaskStore.getState().tasks.find((t) => t.id === taskId)
+    // Task disappeared (deleted on another tab, or stale deep-link). Render
+    // a fresh blank-start workflow under the missing id so the editor can show
+    // a "no longer exists" placeholder via the WorkflowEditor `task` lookup.
+    if (!task) {
+      set({
+        editingTaskId: taskId,
+        nodes: [],
+        edges: [],
+        selectedNodeId: null,
+        history: [],
+        historyIndex: -1,
+        execution: null,
+        resultsCanvasOpen: false,
+        chatMode: false,
+        chatMessages: [],
+        chatStreamingText: '',
+        chatStartedAt: null,
+      })
+      return
+    }
     const workflow = task?.workflow
     const nodes = workflow?.nodes?.length ? workflow.nodes : [DEFAULT_START_NODE]
     const edges = workflow?.edges || []
-    // Auto-open AI chat for empty workflows (only start node)
-    const isEmptyWorkflow = nodes.length <= 1
+    // Default to the manual node palette. Users can toggle into AI Builder via
+    // the panel header. Auto-opening AI mode for empty workflows hid the
+    // manual palette and confused new users into thinking they couldn't add nodes.
 
     // Restore execution state if the task is currently running (e.g. from scheduler)
     const activeExec = useTaskStore.getState().activeExecutions[taskId]
@@ -336,7 +365,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       historyIndex: 0,
       execution,
       resultsCanvasOpen: false,
-      chatMode: isEmptyWorkflow,
+      chatMode: false,
       chatMessages: [],
       chatStreamingText: '',
       chatStartedAt: null,
@@ -949,7 +978,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       const prompt = buildAiFixPrompt(nodes, edges, execution, targetNodeId, jiraProjectKey || undefined)
       const sessionId = `wf-aifix-${Date.now()}`
 
-      const result = await new Promise<AiFixResult>((resolve, reject) => {
+      const result = await new Promise<AiFixResult>(async (resolve, reject) => {
         let resultText = ''
 
         const unsub = api.claude.onEvent((event: ClaudeEvent) => {
@@ -1011,12 +1040,30 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           }
         })
 
+        // Mirror the main chat's CLI invocation: pull the active project's
+        // model + permission mode + MCP config so we use the SAME auth path
+        // (Claude Max / Pro / Teams) the main chat already works with.
+        const tab = useProjectStore.getState().openProjects.find(
+          (p) => p.projectPath === workingDirectory,
+        )
+        const fixModel = tab?.model || 'sonnet'
+        const fixPermissionMode = tab?.permissionMode || 'bypass'
+        let fixMcpConfigPath: string | undefined
+        if (workingDirectory) {
+          try {
+            const mcpResult = await api.mcp.writeConfig(workingDirectory, tab?.mcpServers || [])
+            fixMcpConfigPath = mcpResult.configPath
+          } catch {
+            // Non-fatal — startSession can run without an explicit mcp config.
+          }
+        }
         api.claude.startSession(sessionId, {
           prompt,
           resume: false,
           workingDirectory,
-          model: 'sonnet',
-          permissionMode: 'bypass',
+          model: fixModel,
+          permissionMode: fixPermissionMode,
+          mcpConfigPath: fixMcpConfigPath,
         }).catch((err) => {
           unsub()
           reject(new Error(`AI Fix session failed: ${err instanceof Error ? err.message : 'Unknown'}`))
@@ -1141,7 +1188,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       const prompt = buildChatPrompt([...chatMessages, userMsg], nodes, edges, text, get().jiraProjectKey || undefined)
       const workingDirectory = useProjectStore.getState().activeProjectPath || undefined
 
-      const aiResponse = await new Promise<{ action: string; nodes?: Node<WorkflowNodeData>[]; edges?: Edge[]; message: string; summary?: string }>((resolve, reject) => {
+      const aiResponse = await new Promise<{ action: string; nodes?: Node<WorkflowNodeData>[]; edges?: Edge[]; message: string; summary?: string }>(async (resolve, reject) => {
         let resultText = ''
 
         const unsub = api.claude.onEvent((event: ClaudeEvent) => {
@@ -1183,18 +1230,62 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
                 summary: parsed.summary,
               })
             } catch (parseErr) {
-              console.warn('[AI Builder] Failed to parse response as JSON:', parseErr, '\nRaw text:', finalText.slice(0, 500))
-              reject(new Error('Failed to generate workflow. The AI response was not valid JSON. Please try rephrasing your request.'))
+              // If the response is mostly plain prose (no JSON braces at all),
+              // treat it as an "explain" turn and surface the text directly —
+              // Claude sometimes responds conversationally to a clarifying
+              // question instead of returning a workflow. That's not a real
+              // failure; show what it said.
+              const looksLikeProse = !finalText.includes('{') && finalText.trim().length > 0
+              if (looksLikeProse) {
+                resolve({
+                  action: 'explain',
+                  nodes: undefined,
+                  edges: undefined,
+                  message: finalText.trim(),
+                  summary: undefined,
+                })
+                return
+              }
+              const errMsg = parseErr instanceof Error ? parseErr.message : String(parseErr)
+              const snippet = finalText.trim().slice(0, 240).replace(/\s+/g, ' ')
+              console.warn('[AI Builder] Failed to parse response as JSON:', parseErr, '\nRaw text:', finalText.slice(0, 1000))
+              reject(new Error(
+                `The AI returned a response we couldn't parse as a workflow. ` +
+                `Click Retry to try again, or Simplify to ask for a shorter version. ` +
+                `(${errMsg})\n\nResponse preview: ${snippet}${finalText.length > 240 ? '…' : ''}`
+              ))
             }
           }
         })
 
+        // Mirror the main chat's CLI invocation so the AI Builder runs on
+        // the exact same Claude Code session config — same model, same
+        // permission mode, same MCP config. Keeps the user's Claude Max
+        // / Pro / Teams auth path consistent across chat and workflow gen.
+        const tab = useProjectStore.getState().openProjects.find(
+          (p) => p.projectPath === workingDirectory,
+        )
+        const chatModel = tab?.model || 'sonnet'
+        // Keep 'plan' permission for the builder (read-only by design — it
+        // generates JSON, never runs tools) but fall back gracefully if the
+        // project has another mode the user explicitly picked.
+        const chatPermissionMode = tab?.permissionMode || 'plan'
+        let chatMcpConfigPath: string | undefined
+        if (workingDirectory) {
+          try {
+            const mcpResult = await api.mcp.writeConfig(workingDirectory, tab?.mcpServers || [])
+            chatMcpConfigPath = mcpResult.configPath
+          } catch {
+            // Non-fatal — startSession can run without an explicit mcp config.
+          }
+        }
         api.claude.startSession(sessionId, {
           prompt,
           resume: false,
           workingDirectory,
-          model: 'sonnet',
-          permissionMode: 'plan',
+          model: chatModel,
+          permissionMode: chatPermissionMode,
+          mcpConfigPath: chatMcpConfigPath,
         }).catch((err) => {
           unsub()
           reject(new Error(`Chat session failed: ${err instanceof Error ? err.message : 'Unknown'}`))

@@ -1,13 +1,15 @@
 import { lazy, Suspense } from 'react'
 import type { AppView } from '../../store/useAppStore'
+import { useProjectStore } from '../../store/useProjectStore'
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const ChatPage = lazy(() => import('./pages/ChatPage'))
+const WorkflowsPage = lazy(() => import('./pages/WorkflowsPage'))
 const TerminalPage = lazy(() => import('./pages/TerminalPage'))
-const TasksPage = lazy(() => import('./pages/TasksPage'))
-const ConfigPage = lazy(() => import('./pages/ConfigPage'))
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'))
+const AgentsPage = lazy(() => import('./pages/AgentsPage'))
 const McpPage = lazy(() => import('./pages/McpPage'))
-const ResultsPage = lazy(() => import('./pages/ResultsPage'))
+const RunsPage = lazy(() => import('./pages/RunsPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 
 function ViewLoading() {
@@ -18,17 +20,32 @@ function ViewLoading() {
   )
 }
 
+// Map legacy persisted view keys (also handled at the store layer) so any direct
+// callers stay safe.
+function migrate(view: AppView): AppView {
+  if (view === 'tasks') return 'workflows'
+  if (view === 'results') return 'runs'
+  if (view === 'config') return 'agents'
+  return view
+}
+
 export function ViewRouter({ view }: { view: AppView }) {
+  const hasProject = useProjectStore((s) => !!s.activeProjectPath)
+  // Dashboard is the no-project landing only. Once a project is open, dashboard
+  // routes to chat (guards against stale per-project view memory and any
+  // openProject path that didn't go through the store-layer migration).
+  const v = hasProject && migrate(view) === 'dashboard' ? 'chat' : migrate(view)
   return (
     <Suspense fallback={<ViewLoading />}>
-      {view === 'dashboard' && <DashboardPage />}
-      {view === 'terminal' && <TerminalPage />}
-      {view === 'tasks' && <TasksPage />}
-      {view === 'results' && <ResultsPage />}
-      {view === 'config' && <ConfigPage />}
-      {view === 'analytics' && <AnalyticsPage />}
-      {view === 'mcp' && <McpPage />}
-      {view === 'settings' && <SettingsPage />}
+      {v === 'dashboard' && <DashboardPage />}
+      {v === 'chat' && <ChatPage />}
+      {v === 'workflows' && <WorkflowsPage />}
+      {v === 'terminal' && <TerminalPage />}
+      {v === 'analytics' && <AnalyticsPage />}
+      {v === 'agents' && <AgentsPage />}
+      {v === 'mcp' && <McpPage />}
+      {v === 'runs' && <RunsPage />}
+      {v === 'settings' && <SettingsPage />}
     </Suspense>
   )
 }

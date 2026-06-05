@@ -2,6 +2,14 @@ const { contextBridge, ipcRenderer } = require('electron')
 import { bridgeRepetitionApi } from '@pilos/repetition-detection/adapters/electron-preload'
 
 contextBridge.exposeInMainWorld('api', {
+  // Window controls (titlebar traffic lights / chrome buttons)
+  window: {
+    minimize: () => ipcRenderer.invoke('window:minimize'),
+    maximize: () => ipcRenderer.invoke('window:maximize'),
+    close: () => ipcRenderer.invoke('window:close'),
+    isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  },
+
   // CLI Checker
   cli: {
     check: () => ipcRenderer.invoke('cli:check'),
@@ -69,6 +77,8 @@ contextBridge.exposeInMainWorld('api', {
     delete: (id: string) => ipcRenderer.invoke('conversations:delete', id),
     getMessages: (conversationId: string) =>
       ipcRenderer.invoke('conversations:getMessages', conversationId),
+    getMessagesPage: (conversationId: string, limit: number, beforeId?: number) =>
+      ipcRenderer.invoke('conversations:getMessagesPage', conversationId, limit, beforeId),
     saveMessage: (conversationId: string, message: Record<string, unknown>) =>
       ipcRenderer.invoke('conversations:saveMessage', conversationId, message),
     getMessage: (messageId: number) =>

@@ -61,7 +61,27 @@ export default defineConfig({
           setupFiles: ['./src/test/setup.ts'],
         },
         resolve: {
-          alias: { '@': path.resolve(__dirname, 'src') },
+          alias: {
+            '@': path.resolve(__dirname, 'src'),
+            '@pilos/repetition-detection': path.resolve(__dirname, 'packages/repetition-detection'),
+          },
+        },
+      },
+      {
+        // Self-contained packages/* logic (e.g. repetition-detection). These
+        // tests were previously orphaned — no project glob matched them, so
+        // `npm test` never ran them. Pure logic → node environment.
+        plugins: [optionalPackageStubs()],
+        test: {
+          name: 'packages',
+          environment: 'node',
+          include: ['packages/**/__tests__/**/*.test.ts', 'packages/**/*.test.ts'],
+          exclude: ['**/node_modules/**'],
+        },
+        resolve: {
+          alias: {
+            '@pilos/repetition-detection': path.resolve(__dirname, 'packages/repetition-detection'),
+          },
         },
       },
       {
@@ -76,7 +96,10 @@ export default defineConfig({
           globalSetup: ['./electron/test/sqlite-setup.ts'],
         },
         resolve: {
-          alias: { '@': path.resolve(__dirname, 'src') },
+          alias: {
+            '@': path.resolve(__dirname, 'src'),
+            '@pilos/repetition-detection': path.resolve(__dirname, 'packages/repetition-detection'),
+          },
         },
       },
     ],

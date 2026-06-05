@@ -22,7 +22,6 @@ export function ActiveTaskCard({ task, execution }: Props) {
   const selectTask = useTaskStore((s) => s.selectTask)
   const [, setTick] = useState(0)
 
-  // Tick every second for the timer
   useEffect(() => {
     if (execution?.status !== 'running') return
     const iv = setInterval(() => setTick((t) => t + 1), 1000)
@@ -40,7 +39,7 @@ export function ActiveTaskCard({ task, execution }: Props) {
 
   const handleClick = () => {
     selectTask(task.id)
-    setActiveView('tasks')
+    setActiveView('workflows')
   }
 
   const handleViewResults = (e: React.MouseEvent) => {
@@ -48,68 +47,70 @@ export function ActiveTaskCard({ task, execution }: Props) {
     const store = useWorkflowStore.getState()
     store.setEditingTaskId(task.id)
     store.setResultsCanvasOpen(true)
-    setActiveView('tasks')
+    setActiveView('workflows')
   }
+
+  const statusTag = isRunning ? 'tag warn' : isCompleted ? 'tag ok' : isFailed ? 'tag err' : 'tag'
 
   return (
     <button
+      type="button"
       onClick={handleClick}
-      className="w-full p-4 bg-pilos-card border border-pilos-border rounded-xl hover:border-zinc-600 transition-all text-left"
+      className="tile hover"
+      style={{ width: '100%', display: 'block', cursor: 'pointer' }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
           <StatusDot
             color={isRunning ? 'orange' : isCompleted ? 'green' : 'gray'}
             pulse={isRunning}
           />
-          <span className="text-sm font-bold text-white truncate">{task.title}</span>
+          <span style={{ fontSize: 13, fontWeight: 650, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</span>
         </div>
-        <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0 ${
-          isRunning ? 'bg-orange-500/10 text-orange-400'
-          : isCompleted ? 'bg-emerald-500/10 text-emerald-400'
-          : isFailed ? 'bg-red-500/10 text-red-400'
-          : 'bg-zinc-700/30 text-zinc-500'
-        }`}>
+        <span className={statusTag}>
           {isRunning ? 'Running' : isCompleted ? 'Completed' : isFailed ? 'Failed' : task.status}
         </span>
       </div>
 
-      {/* Step progress */}
       {execution && (
         <>
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[11px] text-zinc-400">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>
               Step {currentStep} of {totalSteps}
               {execution.currentNodeLabel && (
-                <span className="text-zinc-300 font-medium">: {execution.currentNodeLabel}</span>
+                <span style={{ color: 'var(--ink-2)', fontWeight: 500 }}>: {execution.currentNodeLabel}</span>
               )}
             </span>
-            <span className="text-[11px] text-zinc-500 font-mono">{progress}%</span>
+            <span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>{progress}%</span>
           </div>
 
-          {/* Progress bar */}
-          <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden mb-3">
+          <div className="meter" style={{ marginBottom: 12 }}>
             <div
-              className={`h-full rounded-full transition-all duration-500 ${
-                isCompleted ? 'bg-emerald-500' : isFailed ? 'bg-red-500' : 'bg-blue-500'
-              }`}
-              style={{ width: `${progress}%` }}
+              className="fill"
+              style={{
+                width: `${progress}%`,
+                background: isCompleted ? 'var(--ok)' : isFailed ? 'var(--err)' : undefined,
+              }}
             />
           </div>
 
-          {/* Log tail */}
           {lastLogs.length > 0 && (
-            <div className="space-y-0.5 mb-2">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8 }}>
               {lastLogs.map((log, i) => (
                 <div
                   key={i}
-                  className={`text-[10px] font-mono truncate leading-relaxed ${
-                    log.includes('[WARN]') ? 'text-orange-400/70'
-                    : log.includes('[ERROR]') ? 'text-red-400/70'
-                    : log.includes('[DEBUG]') ? 'text-blue-400/60'
-                    : 'text-zinc-600'
-                  }`}
+                  style={{
+                    fontSize: 10,
+                    fontFamily: 'var(--mono)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    lineHeight: 1.55,
+                    color: log.includes('[WARN]') ? 'var(--warn)'
+                      : log.includes('[ERROR]') ? 'var(--err)'
+                      : log.includes('[DEBUG]') ? 'var(--info)'
+                      : 'var(--muted)',
+                    opacity: 0.8,
+                  }}
                 >
                   {log}
                 </div>
@@ -117,11 +118,10 @@ export function ActiveTaskCard({ task, execution }: Props) {
             </div>
           )}
 
-          {/* Footer: elapsed time or View Results */}
           {isRunning && execution.startedAt && (
-            <div className="flex items-center justify-end gap-1.5 text-zinc-600">
-              <Icon icon="lucide:timer" className="text-[10px]" />
-              <span className="text-[10px] font-mono">{formatElapsed(execution.startedAt)}</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, color: 'var(--muted)' }}>
+              <Icon icon="lucide:timer" style={{ fontSize: 10 }} />
+              <span style={{ fontSize: 10, fontFamily: 'var(--mono)' }}>{formatElapsed(execution.startedAt)}</span>
             </div>
           )}
           {(isCompleted || isFailed) && (
@@ -130,9 +130,10 @@ export function ActiveTaskCard({ task, execution }: Props) {
               tabIndex={0}
               onClick={handleViewResults}
               onKeyDown={(e) => { if (e.key === 'Enter') handleViewResults(e as unknown as React.MouseEvent) }}
-              className="flex items-center justify-center gap-1.5 mt-1 px-3 py-1.5 bg-cyan-600/20 border border-cyan-500/30 text-cyan-300 text-xs font-bold rounded-lg hover:bg-cyan-600/30 transition-colors"
+              className="btn sm primary"
+              style={{ marginTop: 8, width: '100%', justifyContent: 'center' }}
             >
-              <Icon icon="lucide:layout-dashboard" className="text-[10px]" />
+              <Icon icon="lucide:layout-dashboard" style={{ fontSize: 11 }} />
               View Results
             </div>
           )}

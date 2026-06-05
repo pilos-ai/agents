@@ -1,8 +1,23 @@
+import { useState, useMemo } from 'react'
 import { Icon } from '../../common/Icon'
 import { useAppStore } from '../../../store/useAppStore'
 import type { DependencyName } from '../../../types'
 
-function DependencyRow({ name, label, icon }: { name: DependencyName; label: string; icon: string }) {
+const STEPS = ['Install CLI', 'Authenticate', 'Ready'] as const
+
+function copyToClipboard(text: string) {
+  try {
+    if (navigator?.clipboard?.writeText) {
+      void navigator.clipboard.writeText(text)
+    }
+  } catch {
+    /* clipboard blocked — silent */
+  }
+}
+
+// ── Step 1: System deps + CLI install ──
+
+function DependencyRow({ name, label }: { name: DependencyName; label: string }) {
   const dependencyResult = useAppStore((s) => s.dependencyResult)
   const browseForBinary = useAppStore((s) => s.browseForBinary)
 
@@ -11,220 +26,416 @@ function DependencyRow({ name, label, icon }: { name: DependencyName; label: str
   const version = dep?.version
 
   return (
-    <div className="flex items-center justify-between p-3 bg-pilos-card border border-pilos-border rounded-lg">
-      <div className="flex items-center gap-3">
-        <Icon icon={icon} className="text-lg" />
-        <div>
-          <span className="text-sm font-medium text-white">{label}</span>
-          {version && <span className="text-[10px] text-zinc-500 ml-2">v{version}</span>}
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        {status === 'checking' && (
-          <div className="w-4 h-4 border-2 border-pilos-blue border-t-transparent rounded-full animate-spin" />
-        )}
-        {status === 'found' && (
-          <Icon icon="lucide:check-circle-2" className="text-emerald-500" />
-        )}
-        {status === 'not_found' && (
-          <button
-            onClick={() => browseForBinary(name)}
-            className="px-3 py-1 text-xs font-medium text-pilos-blue hover:bg-blue-500/10 rounded-lg transition-colors"
-          >
-            Locate
-          </button>
-        )}
-        {status === 'error' && (
-          <Icon icon="lucide:x-circle" className="text-red-500" />
-        )}
-      </div>
+    <div className="row" style={{ gap: 8, fontSize: 12.5, marginTop: 6 }}>
+      {status === 'found' && (
+        <span className="li-dot dot-ok" style={{ width: 7, height: 7 }} />
+      )}
+      {status === 'checking' && (
+        <span className="li-dot dot-idle" style={{ width: 7, height: 7 }} />
+      )}
+      {(status === 'not_found' || status === 'error') && (
+        <span className="li-dot dot-err" style={{ width: 7, height: 7 }} />
+      )}
+      <span style={{ color: status === 'found' ? 'var(--ok)' : 'var(--ink-3)' }}>
+        {label}
+        {version ? <span className="muted" style={{ marginLeft: 6 }}>v{version}</span> : null}
+      </span>
+      {status === 'not_found' && (
+        <button
+          onClick={() => browseForBinary(name)}
+          className="btn sm ghost"
+          style={{ marginLeft: 'auto' }}
+        >
+          Locate
+        </button>
+      )}
     </div>
   )
 }
 
-function CliSetupCard() {
+function StepInstallCli() {
   const cliStatus = useAppStore((s) => s.cliStatus)
   const cliVersion = useAppStore((s) => s.cliVersion)
   const installCli = useAppStore((s) => s.installCli)
-  const loginCli = useAppStore((s) => s.loginCli)
   const cliInstallLog = useAppStore((s) => s.cliInstallLog)
+  const dependencyResult = useAppStore((s) => s.dependencyResult)
+  const checkDependencies = useAppStore((s) => s.checkDependencies)
+  const [copied, setCopied] = useState(false)
+  const installCmd = 'npm install -g @anthropic-ai/claude-code'
+  const depsFound = dependencyResult?.allFound || false
 
   return (
-    <div className="p-6 bg-pilos-card border border-pilos-border rounded-xl">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-lg flex items-center justify-center">
-          <Icon icon="lucide:terminal" className="text-white text-xl" />
-        </div>
-        <div>
-          <h3 className="text-sm font-bold text-white">Claude CLI</h3>
-          <p className="text-[10px] text-zinc-500">
-            {cliVersion ? `v${cliVersion}` : 'Required for agent communication'}
-          </p>
-        </div>
+    <>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+        Install Claude Code CLI
+      </div>
+      <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>
+        Pilos runs on top of the official CLI. Install it globally with npm:
+      </p>
+
+      <div className="cli-box">
+        <span className="dollar">$</span>
+        <code>{installCmd}</code>
+        <button
+          className="copy"
+          onClick={() => {
+            copyToClipboard(installCmd)
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+          }}
+          title="Copy"
+        >
+          {copied ? (
+            <Icon icon="lucide:check" className="text-[14px]" style={{ color: 'var(--ok)' }} />
+          ) : (
+            <Icon icon="lucide:copy" className="text-[14px]" />
+          )}
+        </button>
       </div>
 
-      {cliStatus === 'ready' && (
-        <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-          <Icon icon="lucide:check-circle-2" className="text-emerald-400" />
-          <span className="text-xs font-medium text-emerald-400">Authenticated and ready</span>
-        </div>
-      )}
-
-      {cliStatus === 'missing' && (
-        <button
-          onClick={installCli}
-          className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-lg shadow-lg shadow-blue-600/20 transition-all"
-        >
-          Install Claude CLI
-        </button>
-      )}
-
-      {cliStatus === 'installing' && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 border-2 border-pilos-blue border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs text-zinc-400">Installing...</span>
+      {/* Dependency status */}
+      <div style={{ marginTop: 4 }}>
+        <DependencyRow name="node" label="Node.js detected on PATH" />
+        <DependencyRow name="git" label="Git detected on PATH" />
+        {cliStatus === 'ready' && cliVersion && (
+          <div className="row" style={{ gap: 8, fontSize: 12, color: 'var(--ok)', marginTop: 6 }}>
+            <span className="li-dot dot-ok" style={{ width: 7, height: 7 }} />
+            Detected claude-code v{cliVersion} on PATH
           </div>
-          {cliInstallLog && (
-            <pre className="text-[10px] text-zinc-600 font-mono bg-black/30 p-2 rounded max-h-20 overflow-y-auto custom-scrollbar">
-              {cliInstallLog}
-            </pre>
-          )}
-        </div>
-      )}
-
-      {cliStatus === 'needs_login' && (
-        <button
-          onClick={loginCli}
-          className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-lg shadow-lg shadow-blue-600/20 transition-all"
-        >
-          Sign In to Claude
-        </button>
-      )}
-
-      {cliStatus === 'logging_in' && (
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 border-2 border-pilos-blue border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs text-zinc-400">Opening browser for sign in...</span>
-        </div>
-      )}
-
-      {cliStatus === 'install_failed' && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-            <Icon icon="lucide:x-circle" className="text-red-400" />
-            <span className="text-xs font-medium text-red-400">Installation failed</span>
+        )}
+        {cliStatus === 'checking' && (
+          <div className="row" style={{ gap: 8, marginTop: 12, fontSize: 12, color: 'var(--ink-3)' }}>
+            <Icon icon="lucide:loader-2" className="animate-spin text-[14px]" style={{ color: 'var(--accent-2)' }} />
+            Checking for Claude CLI...
           </div>
+        )}
+        {cliStatus === 'error' && (
+          <div style={{ marginTop: 12 }}>
+            <div
+              className="row"
+              style={{
+                gap: 8,
+                padding: '8px 10px',
+                background: 'rgba(251,111,111,0.08)',
+                border: '1px solid rgba(251,111,111,0.25)',
+                borderRadius: 'var(--r-sm)',
+                color: 'var(--err)',
+                fontSize: 12,
+              }}
+            >
+              <Icon icon="lucide:x-circle" className="text-[14px]" />
+              Couldn't check for the Claude CLI
+            </div>
+            <button onClick={checkDependencies} className="btn" style={{ marginTop: 10 }}>
+              <Icon icon="lucide:refresh-cw" className="text-[12px]" />
+              Try again
+            </button>
+          </div>
+        )}
+        {cliStatus === 'missing' && (
           <button
             onClick={installCli}
-            className="w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-bold rounded-lg transition-all"
+            className="btn primary"
+            style={{ marginTop: 12 }}
           >
-            Retry
+            <Icon icon="lucide:download" className="text-[15px]" />
+            Install Claude CLI for me
           </button>
-        </div>
-      )}
-    </div>
+        )}
+        {cliStatus === 'installing' && (
+          <div className="row" style={{ gap: 8, marginTop: 12, fontSize: 12, color: 'var(--ink-3)' }}>
+            <Icon icon="lucide:loader-2" className="animate-spin text-[14px]" style={{ color: 'var(--accent-2)' }} />
+            Installing...
+          </div>
+        )}
+        {cliStatus === 'install_failed' && (
+          <div style={{ marginTop: 12 }}>
+            <div
+              className="row"
+              style={{
+                gap: 8,
+                padding: '8px 10px',
+                background: 'rgba(251,111,111,0.08)',
+                border: '1px solid rgba(251,111,111,0.25)',
+                borderRadius: 'var(--r-sm)',
+                color: 'var(--err)',
+                fontSize: 12,
+              }}
+            >
+              <Icon icon="lucide:x-circle" className="text-[14px]" />
+              Installation failed
+            </div>
+            <button onClick={installCli} className="btn" style={{ marginTop: 10 }}>
+              Retry install
+            </button>
+          </div>
+        )}
+        {dependencyResult && !dependencyResult.allFound && (
+          <button onClick={checkDependencies} className="btn sm ghost" style={{ marginTop: 12 }}>
+            <Icon icon="lucide:refresh-cw" className="text-[12px]" />
+            Re-check dependencies
+          </button>
+        )}
+        {cliInstallLog && cliStatus === 'installing' && (
+          <pre
+            style={{
+              marginTop: 10,
+              fontFamily: 'var(--mono)',
+              fontSize: 10.5,
+              color: 'var(--muted)',
+              background: 'var(--panel)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--r-sm)',
+              padding: 8,
+              maxHeight: 80,
+              overflowY: 'auto',
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {cliInstallLog}
+          </pre>
+        )}
+        {!depsFound && (
+          <p className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>
+            Install Node.js and Git first, then re-check dependencies.
+          </p>
+        )}
+      </div>
+    </>
   )
 }
 
-export default function OnboardingPage() {
-  const setupStatus = useAppStore((s) => s.setupStatus)
-  const dependencyResult = useAppStore((s) => s.dependencyResult)
-  const checkDependencies = useAppStore((s) => s.checkDependencies)
+// ── Step 2: Authenticate with Anthropic ──
 
-  // Calculate progress
-  const depsFound = dependencyResult?.allFound || false
-  const cliReady = setupStatus === 'ready' || setupStatus === 'needs_login'
-  const progress = depsFound ? (cliReady ? 80 : 50) : 20
+function StepAuth() {
+  const cliStatus = useAppStore((s) => s.cliStatus)
+  const loginCli = useAppStore((s) => s.loginCli)
+  const accountEmail = useAppStore((s) => s.accountEmail)
+  const accountPlan = useAppStore((s) => s.accountPlan)
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Progress bar header */}
-      <div className="h-12 border-b border-pilos-border flex items-center px-6 flex-shrink-0">
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Setup Progress</span>
-            <div className="w-40 h-1 bg-zinc-800 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-pilos-blue rounded-full transition-all duration-700"
-                style={{ width: `${progress}%` }}
-              />
+    <>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+        Authenticate with Anthropic
+      </div>
+      <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>
+        No separate API key needed — the CLI handles auth. Sign in to link your account.
+      </p>
+
+      {cliStatus === 'ready' && accountEmail ? (
+        <div
+          className="tile"
+          style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12 }}
+        >
+          <div className="tile-logo">
+            <Icon icon="lucide:user" className="text-[20px]" />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{accountEmail}</div>
+            <div className="muted" style={{ fontSize: 11.5 }}>
+              {accountPlan ? `Claude ${accountPlan} · authenticated via CLI` : 'Authenticated via CLI'}
             </div>
-            <span className="text-[10px] text-zinc-600">{progress}%</span>
+          </div>
+          <span className="tag ok">linked</span>
+        </div>
+      ) : cliStatus === 'ready' ? (
+        <div
+          className="tile"
+          style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12 }}
+        >
+          <div className="tile-logo" style={{ background: 'rgba(62,207,142,0.12)', color: 'var(--ok)' }}>
+            <Icon icon="lucide:check" className="text-[20px]" />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>CLI ready</div>
+            <div className="muted" style={{ fontSize: 11.5 }}>Authenticated via Claude Code</div>
+          </div>
+          <span className="tag ok">linked</span>
+        </div>
+      ) : cliStatus === 'needs_login' ? (
+        <>
+          <div
+            className="tile"
+            style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12 }}
+          >
+            <div className="tile-logo">
+              <Icon icon="lucide:user" className="text-[20px]" />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Sign in to Claude</div>
+              <div className="muted" style={{ fontSize: 11.5 }}>
+                We'll open the CLI's browser sign-in flow
+              </div>
+            </div>
+            <button onClick={loginCli} className="btn primary">
+              <Icon icon="lucide:log-in" className="text-[15px]" />
+              Sign in
+            </button>
+          </div>
+        </>
+      ) : cliStatus === 'logging_in' ? (
+        <div
+          className="tile"
+          style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12 }}
+        >
+          <Icon icon="lucide:loader-2" className="animate-spin text-[18px]" style={{ color: 'var(--accent-2)' }} />
+          <div className="muted" style={{ fontSize: 12.5 }}>
+            Opening browser for sign in...
           </div>
         </div>
+      ) : (
+        <div
+          className="tile"
+          style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12 }}
+        >
+          <Icon icon="lucide:loader-2" className="animate-spin text-[18px]" style={{ color: 'var(--accent-2)' }} />
+          <div className="muted" style={{ fontSize: 12.5 }}>
+            Checking authentication...
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+// ── Step 3: Ready ──
+
+function StepReady() {
+  return (
+    <>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+        Ready to open Pilos
       </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
-        <div className="max-w-2xl mx-auto py-12 px-6">
-          {/* Hero */}
-          <div className="text-center mb-12">
-            <div className="inline-flex px-3 py-1 bg-blue-500/10 text-blue-400 text-[10px] font-bold rounded-full border border-blue-500/20 uppercase tracking-widest mb-4">
-              Environment Setup
-            </div>
-            <h1 className="text-4xl font-extrabold text-white mb-3">
-              Ignite your agent swarm
-            </h1>
-            <p className="text-sm text-zinc-400 max-w-md mx-auto">
-              Follow these steps to configure your local environment and start running AI agents.
-            </p>
+      <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>
+        Your environment is configured. Pilos stays local — conversations and runs are
+        stored in SQLite on your machine.
+      </p>
+      <div
+        className="tile"
+        style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12 }}
+      >
+        <div className="tile-logo" style={{ background: 'rgba(62,207,142,0.12)', color: 'var(--ok)' }}>
+          <Icon icon="lucide:check" className="text-[20px]" />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>All systems operational</div>
+          <div className="muted" style={{ fontSize: 11.5 }}>
+            The app will load in a moment...
           </div>
+        </div>
+        <span className="tag ok">ready</span>
+      </div>
+    </>
+  )
+}
 
-          {/* Step 1: System Requirements */}
-          <div className="mb-8">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-6 h-6 bg-pilos-blue rounded-full flex items-center justify-center">
-                <span className="text-[10px] font-bold text-white">1</span>
-              </div>
-              <h2 className="text-lg font-bold text-white">System Requirements</h2>
+// ── Main ──
+
+export default function OnboardingPage() {
+  const setupStatus = useAppStore((s) => s.setupStatus)
+  const cliStatus = useAppStore((s) => s.cliStatus)
+  const dependencyResult = useAppStore((s) => s.dependencyResult)
+
+  // Map app state -> wizard step (1/2/3)
+  const step = useMemo(() => {
+    const depsFound = dependencyResult?.allFound || false
+    if (!depsFound) return 1
+    if (cliStatus === 'missing' || cliStatus === 'installing' || cliStatus === 'install_failed' || cliStatus === 'checking') {
+      return 1
+    }
+    if (cliStatus === 'needs_login' || cliStatus === 'logging_in') return 2
+    if (cliStatus === 'ready' && setupStatus !== 'ready') return 2
+    return 3
+  }, [setupStatus, cliStatus, dependencyResult])
+
+  const [manualStep, setManualStep] = useState<number | null>(null)
+  const currentStep = manualStep ?? step
+
+  // Forward state changes — auto-advance unless user explicitly went Back
+  // (we reset manualStep when reaching step 3 / ready)
+  const effectiveStep = Math.max(currentStep, manualStep === null ? step : currentStep)
+
+  const canContinue =
+    (effectiveStep === 1 && (dependencyResult?.allFound || false) && cliStatus === 'ready') ||
+    (effectiveStep === 2 && cliStatus === 'ready') ||
+    effectiveStep === 3
+  const isLast = effectiveStep === 3
+
+  return (
+    <div className="onb">
+      <div className="onb-glow" />
+      <div className="onb-card pop-in">
+        {/* Header */}
+        <div className="row" style={{ gap: 12 }}>
+          <div className="rail-logo" style={{ width: 40, height: 40 }} />
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em' }}>
+              Welcome to Pilos
             </div>
-            <div className="space-y-2">
-              <DependencyRow name="node" label="Node.js" icon="logos:nodejs-icon" />
-              <DependencyRow name="git" label="Git" icon="logos:git-icon" />
+            <div className="muted" style={{ fontSize: 12.5 }}>
+              The visual layer for Claude Code · 3 quick steps
             </div>
-            {dependencyResult && !dependencyResult.allFound && (
-              <button
-                onClick={checkDependencies}
-                className="mt-3 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-lg transition-all"
+          </div>
+        </div>
+
+        {/* Step indicator */}
+        <div className="onb-steps">
+          {STEPS.map((s, i) => {
+            const n = i + 1
+            const done = n < effectiveStep
+            const active = n === effectiveStep
+            return (
+              <div
+                key={s}
+                style={{ display: 'contents' }}
               >
-                Re-check Dependencies
-              </button>
-            )}
-          </div>
+                <div className={`onb-step${done ? ' done' : ''}${active ? ' active' : ''}`}>
+                  <div className="num">
+                    {done ? <Icon icon="lucide:check" className="text-[14px]" /> : n}
+                  </div>
+                  <div className="lbl">{s}</div>
+                </div>
+                {i < STEPS.length - 1 && (
+                  <div className={`onb-line${done ? ' done' : ''}`} />
+                )}
+              </div>
+            )
+          })}
+        </div>
 
-          {/* Step 2: Claude CLI */}
-          <div className="mb-8">
-            <div className="flex items-center gap-3 mb-4">
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center ${depsFound ? 'bg-pilos-blue' : 'bg-zinc-700'}`}>
-                <span className="text-[10px] font-bold text-white">2</span>
-              </div>
-              <h2 className={`text-lg font-bold ${depsFound ? 'text-white' : 'text-zinc-600'}`}>Claude CLI</h2>
-            </div>
-            {depsFound ? (
-              <CliSetupCard />
-            ) : (
-              <p className="text-xs text-zinc-600 pl-9">Complete step 1 first</p>
-            )}
-          </div>
+        <div className="divider" />
 
-          {/* Step 3: Ready */}
-          <div className="mb-8">
-            <div className="flex items-center gap-3 mb-4">
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center ${setupStatus === 'ready' ? 'bg-pilos-green' : 'bg-zinc-700'}`}>
-                <span className="text-[10px] font-bold text-white">3</span>
-              </div>
-              <h2 className={`text-lg font-bold ${setupStatus === 'ready' ? 'text-white' : 'text-zinc-600'}`}>Ready to Go</h2>
-            </div>
-            {setupStatus === 'ready' && (
-              <div className="p-6 bg-emerald-500/5 border border-emerald-500/20 rounded-xl text-center">
-                <Icon icon="lucide:check-circle-2" className="text-emerald-400 text-3xl" />
-                <h3 className="text-sm font-bold text-white mt-3 mb-1">All systems operational</h3>
-                <p className="text-xs text-zinc-400 mb-4">Your environment is configured and ready.</p>
-                <p className="text-[10px] text-zinc-600">The dashboard will load automatically...</p>
-              </div>
-            )}
-          </div>
+        {/* Body */}
+        {effectiveStep === 1 && <StepInstallCli />}
+        {effectiveStep === 2 && <StepAuth />}
+        {effectiveStep === 3 && <StepReady />}
+
+        {/* Footer */}
+        <div className="row" style={{ gap: 10, marginTop: 22 }}>
+          {effectiveStep > 1 && (
+            <button
+              className="btn ghost"
+              onClick={() => setManualStep(effectiveStep - 1)}
+            >
+              Back
+            </button>
+          )}
+          <span style={{ marginLeft: 'auto' }} />
+          <button
+            className="btn primary"
+            disabled={!canContinue && !isLast}
+            onClick={() => {
+              if (isLast) {
+                // Setup is auto-handled by the store reaching 'ready'.
+                // This button is a no-op in last step.
+                return
+              }
+              if (canContinue) setManualStep(effectiveStep + 1)
+            }}
+          >
+            {isLast ? 'Enter Pilos' : 'Continue'}
+            <Icon icon="lucide:arrow-right" className="text-[15px]" />
+          </button>
         </div>
       </div>
     </div>

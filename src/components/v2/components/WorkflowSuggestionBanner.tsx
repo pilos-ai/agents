@@ -46,22 +46,7 @@ export function WorkflowSuggestionBanner({
 
   // ── Visuals ────────────────────────────────────────────────────────────────
   const iconName = isMatched ? 'lucide:play-circle' : isRepeated ? 'lucide:repeat' : 'lucide:sparkles'
-  const accent = isMatched
-    ? 'border-emerald-500/30 bg-emerald-500/5'
-    : isRepeated
-      ? 'border-indigo-500/30 bg-indigo-500/5'
-      : 'border-blue-500/20 bg-blue-500/5'
-  const iconColor = isMatched ? 'text-emerald-300' : isRepeated ? 'text-indigo-300' : 'text-blue-400'
-  const titleColor = isMatched
-    ? 'text-emerald-200'
-    : isRepeated
-      ? 'text-indigo-200'
-      : 'text-blue-300'
-  const buttonColor = isMatched
-    ? 'text-emerald-200 border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20'
-    : isRepeated
-      ? 'text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/10'
-      : 'text-blue-400 border-blue-500/30 hover:bg-blue-500/10'
+  const tileClass = isMatched ? 'msg-tile ok' : 'msg-tile accent'
 
   // ── Primary action ─────────────────────────────────────────────────────────
   // Matched tier: run the workflow (no Pro gate — user already paid once to
@@ -72,47 +57,57 @@ export function WorkflowSuggestionBanner({
   const primaryOnClick = isMatched ? onRun : isPro ? onConvert : undefined
 
   return (
-    <div className={`mx-4 mt-2 flex items-center gap-3 px-4 py-2.5 rounded-lg border ${accent}`}>
-      <Icon icon={iconName} className={`${iconColor} text-sm flex-shrink-0`} />
-      <div className="flex-1 min-w-0">
-        <p className={`text-xs font-medium ${titleColor}`}>{title}</p>
-        <p className="text-[10px] text-zinc-500 truncate">{subtitle}</p>
+    <div className={tileClass}>
+      <div className="msg-tile-head">
+        <Icon icon={iconName} style={{ fontSize: 14, color: isMatched ? 'var(--ok)' : 'var(--accent-2)', flexShrink: 0 }} />
+        <span>{title}</span>
+        <button
+          type="button"
+          onClick={onDismiss}
+          title="Not now"
+          className="mini-ico"
+          style={{ marginLeft: 'auto', width: 22, height: 22 }}
+        >
+          <Icon icon="lucide:x" style={{ fontSize: 12 }} />
+        </button>
       </div>
-      <button
-        onClick={primaryOnClick}
-        disabled={primaryDisabled}
-        className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap flex items-center gap-1.5 ${primaryDisabled ? 'text-zinc-500 border-pilos-border cursor-not-allowed opacity-60' : buttonColor}`}
-      >
-        {primaryIcon && <Icon icon={primaryIcon} className="text-xs" />}
-        {primaryLabel}
-        {!isMatched && !isPro && <ProBadge />}
-      </button>
-      {isMatched && (
+      <div className="msg-tile-body" style={{ padding: '8px 12px' }}>
+        <p className="muted" style={{ fontSize: 11.5, margin: 0 }}>{subtitle}</p>
+      </div>
+      <div className="msg-tile-foot">
         <button
-          onClick={isPro ? onConvert : undefined}
-          disabled={!isPro}
-          title="Save this conversation as a new task instead"
-          className={`text-[10px] transition-colors whitespace-nowrap ${isPro ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-600 cursor-not-allowed'}`}
+          type="button"
+          onClick={primaryOnClick}
+          disabled={primaryDisabled}
+          className={'btn sm' + (isMatched ? ' primary' : '')}
         >
-          Save new
+          {primaryIcon && <Icon icon={primaryIcon} style={{ fontSize: 12 }} />}
+          {primaryLabel}
+          {!isMatched && !isPro && <ProBadge />}
         </button>
-      )}
-      {(isRepeated || isMatched) && onNever && (
-        <button
-          onClick={onNever}
-          title="Never suggest for this pattern"
-          className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors whitespace-nowrap"
-        >
-          Never
-        </button>
-      )}
-      <button
-        onClick={onDismiss}
-        title="Not now"
-        className="text-zinc-600 hover:text-zinc-400 transition-colors"
-      >
-        <Icon icon="lucide:x" className="text-xs" />
-      </button>
+        {isMatched && (
+          <button
+            type="button"
+            onClick={isPro ? onConvert : undefined}
+            disabled={!isPro}
+            title="Save this conversation as a new task instead"
+            className="btn sm ghost"
+          >
+            Save new
+          </button>
+        )}
+        {(isRepeated || isMatched) && onNever && (
+          <button
+            type="button"
+            onClick={onNever}
+            title="Never suggest for this pattern"
+            className="btn sm ghost"
+            style={{ marginLeft: 'auto' }}
+          >
+            Never
+          </button>
+        )}
+      </div>
     </div>
   )
 }

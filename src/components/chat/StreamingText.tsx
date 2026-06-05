@@ -1,3 +1,7 @@
+/**
+ * StreamingText — partial markdown text + animated streaming cursor.
+ * Sits inside a `.ctext` flow; inherits its text colour and typography.
+ */
 import { MarkdownRenderer } from './MarkdownRenderer'
 
 interface Props {
@@ -6,9 +10,9 @@ interface Props {
 
 export function StreamingText({ text }: Props) {
   return (
-    <div className="markdown-content text-sm">
+    <>
       <MarkdownRenderer content={text} />
       <span className="streaming-cursor" />
-    </div>
+    </>
   )
 }

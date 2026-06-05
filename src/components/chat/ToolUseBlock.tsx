@@ -1,6 +1,16 @@
-import { useState } from 'react'
+/**
+ * ToolUseBlock — pilos-prototype styled tool invocation indicator.
+ *
+ * Every tool renders as a compact `.tool-chip` by default (matching the
+ * prototype's collapsed look in screen_chat.jsx). Tools with rich content
+ * (Edit / Write / Bash / arbitrary tools) expose a chevron to expand into
+ * the `.msg-tile` detail view with diff / preview / command.
+ *
+ * Interactive tools (AskUserQuestion / ExitPlanMode) delegate to their own
+ * components which use the `.msg-tile` markup directly (not collapsible).
+ */
+import { useState, type ReactNode } from 'react'
 import type { ToolUseBlock as ToolUseBlockType } from '../../types'
-import { api } from '../../api'
 import { CodeBlock } from './CodeBlock'
 import { AskUserQuestionBlock } from './AskUserQuestionBlock'
 import { ExitPlanModeBlock } from './ExitPlanModeBlock'
@@ -9,148 +19,140 @@ interface Props {
   block: ToolUseBlockType
 }
 
-const TOOL_ICONS: Record<string, string> = {
-  Bash: '$ ',
-  Read: '📄 ',
-  Edit: '✏️ ',
-  Write: '📝 ',
-  Glob: '🔍 ',
-  Grep: '🔎 ',
-  Task: '📋 ',
-  WebFetch: '🌐 ',
-  WebSearch: '🔍 ',
+export function ToolUseBlock({ block }: Props) {
+  // Interactive tools render full UI, never as chips
+  if (block.name === 'AskUserQuestion') return <AskUserQuestionBlock block={block} />
+  if (block.name === 'ExitPlanMode') return <ExitPlanModeBlock block={block} />
+
+  return <ToolChip block={block} />
 }
 
-// Tools that show expanded rich content by default
-const EXPANDED_TOOLS = new Set(['Edit', 'Write', 'Bash'])
+// ── Universal chip with optional expand ──
 
-export function ToolUseBlock({ block }: Props) {
-  const isExpanded = EXPANDED_TOOLS.has(block.name)
-  const [showRaw, setShowRaw] = useState(false)
-
-  // Interactive tools get their own dedicated components
-  if (block.name === 'AskUserQuestion') {
-    return <div className="my-1"><AskUserQuestionBlock block={block} /></div>
-  }
-  if (block.name === 'ExitPlanMode') {
-    return <div className="my-1"><ExitPlanModeBlock block={block} /></div>
-  }
+function ToolChip({ block }: { block: ToolUseBlockType }) {
+  const [expanded, setExpanded] = useState(false)
+  const { label, summary, detail } = describeTool(block)
+  const expandable = !!detail
 
   return (
-    <div className="my-1">
-      {block.name === 'Edit' ? (
-        <EditBlock block={block} showRaw={showRaw} onToggleRaw={() => setShowRaw(!showRaw)} />
-      ) : block.name === 'Write' ? (
-        <WriteBlock block={block} showRaw={showRaw} onToggleRaw={() => setShowRaw(!showRaw)} />
-      ) : block.name === 'Bash' ? (
-        <BashBlock block={block} showRaw={showRaw} onToggleRaw={() => setShowRaw(!showRaw)} />
-      ) : (
-        <CollapsedBlock block={block} />
-      )}
+    <div className="msg-tools" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+      <button
+        type="button"
+        onClick={() => expandable && setExpanded((v) => !v)}
+        className={'tool-chip' + (expandable ? ' expand' : '') + (expanded ? ' open' : '')}
+        title={summary || label}
+        style={expandable ? undefined : { cursor: 'default' }}
+      >
+        <span className="ok">
+          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12l4 4 10-10" />
+          </svg>
+        </span>
+        <span>{label}</span>
+        {summary && (
+          <span style={{ color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 460, whiteSpace: 'nowrap' }}>
+            · {summary}
+          </span>
+        )}
+        {expandable && (
+          <svg className="chev" width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ marginLeft: 4, transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+        )}
+      </button>
+      {expandable && expanded && <div style={{ width: '100%', marginTop: 6 }}>{detail}</div>}
     </div>
   )
 }
 
-// ── Edit Block: inline diff + revert ──
+// ── Per-tool descriptor ──
+// Returns chip label, the summary text shown beside it, and the expanded detail node.
 
-function EditBlock({ block, showRaw, onToggleRaw }: { block: ToolUseBlockType; showRaw: boolean; onToggleRaw: () => void }) {
-  const filePath = block.input.file_path as string || ''
-  const oldString = block.input.old_string as string || ''
-  const newString = block.input.new_string as string || ''
-  const [revertState, setRevertState] = useState<'idle' | 'loading' | 'reverted' | 'error'>('idle')
-  const [revertError, setRevertError] = useState('')
-
-  const handleRevert = async () => {
-    if (revertState === 'reverted' || revertState === 'loading') return
-    setRevertState('loading')
-    try {
-      const result = await api.files.revertEdit(filePath, oldString, newString)
-      if (result.success) {
-        setRevertState('reverted')
-      } else {
-        setRevertState('error')
-        setRevertError(result.error || 'Revert failed')
+function describeTool(block: ToolUseBlockType): { label: string; summary: string; detail: ReactNode | null } {
+  const input = block.input
+  switch (block.name) {
+    case 'Bash': {
+      const command = (input.command as string) || ''
+      const description = (input.description as string) || ''
+      return {
+        label: '$ Bash',
+        summary: description || shortenForChip(command, 80),
+        detail: <CommandDetail command={command} />,
       }
-    } catch {
-      setRevertState('error')
-      setRevertError('Revert failed')
     }
+    case 'Edit': {
+      const filePath = (input.file_path as string) || ''
+      const oldString = (input.old_string as string) || ''
+      const newString = (input.new_string as string) || ''
+      return {
+        label: 'edit',
+        summary: tailPath(filePath),
+        detail: <EditDetail oldString={oldString} newString={newString} />,
+      }
+    }
+    case 'Write': {
+      const filePath = (input.file_path as string) || ''
+      const content = (input.content as string) || ''
+      return {
+        label: 'write',
+        summary: tailPath(filePath),
+        detail: <WriteDetail filePath={filePath} content={content} />,
+      }
+    }
+    case 'Read':
+      return { label: 'read', summary: tailPath((input.file_path as string) || ''), detail: null }
+    case 'Glob':
+      return { label: 'glob', summary: (input.pattern as string) || '', detail: null }
+    case 'Grep':
+      return { label: 'grep', summary: (input.pattern as string) || '', detail: null }
+    case 'Task':
+      return { label: 'task', summary: shortenForChip((input.description as string) || '', 60), detail: null }
+    case 'WebFetch':
+      return { label: 'web', summary: (input.url as string) || '', detail: null }
+    case 'WebSearch':
+      return { label: 'search', summary: (input.query as string) || '', detail: null }
+    default:
+      // Unknown / MCP tools — show name and let user expand if input is non-trivial
+      return {
+        label: block.name,
+        summary: '',
+        detail: hasMeaningfulInput(input) ? <JsonDetail input={input} /> : null,
+      }
   }
+}
 
+// ── Expanded detail views ──
+
+function CommandDetail({ command }: { command: string }) {
+  return (
+    <div className="code-block" style={{ margin: 0 }}>
+      <div className="tline" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+        <span className="cs">$</span> {command}
+      </div>
+    </div>
+  )
+}
+
+function EditDetail({ oldString, newString }: { oldString: string; newString: string }) {
   const oldLines = oldString ? oldString.split('\n') : []
   const newLines = newString ? newString.split('\n') : []
-  const shortPath = filePath.split('/').slice(-3).join('/')
-
   return (
-    <div className="rounded-md overflow-hidden border border-neutral-700/50">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-neutral-800">
-        <button onClick={onToggleRaw} className="flex items-center gap-2 text-xs text-neutral-300 hover:text-white transition-colors">
-          <span>✏️</span>
-          <span className="font-medium">Edit</span>
-          <span className="text-neutral-400">{shortPath}</span>
-        </button>
-        <div className="flex items-center gap-2">
-          {revertState === 'error' && (
-            <span className="text-xs text-red-400">{revertError}</span>
-          )}
-          <button
-            onClick={handleRevert}
-            disabled={revertState === 'reverted' || revertState === 'loading'}
-            className={`text-xs px-2 py-0.5 rounded transition-colors ${
-              revertState === 'reverted'
-                ? 'bg-green-900/40 text-green-400 cursor-default'
-                : revertState === 'loading'
-                ? 'bg-neutral-700 text-neutral-400 cursor-wait'
-                : revertState === 'error'
-                ? 'bg-red-900/40 text-red-400 hover:bg-red-900/60'
-                : 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
-            }`}
-          >
-            {revertState === 'reverted' ? 'Reverted' : revertState === 'loading' ? '...' : 'Revert'}
-          </button>
+    <div className="code-block no-pad" style={{ margin: 0 }}>
+      {oldLines.map((line, i) => (
+        <div key={`old-${i}`} className="tline diff-line del">
+          <span className="sigil">-</span>{line || ' '}
         </div>
-      </div>
-
-      {/* Diff view */}
-      {!showRaw && (oldString || newString) && (
-        <div className="overflow-x-auto">
-          <pre className="text-xs leading-5 p-0 m-0">
-            {oldLines.map((line, i) => (
-              <div key={`old-${i}`} className="px-3 bg-red-950/40 text-red-300">
-                <span className="select-none text-red-500/60 mr-2">-</span>{line}
-              </div>
-            ))}
-            {newLines.map((line, i) => (
-              <div key={`new-${i}`} className="px-3 bg-green-950/40 text-green-300">
-                <span className="select-none text-green-500/60 mr-2">+</span>{line}
-              </div>
-            ))}
-          </pre>
+      ))}
+      {newLines.map((line, i) => (
+        <div key={`new-${i}`} className="tline diff-line add">
+          <span className="sigil">+</span>{line || ' '}
         </div>
-      )}
-
-      {/* Raw JSON (toggle) */}
-      {showRaw && (
-        <div className="p-2">
-          <CodeBlock language="json" code={JSON.stringify(block.input, null, 2)} />
-        </div>
-      )}
+      ))}
     </div>
   )
 }
 
-// ── Write Block: content preview ──
-
-function WriteBlock({ block, showRaw, onToggleRaw }: { block: ToolUseBlockType; showRaw: boolean; onToggleRaw: () => void }) {
-  const filePath = block.input.file_path as string || ''
-  const content = block.input.content as string || ''
-  const lines = content.split('\n')
-  const previewLines = lines.slice(0, 8)
-  const remaining = lines.length - previewLines.length
-  const shortPath = filePath.split('/').slice(-3).join('/')
-
-  // Guess language from extension
+function WriteDetail({ filePath, content }: { filePath: string; content: string }) {
   const ext = filePath.split('.').pop() || ''
   const langMap: Record<string, string> = {
     ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx',
@@ -158,129 +160,32 @@ function WriteBlock({ block, showRaw, onToggleRaw }: { block: ToolUseBlockType; 
     md: 'markdown', css: 'css', html: 'html', yml: 'yaml', yaml: 'yaml',
   }
   const language = langMap[ext] || ''
-
-  return (
-    <div className="rounded-md overflow-hidden border border-neutral-700/50">
-      {/* Header */}
-      <div className="px-3 py-1.5 bg-neutral-800">
-        <button onClick={onToggleRaw} className="flex items-center gap-2 text-xs text-neutral-300 hover:text-white transition-colors">
-          <span>📝</span>
-          <span className="font-medium">Write</span>
-          <span className="text-neutral-400">{shortPath}</span>
-        </button>
-      </div>
-
-      {/* Content preview */}
-      {!showRaw && (
-        <div className="overflow-x-auto">
-          <pre className="text-xs leading-5 p-0 m-0">
-            {previewLines.map((line, i) => (
-              <div key={i} className="px-3 text-neutral-300">
-                <span className="select-none text-neutral-600 mr-3 inline-block w-4 text-right">{i + 1}</span>{line}
-              </div>
-            ))}
-            {remaining > 0 && (
-              <div className="px-3 py-1 text-neutral-500 italic">
-                ... {remaining} more line{remaining > 1 ? 's' : ''}
-              </div>
-            )}
-          </pre>
-        </div>
-      )}
-
-      {/* Raw JSON (toggle) */}
-      {showRaw && (
-        <div className="p-2">
-          <CodeBlock language="json" code={JSON.stringify(block.input, null, 2)} />
-        </div>
-      )}
-    </div>
-  )
+  const lines = content.split('\n')
+  const previewLines = lines.slice(0, 12)
+  const remaining = lines.length - previewLines.length
+  const body = previewLines.join('\n') + (remaining > 0 ? `\n// … ${remaining} more line${remaining > 1 ? 's' : ''}` : '')
+  return <CodeBlock language={language} code={body} />
 }
 
-// ── Bash Block: terminal-styled command ──
-
-function BashBlock({ block, showRaw, onToggleRaw }: { block: ToolUseBlockType; showRaw: boolean; onToggleRaw: () => void }) {
-  const command = block.input.command as string || ''
-  const description = block.input.description as string || ''
-
-  return (
-    <div className="rounded-md overflow-hidden border border-neutral-700/50">
-      {/* Command display */}
-      <div className="bg-neutral-900 px-3 py-2">
-        <button onClick={onToggleRaw} className="w-full text-left">
-          <div className="flex items-start gap-2">
-            <span className="text-green-400 text-xs font-mono select-none shrink-0">$</span>
-            <pre className="text-xs font-mono text-neutral-200 whitespace-pre-wrap break-all m-0 select-text">{command}</pre>
-          </div>
-        </button>
-        {description && (
-          <div className="text-xs text-neutral-500 mt-1 ml-4">{description}</div>
-        )}
-      </div>
-
-      {/* Raw JSON (toggle) */}
-      {showRaw && (
-        <div className="p-2 border-t border-neutral-700/50">
-          <CodeBlock language="json" code={JSON.stringify(block.input, null, 2)} />
-        </div>
-      )}
-    </div>
-  )
+function JsonDetail({ input }: { input: Record<string, unknown> }) {
+  return <CodeBlock language="json" code={JSON.stringify(input, null, 2)} />
 }
 
-// ── Collapsed Block: compact style for Read/Glob/Grep/etc ──
+// ── Helpers ──
 
-function CollapsedBlock({ block }: { block: ToolUseBlockType }) {
-  const [expanded, setExpanded] = useState(false)
-  const icon = TOOL_ICONS[block.name] || '🔧 '
-  const summary = getToolSummary(block)
-
-  return (
-    <>
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 bg-neutral-800/40 hover:bg-neutral-800/60 rounded-md text-left transition-colors border border-neutral-700/50"
-      >
-        <svg
-          className={`w-3 h-3 text-neutral-500 transition-transform ${expanded ? 'rotate-90' : ''}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
-
-        <span className="text-xs">
-          <span className="text-neutral-300">{icon}{block.name}</span>
-          {summary && (
-            <span className="text-neutral-500 ml-2">{summary}</span>
-          )}
-        </span>
-      </button>
-
-      {expanded && (
-        <div className="mt-1 ml-5">
-          <CodeBlock language="json" code={JSON.stringify(block.input, null, 2)} />
-        </div>
-      )}
-    </>
-  )
+function tailPath(p: string, depth = 3): string {
+  if (!p) return ''
+  const parts = p.split('/')
+  return parts.length > depth ? parts.slice(-depth).join('/') : p
 }
 
-function getToolSummary(block: ToolUseBlockType): string {
-  const input = block.input
-  switch (block.name) {
-    case 'Read':
-      return (input.file_path as string) || ''
-    case 'Glob':
-      return (input.pattern as string) || ''
-    case 'Grep':
-      return (input.pattern as string) || ''
-    case 'Task':
-      return (input.description as string)?.slice(0, 60) || ''
-    default:
-      return ''
-  }
+function shortenForChip(s: string, max: number): string {
+  if (!s) return ''
+  const oneLine = s.replace(/\s+/g, ' ').trim()
+  return oneLine.length > max ? oneLine.slice(0, max - 1) + '…' : oneLine
+}
+
+function hasMeaningfulInput(input: Record<string, unknown>): boolean {
+  const keys = Object.keys(input || {})
+  return keys.length > 0 && !(keys.length === 1 && keys[0] === 'description')
 }

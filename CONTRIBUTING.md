@@ -6,7 +6,7 @@ Thanks for your interest in contributing!
 
 - **Bug reports** — Open an issue with steps to reproduce
 - **Feature requests** — Open an issue describing the use case
-- **Pull requests** — Fork the repo, make your change, open a PR against `agents-v2`
+- **Pull requests** — Fork the repo, make your change, open a PR against `main`
 
 ## Development setup
 

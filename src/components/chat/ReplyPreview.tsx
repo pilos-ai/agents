@@ -7,21 +7,52 @@ export function ReplyPreview() {
   if (!replyToMessage) return null
 
   const name = replyToMessage.role === 'user' ? 'You' : (replyToMessage.agentName || 'Assistant')
-  const preview = replyToMessage.content.slice(0, 100) + (replyToMessage.content.length > 100 ? '...' : '')
+  const full = (replyToMessage.content || '').replace(/\s+/g, ' ').trim()
+  const preview = full.length > 140 ? full.slice(0, 140) + '…' : full
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 mb-2 bg-neutral-800/60 border-l-2 border-blue-500 rounded text-xs">
-      <svg className="w-3 h-3 text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <div
+      className="reply-preview"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '8px 12px',
+        marginBottom: 10,
+        background: 'var(--surface)',
+        border: '1px solid var(--line)',
+        borderLeft: '2px solid var(--accent)',
+        borderRadius: 'var(--r-sm)',
+        fontSize: 12,
+        color: 'var(--ink-3)',
+      }}
+    >
+      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: 'var(--accent-2)', flex: 'none' }}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
       </svg>
-      <span className="text-neutral-400 shrink-0">Replying to <span className="font-medium text-neutral-300">{name}</span></span>
-      <span className="text-neutral-500 truncate flex-1">{preview}</span>
-      <button
-        onClick={() => setReplyTo(null)}
-        className="p-0.5 text-neutral-500 hover:text-neutral-200 transition-colors shrink-0 cursor-pointer"
-        title="Cancel reply"
+      <span style={{ flex: 'none' }}>
+        Replying to <span style={{ color: 'var(--ink-2)', fontWeight: 600 }}>{name}</span>
+      </span>
+      <span
+        style={{
+          flex: 1,
+          minWidth: 0,
+          color: 'var(--muted)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
       >
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        {preview}
+      </span>
+      <button
+        type="button"
+        onClick={() => setReplyTo(null)}
+        className="mini-ico"
+        title="Cancel reply"
+        style={{ width: 22, height: 22, flex: 'none' }}
+      >
+        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>

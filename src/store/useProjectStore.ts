@@ -4,6 +4,7 @@ import { useConversationStore } from './useConversationStore'
 import { useAppStore, type AppView } from './useAppStore'
 import { useLicenseStore } from './useLicenseStore'
 import { useTaskStore } from './useTaskStore'
+import { useWorkflowStore } from './useWorkflowStore'
 import type { Project, Conversation, ConversationMessage, ContentBlock, ClaudeEvent, ProjectMode, AgentDefinition, McpServer, McpServerStdio, ImageAttachment, ToolUseBlock, ToolResultBlock } from '../types'
 
 /** Migration map: old fake @anthropic/* MCP packages → real npm packages */
@@ -68,6 +69,12 @@ export interface ConversationSnapshot {
   isWaitingForResponse: boolean
   hasActiveSession: boolean
   messageQueue: Array<{ text: string; images?: import('../types').ImageAttachment[] }>
+  // Cursor-based message-pagination state — snapshotted so a project tab
+  // round-trip (switch away → switch back) preserves how far back the user
+  // has paged. Defaults to (false, null) for legacy snapshots restored on
+  // first run after the upgrade.
+  hasMoreOlder: boolean
+  oldestLoadedMessageId: number | null
 }
 
 export interface ProjectTab {
@@ -144,6 +151,8 @@ const emptySnapshot: ConversationSnapshot = {
   isWaitingForResponse: false,
   hasActiveSession: false,
   messageQueue: [],
+  hasMoreOlder: false,
+  oldestLoadedMessageId: null,
 }
 
 function captureConversationSnapshot(): ConversationSnapshot {
@@ -156,6 +165,8 @@ function captureConversationSnapshot(): ConversationSnapshot {
     isWaitingForResponse: s.isWaitingForResponse,
     hasActiveSession: s.hasActiveSession,
     messageQueue: s.messageQueue,
+    hasMoreOlder: s.hasMoreOlder,
+    oldestLoadedMessageId: s.oldestLoadedMessageId,
   }
 }
 
@@ -168,6 +179,10 @@ function restoreConversationSnapshot(snapshot: ConversationSnapshot): void {
     isWaitingForResponse: snapshot.isWaitingForResponse,
     hasActiveSession: snapshot.hasActiveSession,
     messageQueue: snapshot.messageQueue || [],
+    // Restore pagination cursor (defaults preserve old behavior for legacy snapshots).
+    hasMoreOlder: snapshot.hasMoreOlder ?? false,
+    oldestLoadedMessageId: snapshot.oldestLoadedMessageId ?? null,
+    isLoadingOlder: false,
     permissionRequest: null,
     askUserQuestion: null,
     exitPlanMode: null,
@@ -555,7 +570,16 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       snapshot: null,
       model: settings.model || 'sonnet',
       permissionMode: settings.permissionMode || 'bypass',
-      mode: useLicenseStore.getState().flags.teamMode ? 'team' : 'solo',
+      // Restore the persisted solo/team choice; never restore 'team' if the
+      // license no longer unlocks it. No saved value → default by license tier.
+      mode:
+        settings.mode === 'team' && useLicenseStore.getState().flags.teamMode
+          ? 'team'
+          : settings.mode === 'solo'
+            ? 'solo'
+            : useLicenseStore.getState().flags.teamMode
+              ? 'team'
+              : 'solo',
       agents: settings.agents || [],
       mcpServers: settings.mcpServers || [],
       draftText: '',
@@ -576,6 +600,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       hasActiveSession: false,
       processLogs: [],
       permissionRequest: null,
+      hasMoreOlder: false,
+      oldestLoadedMessageId: null,
+      isLoadingOlder: false,
     })
 
     // Restore view for the new tab
@@ -620,6 +647,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             hasActiveSession: false,
             processLogs: [],
             permissionRequest: null,
+            hasMoreOlder: false,
+            oldestLoadedMessageId: null,
+            isLoadingOlder: false,
           })
           useConversationStore.getState().loadConversations(nextTab.projectPath)
         }
@@ -640,6 +670,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           isWaitingForResponse: false,
           hasActiveSession: false,
           permissionRequest: null,
+          hasMoreOlder: false,
+          oldestLoadedMessageId: null,
+          isLoadingOlder: false,
         })
 
         // Clear tasks (no project open)
@@ -667,6 +700,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       )
     }
 
+    // Close the workflow editor if one is open — task IDs are scoped per
+    // project, so keeping the editor mounted across project switches strands
+    // it on a task from the wrong project (or one that doesn't exist in the
+    // new project's tasks list).
+    if (useWorkflowStore.getState().editingTaskId) {
+      useWorkflowStore.getState().setEditingTaskId(null)
+    }
+
     // Phase 4: Reset unread count for the tab we're switching to
     openProjects = openProjects.map((p) =>
       p.projectPath === dirPath ? { ...p, unreadCount: 0 } : p
@@ -688,6 +729,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         hasActiveSession: false,
         processLogs: [],
         permissionRequest: null,
+        hasMoreOlder: false,
+        oldestLoadedMessageId: null,
+        isLoadingOlder: false,
       })
     }
 
@@ -699,9 +743,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       await useConversationStore.getState().loadConversations(dirPath)
     }
 
-    // Phase 3: Restore the tab's active view (guard against stale views like 'chat' that no longer exist)
-    const VALID_VIEWS = new Set(['dashboard', 'terminal', 'tasks', 'results', 'config', 'analytics', 'mcp', 'settings'])
-    const restoredView = tab?.activeView && VALID_VIEWS.has(tab.activeView) ? tab.activeView : 'dashboard'
+    // Phase 3: Restore the tab's active view.
+    // Migrations: legacy 'terminal' → 'chat'; old default 'dashboard' → 'chat'
+    // (dashboard is the no-project landing only; once a project is open we go to chat).
+    const VALID_VIEWS = new Set(['chat', 'workflows', 'terminal', 'analytics', 'agents', 'mcp', 'runs', 'settings', 'tasks', 'results', 'config'])
+    const raw = tab?.activeView
+    const rawView = raw === 'terminal' ? 'chat' : raw === 'dashboard' ? 'chat' : raw
+    const restoredView = rawView && VALID_VIEWS.has(rawView) ? rawView : 'chat'
     useAppStore.getState().setActiveView(restoredView)
 
     // Load tasks for the new project

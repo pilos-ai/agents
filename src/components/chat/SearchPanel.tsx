@@ -1,3 +1,7 @@
+/**
+ * SearchPanel — full-window search overlay (Cmd+F). Restyled to the prototype
+ * tokens: dark `.win` chrome backdrop, `.seg` scope tabs, `.list-item` results.
+ */
 import { useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchStore, debouncedSearch } from '../../store/useSearchStore'
@@ -48,17 +52,16 @@ export function SearchPanel() {
     if (activeConversationId !== conversationId) {
       await setActiveConversation(conversationId)
     }
-    // setActiveConversation is async and fully awaited — safe to scroll now
     setScrollToMessageId(messageId)
   }, [activeConversationId, setActiveConversation, setScrollToMessageId, close])
 
   if (!isOpen) return null
 
   return createPortal(
-    <div className="fixed top-8 left-0 right-0 bottom-0 z-[9999] bg-neutral-900 flex flex-col">
+    <div style={{ position: 'fixed', top: 32, left: 0, right: 0, bottom: 0, zIndex: 9999, background: 'var(--win)', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-neutral-800">
-        <svg className="w-5 h-5 text-neutral-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 24px', borderBottom: '1px solid var(--line-2)' }}>
+        <svg width="20" height="20" style={{ color: 'var(--ink-3)', flexShrink: 0 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
         <input
@@ -67,77 +70,79 @@ export function SearchPanel() {
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Search messages..."
-          className="flex-1 bg-transparent text-white text-lg outline-none placeholder-neutral-500"
+          style={{
+            flex: 1, background: 'transparent', color: 'var(--ink)', fontSize: 18,
+            border: 'none', outline: 'none', fontFamily: 'inherit',
+          }}
           autoFocus
         />
-        <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-1 text-[10px] text-neutral-500 bg-neutral-800 border border-neutral-700 rounded">
-          ⌘F
-        </kbd>
+        <span className="kbd">⌘F</span>
         <button
+          type="button"
           onClick={close}
-          className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+          className="mini-ico"
           title="Close (Esc)"
         >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
 
       {/* Scope toggle */}
-      <div className="flex items-center gap-2 px-6 py-2 border-b border-neutral-800/50">
-        <button
-          onClick={() => setScope('project')}
-          className={`px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer ${
-            scope === 'project'
-              ? 'bg-blue-600 text-white'
-              : 'bg-neutral-800 text-neutral-400 hover:text-neutral-200'
-          }`}
-        >
-          All conversations
-        </button>
-        <button
-          onClick={() => setScope('conversation')}
-          disabled={!activeConversationId}
-          className={`px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer disabled:opacity-30 ${
-            scope === 'conversation'
-              ? 'bg-blue-600 text-white'
-              : 'bg-neutral-800 text-neutral-400 hover:text-neutral-200'
-          }`}
-        >
-          Current chat
-        </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 24px', borderBottom: '1px solid var(--line-2)' }}>
+        <div className="seg">
+          <button type="button" onClick={() => setScope('project')} className={scope === 'project' ? 'on' : ''}>
+            All conversations
+          </button>
+          <button
+            type="button"
+            onClick={() => setScope('conversation')}
+            disabled={!activeConversationId}
+            className={scope === 'conversation' ? 'on' : ''}
+          >
+            Current chat
+          </button>
+        </div>
         {query.trim() && (
-          <span className="ml-auto text-xs text-neutral-500">
+          <span className="muted" style={{ marginLeft: 'auto', fontSize: 11.5 }}>
             {isSearching ? 'Searching...' : `${total} result${total !== 1 ? 's' : ''}`}
           </span>
         )}
       </div>
 
       {/* Results */}
-      <div className="flex-1 overflow-y-auto px-6 py-3">
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 24px' }}>
         {!query.trim() && (
-          <p className="text-neutral-500 text-sm text-center mt-8">Type to search across your messages</p>
+          <p className="muted" style={{ fontSize: 13, textAlign: 'center', marginTop: 32 }}>Type to search across your messages</p>
         )}
 
         {query.trim() && results.length === 0 && !isSearching && (
-          <p className="text-neutral-500 text-sm text-center mt-8">No results found</p>
+          <p className="muted" style={{ fontSize: 13, textAlign: 'center', marginTop: 32 }}>No results found</p>
         )}
 
         {results.map((r) => (
           <button
+            type="button"
             key={r.id}
             onClick={() => handleResultClick(r.conversationId, r.id)}
-            className="w-full text-left px-4 py-3 mb-1 rounded-lg hover:bg-neutral-800/60 transition-colors cursor-pointer"
+            style={{
+              width: '100%', textAlign: 'left', padding: '12px 16px',
+              marginBottom: 4, borderRadius: 8, border: '1px solid transparent',
+              background: 'transparent', cursor: 'pointer', display: 'block',
+              transition: 'background 0.14s, border-color 0.14s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
           >
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-medium text-blue-400 truncate">{r.conversationTitle}</span>
-              <span className="text-[10px] text-neutral-600 shrink-0">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--accent-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.conversationTitle}</span>
+              <span style={{ fontSize: 10, color: 'var(--faint)', flexShrink: 0 }}>
                 {new Date(r.timestamp).toLocaleDateString()}
               </span>
             </div>
             <p
-              className="text-sm text-neutral-300 line-clamp-2 [&>mark]:bg-yellow-500/30 [&>mark]:text-yellow-200 [&>mark]:rounded-sm [&>mark]:px-0.5"
+              style={{ fontSize: 13, color: 'var(--ink-2)', margin: 0, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
               dangerouslySetInnerHTML={{ __html: r.snippet }}
             />
           </button>

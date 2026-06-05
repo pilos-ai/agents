@@ -4,26 +4,108 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   Pilos — Desktop App Design Tokens (from pilos-handoff/app/app.css)
+   Dark · dense · IDE-grade · Figtree + indigo accent
+   ============================================================ */
+:root {
+  /* Accent (indigo) */
+  --accent: #6366f1;
+  --accent-2: #818cf8;
+  --accent-strong: #4f52e6;
+  --accent-soft: rgba(99, 102, 241, 0.14);
+  --accent-line: rgba(99, 102, 241, 0.35);
+  --accent-glow: rgba(99, 102, 241, 0.45);
+
+  /* Status */
+  --ok: #3ecf8e;
+  --warn: #f6b73c;
+  --err: #fb6f6f;
+  --info: #5cb8ff;
+
+  /* Surfaces */
+  --desk: #050507;
+  --win: #0c0c11;
+  --rail: #08080c;
+  --panel: #0f0f15;
+  --panel-2: #121219;
+  --surface: #15151d;
+  --surface-2: #1b1b25;
+  --surface-3: #22222e;
+  --hover: rgba(255, 255, 255, 0.04);
+  --active: rgba(255, 255, 255, 0.07);
+
+  /* Ink (text) */
+  --ink: #f2f2f6;
+  --ink-2: #c4c4d0;
+  --ink-3: #9a9aa8;
+  --muted: #6f6f7d;
+  --faint: #4d4d59;
+
+  /* Lines */
+  --line: rgba(255, 255, 255, 0.08);
+  --line-2: rgba(255, 255, 255, 0.05);
+  --line-3: rgba(255, 255, 255, 0.12);
+
+  /* Radius */
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 18px;
+
+  /* Typography */
+  --font: 'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Dimensions */
+  --rail-w: 60px;
+  --panel-w: 248px;
+
+  /* Shadows */
+  --shadow-win: 0 40px 90px -30px rgba(0, 0, 0, 0.8), 0 16px 40px -18px rgba(0, 0, 0, 0.6);
+  --shadow-pop: 0 18px 50px -18px rgba(0, 0, 0, 0.7);
+
+  /* ---------- Legacy --pilos-* aliases (keep Tailwind classes working) ---------- */
+  --pilos-bg: var(--desk);
+  --pilos-card: var(--surface);
+  --pilos-blue: var(--accent);
+  --pilos-orange: var(--warn);
+  --pilos-green: var(--ok);
+  --pilos-border: var(--line-3);
+  --pilos-text: var(--ink);
+  --pilos-text-muted: var(--ink-3);
+  --pilos-text-dim: var(--muted);
+}
+
 /* React Flow dark theme */
 .react-flow {
-  --xy-background-color: var(--pilos-bg) !important;
+  --xy-background-color: var(--win) !important;
+  background-color: var(--win) !important;
 }
 
 .react-flow__background {
-  background: var(--pilos-bg) !important;
+  background: var(--win) !important;
+}
+
+/* Outer canvas wrapper — solid bg so body radial-gradients don't bleed through. */
+.workflow-canvas,
+.workflow-canvas > .react-flow {
+  background-color: var(--win) !important;
 }
 
 .react-flow__minimap {
-  background: var(--pilos-card) !important;
+  background: var(--surface) !important;
 }
 
 .react-flow__controls {
-  display: none !important; /* using custom controls */
+  display: none !important;
 }
 
 .react-flow__selection {
-  background: rgba(59, 130, 246, 0.08) !important;
-  border: 1px dashed rgba(59, 130, 246, 0.4) !important;
+  background: var(--accent-soft) !important;
+  border: 1px dashed var(--accent-line) !important;
 }
 
 /* Edge animation */
@@ -39,42 +121,77 @@
 
 /* Node execution glow */
 .workflow-node-running {
-  box-shadow: 0 0 16px rgba(249, 115, 22, 0.35);
+  box-shadow: 0 0 16px var(--accent-glow);
   border-radius: 0.5rem;
 }
 
 .workflow-node-completed {
-  box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+  box-shadow: 0 0 10px rgba(62, 207, 142, 0.25);
   border-radius: 0.5rem;
 }
 
 .workflow-node-failed {
-  box-shadow: 0 0 10px rgba(239, 68, 68, 0.25);
+  box-shadow: 0 0 10px rgba(251, 111, 111, 0.25);
   border-radius: 0.5rem;
 }
 
-:root {
-  --pilos-bg: #09090b;
-  --pilos-card: #111113;
-  --pilos-blue: #3b82f6;
-  --pilos-orange: #ff6154;
-  --pilos-green: #10b981;
-  --pilos-border: #27272a;
-  --pilos-text: #fafafa;
-  --pilos-text-muted: #a1a1aa;
-  --pilos-text-dim: #71717a;
-}
-
 * {
+  box-sizing: border-box;
   scrollbar-width: thin;
-  scrollbar-color: #27272a transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
   user-select: none;
   -webkit-user-select: none;
 }
 
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  background:
+    radial-gradient(120% 90% at 80% -10%, rgba(99, 102, 241, 0.1), transparent 55%),
+    radial-gradient(100% 80% at 10% 110%, rgba(99, 102, 241, 0.06), transparent 50%),
+    var(--desk);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: -0.006em;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  color: inherit;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
 /* Allow selection in inputs, textareas, code blocks, and terminal */
-input, textarea, [contenteditable="true"],
-pre, code, .xterm, .markdown-content,
+input,
+textarea,
+[contenteditable='true'],
+pre,
+code,
+.xterm,
+.markdown-content,
 .selectable {
   user-select: text;
   -webkit-user-select: text;
@@ -94,18 +211,10 @@ pre, code, .xterm, .markdown-content,
   -webkit-user-select: none !important;
 }
 
-body {
-  margin: 0;
-  background: var(--pilos-bg);
-  overflow: hidden;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  color: var(--pilos-text);
-}
-
-/* Custom scrollbar for webkit */
+/* ---------- Scrollbars (10px prototype) ---------- */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -113,41 +222,44 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
+  background: rgba(255, 255, 255, 0.16);
+  background-clip: content-box;
 }
 
-/* Custom scrollbar class */
+.scroll {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+/* Custom scrollbar class (legacy — keep narrower 4px variant) */
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 10px;
 }
 
-/* xterm.js overrides */
-.xterm-helpers {
-  opacity: 0;
-  height: 0;
-  width: 0;
-}
-
-.xterm {
-  padding: 4px;
-}
-
+/* xterm.js overrides — base styles come from @xterm/xterm/css/xterm.css
+   (imported in main.tsx). The old `.xterm-helpers { opacity:0; height:0 }`
+   and `.xterm { padding:4px }` hacks were removed: the first mis-hid the
+   cursor/input helper (the stray box), the second desynced FitAddon's grid
+   from the visible area (padding belongs on .xterm-host, which already has it). */
 .xterm-viewport::-webkit-scrollbar {
   width: 5px;
 }
 
 .xterm-viewport::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 10px;
 }
 
@@ -159,13 +271,13 @@ body {
 
 .resize-handle:hover,
 .resize-handle:active {
-  background: var(--pilos-blue);
+  background: var(--accent);
 }
 
-/* Sidebar navigation active state */
+/* Sidebar navigation active state (legacy) */
 .sidebar-active {
-  background-color: rgba(59, 130, 246, 0.1);
-  border-right: 2px solid var(--pilos-blue);
+  background-color: var(--accent-soft);
+  border-right: 2px solid var(--accent);
 }
 
 /* Form input base style */
@@ -176,15 +288,15 @@ body {
   font-size: 0.875rem;
   transition: all 0.2s;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
-  background: var(--pilos-card);
-  border: 1px solid var(--pilos-border);
-  color: var(--pilos-text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink);
   outline: none;
 }
 
 .form-input:focus {
-  border-color: var(--pilos-blue);
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3);
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 1px var(--accent-soft);
 }
 
 /* Code editor textarea */
@@ -192,29 +304,29 @@ body {
   width: 100%;
   padding: 1rem;
   border-radius: 0.5rem;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--mono);
   font-size: 11px;
-  background: #0c0c0e;
-  border: 1px solid var(--pilos-border);
-  color: #a1a1aa;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--ink-3);
   outline: none;
   resize: vertical;
 }
 
 .code-editor:focus {
-  border-color: var(--pilos-blue);
+  border-color: var(--accent-line);
 }
 
 /* Monospace font utility */
 .mono {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--mono);
 }
 
 /* Settings nav active state */
 .settings-nav-active {
-  background: var(--pilos-card);
-  color: var(--pilos-blue);
-  border-left: 2px solid var(--pilos-blue);
+  background: var(--surface);
+  color: var(--accent-2);
+  border-left: 2px solid var(--accent);
 }
 
 /* Unsaved changes dot */
@@ -222,25 +334,25 @@ body {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #ffb84d;
+  background: var(--warn);
 }
 
 /* Table row hover effect */
 .task-row-hover:hover {
-  background-color: rgba(59, 130, 246, 0.05);
+  background-color: var(--accent-soft);
 }
 
 .table-row-hover:hover {
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--hover);
 }
 
 /* Chart gradients */
 .gradient-blue {
-  background: linear-gradient(180deg, rgba(59, 130, 246, 0.3) 0%, transparent 100%);
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.3) 0%, transparent 100%);
 }
 
 .gradient-orange {
-  background: linear-gradient(180deg, rgba(255, 97, 84, 0.3) 0%, transparent 100%);
+  background: linear-gradient(180deg, rgba(246, 183, 60, 0.3) 0%, transparent 100%);
 }
 
 /* Markdown content */
@@ -268,7 +380,7 @@ body {
 }
 
 .markdown-content code {
-  background: #1e293b;
+  background: var(--surface-2);
   padding: 0.125em 0.375em;
   border-radius: 0.25em;
   font-size: 0.875em;
@@ -291,34 +403,82 @@ body {
 
 .markdown-content th,
 .markdown-content td {
-  border: 1px solid var(--pilos-border);
+  border: 1px solid var(--line);
   padding: 0.375em 0.75em;
   text-align: left;
 }
 
 .markdown-content th {
-  background: #1e293b;
+  background: var(--surface-2);
   font-weight: 600;
 }
 
-/* Blinking cursor for streaming */
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+/* ============================================================
+   Animations (from prototype)
+   ============================================================ */
+@keyframes fadeIn {
+  from {
+    opacity: 0.4;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
+@keyframes popIn {
+  from {
+    transform: translateY(10px) scale(0.99);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes msgIn {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* Blinking cursor for streaming (legacy) */
 .streaming-cursor::after {
   content: '▋';
   animation: blink 1s step-end infinite;
-  color: var(--pilos-blue);
+  color: var(--accent);
 }
 
-/* Terminal cursor blink */
 .cursor-blink {
   animation: blink 1s infinite;
 }
 
-/* macOS traffic light spacing */
+/* macOS traffic light spacing (legacy) */
 .titlebar-drag {
   -webkit-app-region: drag;
 }

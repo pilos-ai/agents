@@ -55,8 +55,7 @@ export function AiNode({ data, selected }: AiNodeProps) {
             )}
           </div>
           <div className="flex items-center gap-1.5 mt-1.5 pl-8">
-            <span className="text-[10px] font-mono text-purple-500/70 uppercase">{MODEL_LABELS[model]}</span>
-            <span className="text-[10px] text-zinc-700">AI</span>
+            <span className="text-[9px] font-bold font-mono text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded-full uppercase tracking-wide">{MODEL_LABELS[model] || model}</span>
           </div>
         </div>
         {data.executionError && (

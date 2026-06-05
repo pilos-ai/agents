@@ -23,7 +23,10 @@ export function TerminalTab({ id, cwd }: Props) {
       fontSize,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       theme: {
-        background: '#0a0a0a',
+        // Match the host (.xterm-host / .term-wrap = #07070b) so written cells,
+        // empty rows, and the surrounding gutter are always the same shade —
+        // no seam between rendered and un-rendered terminal area.
+        background: '#07070b',
         foreground: '#e5e5e5',
         cursor: '#3b82f6',
         selectionBackground: '#374151',

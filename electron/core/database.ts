@@ -156,6 +156,9 @@ export class Database {
       this.db!.exec("ALTER TABLE conversations ADD COLUMN project_path TEXT NOT NULL DEFAULT ''")
     }
     this.db!.exec("CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project_path, updated_at DESC)")
+    // idx_messages_conversation_id is intentionally NOT created here — it is
+    // built lazily via buildIndexesDeferred() after the window has loaded, so
+    // a large existing messages table doesn't freeze the main process on startup.
 
     // Migration: add cli_session_id to conversations
     if (!columns.some((c) => c.name === 'cli_session_id')) {
@@ -275,10 +278,51 @@ export class Database {
     return this.db
   }
 
+  /**
+   * Build indexes that are too slow to create synchronously during startup
+   * (e.g. on a large existing messages table). Call this once after the main
+   * window has loaded so the UI is responsive during the index build.
+   */
+  buildIndexesDeferred(): void {
+    this.db!.exec("CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id, id)")
+  }
+
   getMessages(conversationId: string): Message[] {
     return this.db!.prepare(
       'SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
     ).all(conversationId) as unknown as Message[]
+  }
+
+  /**
+   * Cursor-based backwards pagination over messages in a conversation.
+   *
+   * Returns the most recent `limit` rows whose id is strictly less than `beforeId`
+   * (or just the most recent `limit` rows when `beforeId` is undefined), ordered
+   * oldest → newest so callers can prepend/append without re-sorting.
+   *
+   * `hasMore` indicates whether at least one older row exists beyond the
+   * returned page. We over-fetch by 1 (`LIMIT ?+1`) and slice to detect this
+   * without a second round-trip.
+   */
+  getMessagesPage(
+    conversationId: string,
+    limit: number,
+    beforeId?: number
+  ): { messages: Message[]; hasMore: boolean } {
+    const cursor = beforeId ?? null
+    // Over-fetch by 1 to detect whether more older rows exist.
+    // better-sqlite3 rejects mixing `?` and `?N` styles; use all-anonymous
+    // and pass `cursor` twice so the same NULL-check + cursor value lands
+    // in both positions.
+    const rows = this.db!.prepare(
+      'SELECT * FROM messages WHERE conversation_id = ? AND (? IS NULL OR id < ?) ORDER BY id DESC LIMIT ?'
+    ).all(conversationId, cursor, cursor, limit + 1) as unknown as Message[]
+
+    const hasMore = rows.length > limit
+    const page = hasMore ? rows.slice(0, limit) : rows
+    // Reverse DESC → ASC so messages are returned oldest first.
+    page.reverse()
+    return { messages: page, hasMore }
   }
 
   saveMessage(conversationId: string, message: Partial<Message>): Message {

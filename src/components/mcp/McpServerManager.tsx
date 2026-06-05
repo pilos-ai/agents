@@ -5,7 +5,6 @@ import { McpServerEditModal } from './McpServerEditModal'
 import { useLicenseStore } from '../../store/useLicenseStore'
 import { ProBadge } from '../common/ProBadge'
 import { loadProModule } from '../../lib/pro'
-import { Icon } from '../common/Icon'
 import { McpIcon } from './McpIcon'
 
 interface Props {
@@ -40,14 +39,22 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
 
   const allTemplates = [...MCP_SERVER_TEMPLATES, ...premiumTemplates]
   const existingIds = new Set(servers.map((s) => s.id))
-  const availableTemplates = allTemplates.filter((t) => !existingIds.has(t.id))
+  // Drop already-configured servers, and collapse duplicates by name (e.g. a
+  // built-in Postgres + a premium Postgres) — first occurrence wins.
+  const seenNames = new Set<string>()
+  const availableTemplates = allTemplates.filter((t) => {
+    if (existingIds.has(t.id)) return false
+    const key = t.name.trim().toLowerCase()
+    if (seenNames.has(key)) return false
+    seenNames.add(key)
+    return true
+  })
   const allCategories = Array.from(new Set([...MCP_CATEGORIES, ...premiumTemplates.map((t) => t.category)]))
 
   const handleTemplateAdd = (templateId: string) => {
     const template = allTemplates.find((t) => t.id === templateId)
     if (!template) return
 
-    // Templates with no required env vars — add directly
     if (template.requiredEnvVars.length === 0) {
       onAdd({
         id: template.id,
@@ -59,7 +66,6 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
       })
       setShowTemplatePicker(false)
     } else {
-      // Open edit modal pre-filled with template
       setEditingServer({
         id: template.id,
         name: template.name,
@@ -83,62 +89,58 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
   }
 
   return (
-    <div className="space-y-3">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* Server list */}
       {servers.length > 0 && (
-        <div className="space-y-2">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {servers.map((server) => (
             <div
               key={server.id}
-              className={`flex items-center gap-3 p-2.5 rounded-lg border transition-colors ${
-                server.enabled
-                  ? 'border-neutral-700 bg-neutral-800/50'
-                  : 'border-neutral-800 bg-neutral-900/50 opacity-50'
-              }`}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: 10, borderRadius: 8,
+                border: '1px solid var(--line)',
+                background: server.enabled ? 'var(--surface)' : 'var(--panel)',
+                opacity: server.enabled ? 1 : 0.55,
+              }}
             >
-              <div className="w-8 h-8 rounded-lg bg-neutral-700/50 flex items-center justify-center shrink-0">
-                <McpIcon icon={server.icon} className="w-5 h-5 text-neutral-300" />
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--surface-2)', display: 'grid', placeItems: 'center', flex: 'none' }}>
+                <McpIcon icon={server.icon} className="w-5 h-5" />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-neutral-200">{server.name}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-700 text-neutral-400">
-                    {server.config.type}
-                  </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{server.name}</span>
+                  <span className="tag" style={{ fontFamily: 'var(--mono)' }}>{server.config.type}</span>
                 </div>
-                <div className="text-xs text-neutral-500 truncate">{server.description}</div>
+                <div className="muted" style={{ fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{server.description}</div>
               </div>
-              {/* Toggle */}
               <button
+                type="button"
                 onClick={() => onToggle(server.id)}
-                className={`relative w-8 h-[18px] rounded-full transition-colors shrink-0 ${
-                  server.enabled ? 'bg-green-600' : 'bg-neutral-600'
-                }`}
+                className={'switch' + (server.enabled ? ' on' : '')}
+                style={{ width: 30, height: 17 }}
                 title={server.enabled ? 'Disable' : 'Enable'}
               >
-                <span
-                  className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${
-                    server.enabled ? 'left-[16px]' : 'left-[2px]'
-                  }`}
-                />
+                <span className="knob" style={{ width: 12, height: 12, transform: server.enabled ? 'translateX(13px)' : 'none' }} />
               </button>
-              {/* Edit */}
               <button
+                type="button"
                 onClick={() => setEditingServer(server)}
-                className="text-neutral-500 hover:text-neutral-300 transition-colors shrink-0"
+                className="btn sm ghost icon"
                 title="Edit"
               >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                 </svg>
               </button>
-              {/* Remove */}
               <button
+                type="button"
                 onClick={() => onRemove(server.id)}
-                className="text-neutral-500 hover:text-red-400 transition-colors shrink-0"
+                className="btn sm ghost icon"
+                style={{ color: 'var(--err)' }}
                 title="Remove"
               >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -149,28 +151,28 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
 
       {/* Template picker */}
       {showTemplatePicker && (
-        <div className="border border-neutral-700 rounded-lg p-3 space-y-3 bg-neutral-800/30">
+        <div style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 12, background: 'var(--panel)' }}>
           {allCategories.map((category) => {
             const templates = availableTemplates.filter((t) => t.category === category)
             if (templates.length === 0) return null
             return (
-              <div key={category}>
-                <label className="block text-[10px] font-medium text-neutral-500 uppercase tracking-wider mb-1.5">
-                  {category}
-                </label>
-                <div className="grid grid-cols-2 gap-1.5">
+              <div key={category} style={{ marginBottom: 12 }}>
+                <div className="section-label" style={{ marginBottom: 8 }}>{category}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
                   {templates.map((template) => (
                     <button
                       key={template.id}
+                      type="button"
                       onClick={() => handleTemplateAdd(template.id)}
-                      className="flex items-center gap-2 p-2 rounded-lg border border-neutral-700 bg-neutral-800/50 hover:border-blue-500/50 hover:bg-blue-500/5 transition-colors text-left"
+                      className="tile hover"
+                      style={{ padding: 10, display: 'flex', gap: 10, alignItems: 'center' }}
                     >
-                      <div className="w-7 h-7 rounded-md bg-neutral-700/50 flex items-center justify-center shrink-0">
-                        <McpIcon icon={template.icon} className="w-4 h-4 text-neutral-300" />
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--surface-2)', display: 'grid', placeItems: 'center', flex: 'none' }}>
+                        <McpIcon icon={template.icon} className="w-4 h-4" />
                       </div>
-                      <div className="min-w-0">
-                        <div className="text-xs font-medium text-neutral-200">{template.name}</div>
-                        <div className="text-[10px] text-neutral-500 truncate">{template.description}</div>
+                      <div style={{ minWidth: 0, textAlign: 'left' }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>{template.name}</div>
+                        <div className="muted" style={{ fontSize: 10.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{template.description}</div>
                       </div>
                     </button>
                   ))}
@@ -179,8 +181,9 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
             )
           })}
           <button
+            type="button"
             onClick={() => setShowTemplatePicker(false)}
-            className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+            className="btn sm ghost"
           >
             Cancel
           </button>
@@ -189,9 +192,9 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
 
       {/* Action buttons */}
       {!showTemplatePicker && (
-        <div className="flex gap-3 items-center">
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {atLimit ? (
-            <div className="flex items-center gap-2 text-xs text-neutral-500">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: 'var(--muted)' }}>
               <span>MCP server limit reached ({flags.maxMcpServers})</span>
               <ProBadge label="Upgrade to unlock unlimited MCP servers" />
             </div>
@@ -199,20 +202,22 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
             <>
               {availableTemplates.length > 0 && (
                 <button
+                  type="button"
                   onClick={() => setShowTemplatePicker(true)}
-                  className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-400 transition-colors"
+                  className="btn sm"
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                   </svg>
                   Add from Template
                 </button>
               )}
               <button
+                type="button"
                 onClick={() => setShowNewModal(true)}
-                className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-400 transition-colors"
+                className="btn sm ghost"
               >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                 </svg>
                 Add Custom
@@ -223,7 +228,7 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
       )}
 
       {servers.length === 0 && !showTemplatePicker && (
-        <p className="text-xs text-neutral-500 italic">
+        <p className="muted" style={{ fontSize: 11.5, fontStyle: 'italic', margin: 0 }}>
           No MCP servers configured. Add servers to enable Claude to interact with external tools.
         </p>
       )}

@@ -23,10 +23,37 @@ export function registerConversationHandlers(database: Database) {
     database.deleteConversation(id)
   )
 
+  /**
+   * @deprecated Eagerly loads every message — used by mobile relay, search,
+   * exports, and other call sites that need the full conversation. New UI code
+   * should use `conversations:getMessagesPage` for cursor-based pagination.
+   */
   ipcMain.handle('conversations:getMessages', (_event, conversationId: string) => {
     const rows = database.getMessages(conversationId)
     return rows.map((r) => mapMessageRow(r as unknown as Record<string, unknown>))
   })
+
+  /**
+   * Cursor-based message pagination: returns the most recent `limit` messages
+   * older than `beforeId` (or just the most recent `limit` if `beforeId` is
+   * omitted). Messages come back ordered oldest → newest so the renderer can
+   * prepend (for backwards infinite-scroll) or set (for first page) without
+   * re-sorting. `hasMore` indicates whether older messages exist beyond the
+   * returned page.
+   */
+  ipcMain.handle(
+    'conversations:getMessagesPage',
+    (_event, conversationId: string, limit: number, beforeId?: number) => {
+      // Clamp to prevent OOM from an uncapped limit (limit=0 would also cause
+      // an infinite-scroll livelock returning hasMore:true with empty pages).
+      const safeLimit = Math.min(Math.max(1, Math.floor(limit) || 50), 200)
+      const { messages, hasMore } = database.getMessagesPage(conversationId, safeLimit, beforeId)
+      return {
+        messages: messages.map((r) => mapMessageRow(r as unknown as Record<string, unknown>)),
+        hasMore,
+      }
+    }
+  )
 
   ipcMain.handle('conversations:saveMessage', (_event, conversationId: string, message) => {
     const saved = database.saveMessage(conversationId, {

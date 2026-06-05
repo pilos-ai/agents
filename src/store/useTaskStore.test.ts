@@ -1081,7 +1081,9 @@ describe('addRunResult', () => {
 // ── runTaskWorkflow ───────────────────────────────────────────────────────────
 
 describe('runTaskWorkflow', () => {
-  it('does nothing when task has no workflow', async () => {
+  it('surfaces a failed no-op run when task has no workflow (does not start execution)', async () => {
+    const { executeWorkflow } = await import('../utils/workflow-executor')
+    const execMock = vi.mocked(executeWorkflow)
     const api = await getApi()
     const tasks: Task[] = [
       {
@@ -1095,8 +1097,22 @@ describe('runTaskWorkflow', () => {
 
     await useTaskStore.getState().runTaskWorkflow('t1')
 
-    // No settings.set for run persistence — workflow never started
-    expect(api.settings.set).not.toHaveBeenCalled()
+    // The workflow never starts: executeWorkflow is not called and no active
+    // execution is registered.
+    expect(execMock).not.toHaveBeenCalled()
+    expect(useTaskStore.getState().activeExecutions['t1']).toBeUndefined()
+
+    // Instead of a silent click, a failed no-op run is surfaced and persisted so
+    // the user sees feedback in the runs UI.
+    expect(api.settings.set).toHaveBeenCalledWith('v2_tasks:/proj', expect.any(Array))
+    const task = useTaskStore.getState().tasks[0]
+    expect(task.status).toBe('failed')
+    expect(task.runs).toHaveLength(1)
+    expect(task.runs[0].status).toBe('failed')
+    expect(task.runs[0].trigger).toBe('manual')
+    expect(task.runs[0].completedAt).not.toBeNull()
+    expect(task.runs[0].summary).toBe('Cannot run: workflow has no steps')
+    expect(task.runs[0].actions[0].type).toBe('error')
   })
 
   it('does nothing when task not found', async () => {
@@ -1113,11 +1129,11 @@ describe('runTaskWorkflow', () => {
     const execMock = vi.mocked(executeWorkflow)
     execMock.mockResolvedValue(undefined)
 
-    const workflow = {
+    const workflow: WorkflowDefinition = {
       nodes: [
-        { id: 'start', data: { type: 'start', label: 'Start' }, position: { x: 0, y: 0 } },
-        { id: 'step1', data: { type: 'claude', label: 'Do Work' }, position: { x: 0, y: 100 } },
-        { id: 'end', data: { type: 'end', label: 'End' }, position: { x: 0, y: 200 } },
+        { id: 'start', type: 'start', data: { type: 'start', label: 'Start' }, position: { x: 0, y: 0 } },
+        { id: 'step1', type: 'agent', data: { type: 'agent', label: 'Do Work' }, position: { x: 0, y: 100 } },
+        { id: 'end', type: 'end', data: { type: 'end', label: 'End' }, position: { x: 0, y: 200 } },
       ],
       edges: [
         { id: 'e1', source: 'start', target: 'step1' },

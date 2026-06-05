@@ -1,3 +1,8 @@
+/**
+ * FormToggle — pilos-prototype `.switch` (round toggle with `.knob`).
+ * Keeps a hidden `<input type="checkbox">` for accessibility + test integration;
+ * the visible `.switch` button click forwards to the input via `onChange`.
+ */
 interface FormToggleProps {
   checked: boolean
   onChange: (checked: boolean) => void
@@ -7,18 +12,27 @@ interface FormToggleProps {
 
 export function FormToggle({ checked, onChange, label, disabled = false }: FormToggleProps) {
   return (
-    <label className="relative inline-flex items-center cursor-pointer gap-3">
-      <div className="relative">
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={(e) => onChange(e.target.checked)}
-          className="sr-only peer"
-          disabled={disabled}
-        />
-        <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
-      </div>
-      {label && <span className="text-sm text-zinc-300">{label}</span>}
+    <label
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 10,
+        cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
+        position: 'relative',
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        disabled={disabled}
+        style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
+      />
+      <span
+        className={'switch' + (checked ? ' on' : '')}
+        aria-hidden="true"
+      >
+        <span className="knob" />
+      </span>
+      {label && <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>{label}</span>}
     </label>
   )
 }

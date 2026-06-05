@@ -135,7 +135,7 @@ export default function App() {
           break
         case 'menu:newConversation':
           if (useProjectStore.getState().activeProjectPath) {
-            useAppStore.getState().setActiveView('terminal')
+            useAppStore.getState().setActiveView('chat')
             useConversationStore.getState().createConversation()
           }
           break
@@ -189,18 +189,21 @@ export default function App() {
     })
 
     const unsubNav = api.scheduler.onNavigateToTask((taskId) => {
-      useAppStore.getState().setActiveView('tasks')
+      useAppStore.getState().setActiveView('workflows')
       useTaskStore.getState().selectTask(taskId)
     })
 
     return () => { unsubTrigger(); unsubNav() }
   }, [])
 
+  const showV2Shell = setupStatus === 'ready' && authLoaded && isAuthenticated && (!workspaceSetupLoaded || workspaceSetupComplete)
+
   return (
     <ErrorBoundary>
-      <div className="h-screen w-screen bg-pilos-bg text-[#fafafa] font-sans flex flex-col overflow-hidden">
-        {/* macOS drag region */}
-        <div className="titlebar-drag h-8 flex-shrink-0" />
+      <div className="h-screen w-screen text-[var(--ink)] font-sans flex flex-col overflow-hidden" style={{ background: 'var(--desk)' }}>
+        {/* macOS drag region — only show for full-screen pages WITHOUT the new titlebar.
+            V2Layout brings its own .titlebar (drag region) so we omit this strip then. */}
+        {!showV2Shell && <div className="titlebar-drag h-8 flex-shrink-0" />}
 
         {setupStatus !== 'ready' ? (
           <ErrorBoundary>

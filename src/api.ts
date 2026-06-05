@@ -5,6 +5,12 @@ const noopAsync = () => Promise.resolve(null as never)
 const noopUnsub = () => noop
 
 const stubAPI: ElectronAPI = {
+  window: {
+    minimize: () => Promise.resolve(),
+    maximize: () => Promise.resolve(),
+    close: () => Promise.resolve(),
+    isMaximized: () => Promise.resolve(false),
+  },
   cli: {
     check: () => Promise.resolve({ available: true }),
     install: () => Promise.resolve(true),
@@ -45,6 +51,7 @@ const stubAPI: ElectronAPI = {
     updateTitle: noopAsync,
     delete: noopAsync,
     getMessages: () => Promise.resolve([]),
+    getMessagesPage: () => Promise.resolve({ messages: [], hasMore: false }),
     saveMessage: noopAsync,
     getMessage: () => Promise.resolve(null),
     searchMessages: () => Promise.resolve({ total: 0, messages: [] }),

@@ -13,39 +13,51 @@ import type { StorageStats } from '../../../types'
 
 function UpgradeModal({ onClose }: { onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-pilos-card border border-pilos-border rounded-2xl p-6 w-full max-w-sm mx-4 space-y-4" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+      onClick={onClose}
+    >
+      <div
+        className="tile"
+        style={{ width: '100%', maxWidth: 380, margin: 16, display: 'flex', flexDirection: 'column', gap: 16, padding: 20 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <div>
-            <h3 className="text-base font-bold text-white">Upgrade to Pro</h3>
-            <p className="text-xs text-zinc-500 mt-0.5">Unlimited agents, MCP integrations & more</p>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink)', margin: 0 }}>Upgrade to Pro</h3>
+            <p className="muted" style={{ fontSize: 11.5, margin: '4px 0 0' }}>Unlimited agents, MCP integrations &amp; more</p>
           </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 transition-colors">
-            <Icon icon="lucide:x" className="text-lg" />
+          <button type="button" onClick={onClose} className="mini-ico">
+            <Icon icon="lucide:x" style={{ fontSize: 16 }} />
           </button>
         </div>
 
-        <div className="space-y-1 text-xs text-zinc-400">
-          <div className="flex justify-between py-1.5 border-b border-pilos-border">
-            <span>Pro · Monthly</span><span className="text-white font-semibold">$12/mo</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 12, color: 'var(--ink-2)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--line-2)' }}>
+            <span>Pro · Monthly</span>
+            <span style={{ color: 'var(--ink)', fontWeight: 600 }}>$12/mo</span>
           </div>
-          <div className="flex justify-between py-1.5 border-b border-pilos-border">
-            <span>Pro · Annual</span><span className="text-white font-semibold">$96/yr <span className="text-green-400 text-[10px]">Save 33%</span></span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--line-2)' }}>
+            <span>Pro · Annual</span>
+            <span style={{ color: 'var(--ink)', fontWeight: 600 }}>$96/yr <span style={{ color: 'var(--ok)', fontSize: 10 }}>Save 33%</span></span>
           </div>
-          <div className="flex justify-between py-1.5">
-            <span>Teams · Monthly</span><span className="text-white font-semibold">$19/seat</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+            <span>Teams · Monthly</span>
+            <span style={{ color: 'var(--ink)', fontWeight: 600 }}>$19/seat</span>
           </div>
         </div>
 
         <button
+          type="button"
           onClick={() => { api.dialog.openExternal('https://pilos.net/pricing'); onClose() }}
-          className="w-full px-3 py-2.5 bg-gradient-to-r from-blue-700 to-blue-600 hover:from-blue-600 hover:to-blue-500 text-white text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2"
+          className="btn primary"
+          style={{ width: '100%', justifyContent: 'center' }}
         >
-          <Icon icon="lucide:credit-card" className="text-sm" />
+          <Icon icon="lucide:credit-card" style={{ fontSize: 14 }} />
           Pay with Card — pilos.net/pricing
         </button>
 
-        <p className="text-[10px] text-zinc-600 text-center">
+        <p className="muted" style={{ fontSize: 10.5, textAlign: 'center', margin: 0 }}>
           Secure checkout via Stripe. License key delivered to your email instantly.
         </p>
       </div>
@@ -80,17 +92,90 @@ async function loadJiraStore() {
   }
 }
 
-type SettingsNav = 'account' | 'general' | 'integrations' | 'plugins' | 'devices' | 'security' | 'advanced'
+type SettingsNav = 'account' | 'general' | 'project' | 'integrations' | 'plugins' | 'devices' | 'security' | 'advanced'
 
 const allNavItems: { id: SettingsNav; label: string; icon: string; featureFlag?: string }[] = [
   { id: 'account', label: 'Account', icon: 'lucide:user' },
   { id: 'general', label: 'General', icon: 'lucide:settings' },
+  { id: 'project', label: 'Project', icon: 'lucide:folder' },
   { id: 'integrations', label: 'Integrations', icon: 'lucide:plug-zap' },
   { id: 'plugins', label: 'Plugins', icon: 'lucide:puzzle' },
   { id: 'devices', label: 'Devices', icon: 'lucide:smartphone', featureFlag: 'devices' },
   { id: 'security', label: 'Security', icon: 'lucide:shield-check' },
   { id: 'advanced', label: 'Advanced', icon: 'lucide:code' },
 ]
+
+// ── Project section — formerly the Project settings inside ConfigPage ──
+function ProjectSection() {
+  const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
+  const activeProject = useProjectStore((s) => {
+    const path = s.activeProjectPath
+    return s.openProjects.find((p) => p.projectPath === path)
+  })
+  const setProjectModel = useProjectStore((s) => s.setProjectModel)
+  const setProjectPermissionMode = useProjectStore((s) => s.setProjectPermissionMode)
+
+  if (!activeProjectPath || !activeProject) {
+    return (
+      <div className="set-sec">
+        <h2 className="h2">Project</h2>
+        <p className="muted" style={{ fontSize: 12.5 }}>Open a project to configure project-level settings.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="set-sec">
+      <h2 className="h2">Project</h2>
+      <p className="muted" style={{ fontSize: 12.5, marginTop: -8, marginBottom: 12 }}>
+        Settings for <span style={{ color: 'var(--ink)' }}>{activeProject.projectName}</span>
+      </p>
+
+      <div className="set-row">
+        <div className="info">
+          <div className="t">Path</div>
+          <div className="d" style={{ fontFamily: 'var(--mono)' }}>{activeProject.projectPath}</div>
+        </div>
+      </div>
+
+      <div className="set-row">
+        <div className="info">
+          <div className="t">Default model</div>
+          <div className="d">Model used for new conversations in this project</div>
+        </div>
+        <div style={{ width: 200 }}>
+          <FormSelect
+            value={activeProject.model || 'sonnet'}
+            onChange={(e) => setProjectModel(e.target.value)}
+            options={[
+              { value: 'sonnet', label: 'Claude Sonnet' },
+              { value: 'opus', label: 'Claude Opus' },
+              { value: 'haiku', label: 'Claude Haiku' },
+            ]}
+          />
+        </div>
+      </div>
+
+      <div className="set-row">
+        <div className="info">
+          <div className="t">Permission mode</div>
+          <div className="d">How agents handle tool approvals in this project</div>
+        </div>
+        <div style={{ width: 200 }}>
+          <FormSelect
+            value={activeProject.permissionMode || 'default'}
+            onChange={(e) => setProjectPermissionMode(e.target.value)}
+            options={[
+              { value: 'default', label: 'Default (Ask)' },
+              { value: 'bypass', label: 'Auto-approve' },
+              { value: 'plan', label: 'Plan Mode' },
+            ]}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function AccountSection() {
   const cliVersion = useAppStore((s) => s.cliVersion)
@@ -103,17 +188,34 @@ function AccountSection() {
   const activateLicense = useLicenseStore((s) => s.activateLicense)
   const deactivateLicense = useLicenseStore((s) => s.deactivateLicense)
   const logout = useLicenseStore((s) => s.logout)
+  const recoverLicense = useLicenseStore((s) => s.recoverLicense)
+  const pendingActivation = useLicenseStore((s) => s.pendingActivation)
+  const setPendingActivation = useLicenseStore((s) => s.setPendingActivation)
 
   const [keyInput, setKeyInput] = useState('')
   const [showKeyInput, setShowKeyInput] = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [portalLoading, setPortalLoading] = useState(false)
+  const [showRecover, setShowRecover] = useState(false)
+  const [recoverEmail, setRecoverEmail] = useState('')
+  const [recoverMsg, setRecoverMsg] = useState<string | null>(null)
 
-  const tierColors: Record<string, string> = {
-    free: 'bg-zinc-700 text-zinc-400',
-    pro: 'bg-amber-500/20 text-amber-400',
-    teams: 'bg-purple-500/20 text-purple-400',
+  const tierTagClass: Record<string, string> = {
+    free: 'tag',
+    pro: 'tag warn',
+    teams: 'tag pro',
   }
+
+  // Deep link pre-fill — user opened the app via pilos://activate?key=X while
+  // already signed in. App.tsx stores the key in pendingActivation and routes
+  // to Settings; here we reveal the key input, pre-fill it, then clear pending.
+  useEffect(() => {
+    if (pendingActivation?.key) {
+      setKeyInput(pendingActivation.key)
+      setShowKeyInput(true)
+      setPendingActivation(null)
+    }
+  }, [pendingActivation, setPendingActivation])
 
   const handleActivate = async () => {
     if (!keyInput.trim()) return
@@ -121,6 +223,22 @@ function AccountSection() {
     if (result.valid) {
       setKeyInput('')
       setShowKeyInput(false)
+    }
+  }
+
+  const handleRecover = async () => {
+    const target = (recoverEmail.trim() || email || '').trim()
+    if (!target) return
+    setRecoverMsg(null)
+    const result = await recoverLicense(target)
+    if (result.found && result.key) {
+      setKeyInput(result.key)
+      setShowKeyInput(true)
+      setShowRecover(false)
+      setRecoverEmail('')
+      setRecoverMsg(null)
+    } else {
+      setRecoverMsg(result.error || 'No license found for that email.')
     }
   }
 
@@ -143,31 +261,29 @@ function AccountSection() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-bold text-white mb-1">Account</h2>
-        <p className="text-xs text-zinc-500">Your account information and subscription</p>
-      </div>
+    <div className="set-sec">
+      <h2 className="h2">Account</h2>
+      <p className="muted" style={{ fontSize: 12.5, marginTop: -8, marginBottom: 18 }}>
+        Your account information and subscription
+      </p>
 
       {/* User Profile */}
-      <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-gradient-to-br from-blue-600/20 to-indigo-700/20 rounded-full flex items-center justify-center border border-blue-500/20">
-            <span className="text-lg font-bold text-blue-400">
-              {email ? email[0].toUpperCase() : 'U'}
-            </span>
+      <div className="tile" style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div className="cav cav-grad-claude" style={{ width: 44, height: 44, borderRadius: 12, fontSize: 16 }}>
+            {email ? email[0].toUpperCase() : 'U'}
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">{email || 'Unknown'}</p>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${tierColors[tier] || tierColors.free}`}>
-                {tier}
-              </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email || 'Unknown'}</div>
+            <div style={{ marginTop: 4 }}>
+              <span className={tierTagClass[tier] || tierTagClass.free}>{tier}</span>
             </div>
           </div>
           <button
+            type="button"
             onClick={logout}
-            className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 rounded-lg transition-colors"
+            className="btn sm"
+            style={{ color: 'var(--err)' }}
           >
             Sign Out
           </button>
@@ -175,43 +291,48 @@ function AccountSection() {
       </div>
 
       {/* Workspace Setup */}
-      <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl">
-        <div className="flex items-center justify-between">
+      <div className="tile" style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Workspace Setup</h3>
-            <p className="text-[10px] text-zinc-600 mt-1">Re-run the onboarding wizard to generate new role-based tasks and workflows</p>
+            <h3 className="section-label" style={{ margin: 0 }}>Workspace Setup</h3>
+            <p className="muted" style={{ fontSize: 11, marginTop: 6 }}>Re-run the onboarding wizard to generate new role-based tasks and workflows</p>
           </div>
           <button
+            type="button"
             onClick={async () => {
               await useAppStore.getState().resetWorkspaceSetup()
             }}
-            className="px-3 py-1.5 text-xs text-blue-400 hover:text-blue-300 border border-blue-500/20 hover:border-blue-500/40 rounded-lg transition-colors flex items-center gap-1.5"
+            className="btn sm"
           >
-            <Icon icon="lucide:refresh-cw" className="text-[10px]" />
+            <Icon icon="lucide:refresh-cw" style={{ fontSize: 11 }} />
             Re-run Setup
           </button>
         </div>
       </div>
 
       {/* License Management */}
-      <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">License</h3>
+      <div className="tile" style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h3 className="section-label" style={{ margin: 0 }}>License</h3>
           {licenseKey && (
-            <div className="flex items-center gap-3">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
               {tier !== 'free' && (
                 <button
+                  type="button"
                   onClick={handleManageSubscription}
                   disabled={portalLoading}
-                  className="text-[10px] text-blue-400 hover:text-blue-300 transition-colors disabled:opacity-50"
+                  className="btn sm ghost"
+                  style={{ height: 22, padding: '0 8px', fontSize: 11 }}
                 >
                   {portalLoading ? 'Loading...' : 'Manage subscription'}
                 </button>
               )}
               <button
+                type="button"
                 onClick={deactivateLicense}
                 disabled={isValidating}
-                className="text-[10px] text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
+                className="btn sm ghost"
+                style={{ height: 22, padding: '0 8px', fontSize: 11, color: 'var(--err)' }}
               >
                 Deactivate
               </button>
@@ -220,14 +341,16 @@ function AccountSection() {
         </div>
 
         {machineMismatch && licenseKey && (
-          <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-amber-500/5 border border-amber-500/20">
-            <Icon icon="lucide:alert-triangle" className="text-amber-400 text-sm flex-shrink-0 mt-0.5" />
-            <div>
-              <span className="text-xs text-amber-300">License is active on another machine.</span>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', borderRadius: 8, background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.3)' }}>
+            <Icon icon="lucide:alert-triangle" style={{ fontSize: 14, color: 'var(--warn)', flexShrink: 0, marginTop: 2 }} />
+            <div style={{ fontSize: 12, color: 'var(--warn)' }}>
+              License is active on another machine.
               <button
+                type="button"
                 onClick={() => activateLicense(licenseKey)}
                 disabled={isValidating}
-                className="text-xs text-blue-400 hover:text-blue-300 ml-1 disabled:opacity-50"
+                className="btn sm ghost"
+                style={{ height: 20, padding: '0 6px', fontSize: 11, marginLeft: 6 }}
               >
                 Re-activate here
               </button>
@@ -236,69 +359,78 @@ function AccountSection() {
         )}
 
         {licenseKey ? (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between py-1.5">
-              <span className="text-xs text-zinc-500">License Key</span>
-              <span className="text-xs font-mono text-zinc-300">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span className="muted" style={{ fontSize: 12 }}>License Key</span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--ink-2)' }}>
                 {licenseKey.slice(0, 10)}...{licenseKey.slice(-4)}
               </span>
             </div>
             {!showKeyInput ? (
               <button
+                type="button"
                 onClick={() => setShowKeyInput(true)}
-                className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                className="btn sm ghost"
+                style={{ alignSelf: 'flex-start' }}
               >
                 Change license key
               </button>
             ) : (
-              <div className="flex gap-2">
+              <div style={{ display: 'flex', gap: 8 }}>
                 <input
                   type="text"
                   value={keyInput}
                   onChange={(e) => setKeyInput(e.target.value)}
                   placeholder="PILOS-XXXX-XXXX-XXXX"
-                  className="flex-1 bg-pilos-bg text-white text-xs rounded-lg px-3 py-2 outline-none border border-pilos-border focus:border-blue-500 font-mono placeholder:text-zinc-600"
+                  className="control"
+                  style={{ flex: 1, fontFamily: 'var(--mono)' }}
                   onKeyDown={(e) => e.key === 'Enter' && handleActivate()}
                 />
                 <button
+                  type="button"
                   onClick={handleActivate}
                   disabled={isValidating || !keyInput.trim()}
-                  className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
+                  className="btn sm primary"
                 >
                   {isValidating ? '...' : 'Activate'}
                 </button>
                 <button
+                  type="button"
                   onClick={() => { setShowKeyInput(false); setKeyInput('') }}
-                  className="px-2 py-2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                  className="btn sm ghost icon"
                 >
-                  <Icon icon="lucide:x" className="text-xs" />
+                  <Icon icon="lucide:x" style={{ fontSize: 12 }} />
                 </button>
               </div>
             )}
           </div>
         ) : (
-          <div className="space-y-2">
-            <p className="text-xs text-zinc-500">No license key activated. You're on the free plan.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <p className="muted" style={{ fontSize: 12, margin: 0 }}>No license key activated. You're on the free plan.</p>
             <button
+              type="button"
               onClick={() => setShowUpgradeModal(true)}
-              className="w-full px-3 py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2"
+              className="btn primary"
+              style={{ width: '100%', justifyContent: 'center' }}
             >
-              <Icon icon="lucide:zap" className="text-sm" />
+              <Icon icon="lucide:zap" style={{ fontSize: 14 }} />
               Upgrade to Pro — from $12/mo
             </button>
-            <div className="flex gap-2">
+            <div style={{ display: 'flex', gap: 8 }}>
               <input
                 type="text"
                 value={keyInput}
                 onChange={(e) => setKeyInput(e.target.value)}
                 placeholder="PILOS-XXXX-XXXX-XXXX"
-                className="flex-1 bg-pilos-bg text-white text-xs rounded-lg px-3 py-2 outline-none border border-pilos-border focus:border-blue-500 font-mono placeholder:text-zinc-600"
+                className="control"
+                style={{ flex: 1, fontFamily: 'var(--mono)' }}
                 onKeyDown={(e) => e.key === 'Enter' && handleActivate()}
               />
               <button
+                type="button"
                 onClick={handleActivate}
                 disabled={isValidating || !keyInput.trim()}
-                className="px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
+                className="btn sm primary"
               >
                 {isValidating ? 'Validating...' : 'Activate Pro'}
               </button>
@@ -307,20 +439,72 @@ function AccountSection() {
         )}
 
         {error && (
-          <p className="text-xs text-red-400">{error}</p>
+          <p style={{ fontSize: 12, color: 'var(--err)', margin: 0 }}>{error}</p>
+        )}
+
+        {/* Recover license — for users who lost their key. The license-server
+            emails point here ("Settings > Account > Recover License"). */}
+        {!licenseKey && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {!showRecover ? (
+              <button
+                type="button"
+                onClick={() => { setShowRecover(true); setRecoverMsg(null) }}
+                className="btn sm ghost"
+                style={{ alignSelf: 'flex-start', height: 22, padding: '0 8px', fontSize: 11 }}
+              >
+                Recover license
+              </button>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <p className="muted" style={{ fontSize: 11, margin: 0 }}>
+                  Enter the email associated with your license. If a valid license is found, your key will be recovered.
+                </p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="email"
+                    value={recoverEmail || email || ''}
+                    onChange={(e) => setRecoverEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    className="control"
+                    style={{ flex: 1 }}
+                    onKeyDown={(e) => e.key === 'Enter' && handleRecover()}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleRecover}
+                    disabled={isValidating || !(recoverEmail.trim() || email)}
+                    className="btn sm primary"
+                  >
+                    {isValidating ? '...' : 'Recover'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowRecover(false); setRecoverEmail(''); setRecoverMsg(null) }}
+                    className="btn sm ghost icon"
+                  >
+                    <Icon icon="lucide:x" style={{ fontSize: 12 }} />
+                  </button>
+                </div>
+                {recoverMsg && (
+                  <p style={{ fontSize: 12, color: 'var(--err)', margin: 0 }}>{recoverMsg}</p>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
       {/* Version Info */}
-      <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl">
-        <div className="flex items-center justify-between">
+      <div className="tile">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
           <div>
-            <p className="text-xs font-medium text-zinc-400">Claude CLI Version</p>
-            <p className="text-sm font-bold text-white mt-0.5">{cliVersion || 'Unknown'}</p>
+            <p className="muted" style={{ fontSize: 11.5, margin: 0, fontWeight: 500 }}>Claude CLI Version</p>
+            <p style={{ fontSize: 13.5, fontWeight: 650, color: 'var(--ink)', marginTop: 4, marginBottom: 0 }}>{cliVersion || 'Unknown'}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-zinc-400">App Version</p>
-            <p className="text-sm font-bold text-white mt-0.5">2.1.0-alpha</p>
+            <p className="muted" style={{ fontSize: 11.5, margin: 0, fontWeight: 500 }}>App Version</p>
+            <p style={{ fontSize: 13.5, fontWeight: 650, color: 'var(--ink)', marginTop: 4, marginBottom: 0 }}>v{__APP_VERSION__}</p>
           </div>
         </div>
       </div>
@@ -355,96 +539,80 @@ function GeneralSection() {
   const permissionMode = activeTab?.permissionMode || 'default'
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-bold text-white mb-1">General</h2>
-        <p className="text-xs text-zinc-500">Application and project settings</p>
-      </div>
+    <div className="set-sec">
+      <h2 className="h2">General</h2>
+      <p className="muted" style={{ fontSize: 12.5, marginTop: -8, marginBottom: 18 }}>
+        Application and project settings
+      </p>
 
       {activeTab && (
         <>
-          <div>
-            <h3 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-4">Project Settings</h3>
-            <div className="space-y-4">
-              <FormSelect
-                label="Model"
-                value={model}
-                onChange={(e) => setProjectModel(e.target.value)}
-                options={[
-                  { value: 'sonnet', label: 'Claude Sonnet' },
-                  { value: 'opus', label: 'Claude Opus' },
-                  { value: 'haiku', label: 'Claude Haiku' },
-                ]}
-              />
-              <FormSelect
-                label="Permission Mode"
-                value={permissionMode}
-                onChange={(e) => setProjectPermissionMode(e.target.value)}
-                options={[
-                  { value: 'default', label: 'Default (Ask)' },
-                  { value: 'bypass', label: 'Auto-approve' },
-                  { value: 'plan', label: 'Plan Mode' },
-                ]}
-              />
-            </div>
-          </div>
+          <h3 className="section-label" style={{ marginTop: 18, marginBottom: 12 }}>Project Settings</h3>
+          <FormSelect
+            label="Model"
+            value={model}
+            onChange={(e) => setProjectModel(e.target.value)}
+            options={[
+              { value: 'sonnet', label: 'Claude Sonnet' },
+              { value: 'opus', label: 'Claude Opus' },
+              { value: 'haiku', label: 'Claude Haiku' },
+            ]}
+          />
+          <FormSelect
+            label="Permission Mode"
+            value={permissionMode}
+            onChange={(e) => setProjectPermissionMode(e.target.value)}
+            options={[
+              { value: 'default', label: 'Default (Ask)' },
+              { value: 'bypass', label: 'Auto-approve' },
+              { value: 'plan', label: 'Plan Mode' },
+            ]}
+          />
         </>
       )}
 
-      <div>
-        <h3 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-4">Appearance</h3>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-zinc-300">Terminal Font Size</p>
-              <p className="text-[10px] text-zinc-600">{terminalFontSize}px</p>
-            </div>
-            <input
-              type="range"
-              min="10"
-              max="20"
-              value={terminalFontSize}
-              onChange={(e) => setTerminalFontSize(Number(e.target.value))}
-              className="w-32 h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
-            />
-          </div>
+      <h3 className="section-label" style={{ marginTop: 22, marginBottom: 12 }}>Appearance</h3>
+      <div className="set-row">
+        <div className="info">
+          <div className="t">Terminal Font Size</div>
+          <div className="d">{terminalFontSize}px</div>
         </div>
+        <input
+          type="range"
+          min="10"
+          max="20"
+          value={terminalFontSize}
+          onChange={(e) => setTerminalFontSize(Number(e.target.value))}
+          style={{ width: 140, accentColor: 'var(--accent)' }}
+        />
       </div>
 
-      <div>
-        <h3 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-4">Background</h3>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-zinc-300">Run in background</p>
-              <p className="text-[10px] text-zinc-600">
-                Keep running in the menu bar when the window is closed. Scheduled tasks continue automatically.
-              </p>
-            </div>
-            <FormToggle
-              checked={backgroundMode}
-              onChange={(checked) => {
-                setBackgroundMode(checked)
-                api.settings.set('backgroundMode', checked)
-              }}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-zinc-300">Desktop notifications</p>
-              <p className="text-[10px] text-zinc-600">
-                Show notifications when scheduled tasks complete or fail
-              </p>
-            </div>
-            <FormToggle
-              checked={notifications}
-              onChange={(checked) => {
-                setNotifications(checked)
-                api.settings.set('notificationsEnabled', checked)
-              }}
-            />
-          </div>
+      <h3 className="section-label" style={{ marginTop: 22, marginBottom: 12 }}>Background</h3>
+      <div className="set-row">
+        <div className="info">
+          <div className="t">Run in background</div>
+          <div className="d">Keep running in the menu bar when the window is closed. Scheduled tasks continue automatically.</div>
         </div>
+        <FormToggle
+          checked={backgroundMode}
+          onChange={(checked) => {
+            setBackgroundMode(checked)
+            api.settings.set('backgroundMode', checked)
+          }}
+        />
+      </div>
+      <div className="set-row">
+        <div className="info">
+          <div className="t">Desktop notifications</div>
+          <div className="d">Show notifications when scheduled tasks complete or fail</div>
+        </div>
+        <FormToggle
+          checked={notifications}
+          onChange={(checked) => {
+            setNotifications(checked)
+            api.settings.set('notificationsEnabled', checked)
+          }}
+        />
       </div>
     </div>
   )
@@ -527,104 +695,102 @@ function IntegrationsSection() {
   }, [githubToken, addProjectMcpServer])
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-bold text-white mb-1">Integrations</h2>
-        <p className="text-xs text-zinc-500">Connect external services and MCP servers</p>
-      </div>
+    <div className="set-sec">
+      <h2 className="h2">Integrations</h2>
+      <p className="muted" style={{ fontSize: 12.5, marginTop: -8, marginBottom: 18 }}>
+        Connect external services and MCP servers
+      </p>
 
-      <div className="space-y-3">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {/* Jira */}
-        <div className="bg-pilos-card border border-pilos-border rounded-xl overflow-hidden">
-          <div className="flex items-center gap-3 p-4">
-            <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-              <Icon icon="logos:jira" className="text-lg" />
+        <div className="tile" style={{ padding: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 14 }}>
+            <div className="tile-logo" style={{ width: 36, height: 36 }}>
+              <Icon icon="logos:jira" style={{ fontSize: 18 }} />
             </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium text-white">Jira</p>
-                <span className="text-[9px] font-bold text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded uppercase tracking-wider">Pro</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>Jira</span>
+                <span className="tag pro">Pro</span>
               </div>
-              <p className="text-[10px] text-zinc-500">Atlassian issue tracking</p>
+              <div className="muted" style={{ fontSize: 11 }}>Atlassian issue tracking</div>
             </div>
             {jiraConnected ? (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-400">
-                <Icon icon="lucide:check-circle-2" className="text-xs" />
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500, color: 'var(--ok)' }}>
+                <Icon icon="lucide:check-circle-2" style={{ fontSize: 12 }} />
                 Connected
               </span>
             ) : (
               <button
+                type="button"
                 onClick={isPro ? handleJiraConnect : undefined}
                 disabled={!isPro || jiraConnecting}
-                className="px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-300 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5"
+                className="btn sm"
               >
                 {jiraConnecting ? (
                   <>
-                    <Icon icon="lucide:loader-2" className="text-xs animate-spin" />
+                    <Icon icon="lucide:loader-2" style={{ fontSize: 12, animation: 'spin 1s linear infinite' }} />
                     Connecting...
                   </>
-                ) : isPro ? (
-                  'Connect'
-                ) : (
-                  'Upgrade'
-                )}
+                ) : isPro ? 'Connect' : 'Upgrade'}
               </button>
             )}
           </div>
           {isPro && jiraConnected && jiraLoaded && PmJiraIntegrationCard && (
-            <div className="border-t border-pilos-border px-4 pb-4 pt-3">
+            <div style={{ borderTop: '1px solid var(--line-2)', padding: 14 }}>
               <PmJiraIntegrationCard />
             </div>
           )}
         </div>
 
         {/* GitHub */}
-        <div className="bg-pilos-card border border-pilos-border rounded-xl overflow-hidden">
-          <div className="flex items-center gap-3 p-4">
-            <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0">
-              <Icon icon="logos:github-icon" className="text-lg" />
+        <div className="tile" style={{ padding: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 14 }}>
+            <div className="tile-logo" style={{ width: 36, height: 36 }}>
+              <Icon icon="logos:github-icon" style={{ fontSize: 18 }} />
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-white">GitHub</p>
-              <p className="text-[10px] text-zinc-500">Issues, PRs, code search</p>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>GitHub</div>
+              <div className="muted" style={{ fontSize: 11 }}>Issues, PRs, code search</div>
             </div>
             {githubConnected ? (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-400">
-                <Icon icon="lucide:check-circle-2" className="text-xs" />
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500, color: 'var(--ok)' }}>
+                <Icon icon="lucide:check-circle-2" style={{ fontSize: 12 }} />
                 Connected
               </span>
             ) : (
               <button
+                type="button"
                 onClick={() => setShowGithubSetup(!showGithubSetup)}
-                className="px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-lg transition-colors"
+                className="btn sm"
               >
                 Connect
               </button>
             )}
           </div>
           {showGithubSetup && !githubConnected && (
-            <div className="border-t border-pilos-border px-4 pb-4 pt-3 space-y-3">
-              <p className="text-[11px] text-zinc-500">
-                Create a <span className="text-zinc-300">Personal Access Token</span> at GitHub &gt; Settings &gt; Developer settings &gt; Tokens (classic) with <span className="text-zinc-300">repo</span> scope.
+            <div style={{ borderTop: '1px solid var(--line-2)', padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <p className="muted" style={{ fontSize: 11, margin: 0 }}>
+                Create a <span style={{ color: 'var(--ink-2)' }}>Personal Access Token</span> at GitHub &gt; Settings &gt; Developer settings &gt; Tokens (classic) with <span style={{ color: 'var(--ink-2)' }}>repo</span> scope.
               </p>
-              <div className="flex gap-2">
+              <div style={{ display: 'flex', gap: 8 }}>
                 <input
                   type="password"
                   value={githubToken}
                   onChange={(e) => setGithubToken(e.target.value)}
                   placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                  className="flex-1 bg-zinc-900 border border-pilos-border rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 font-mono"
+                  className="control"
+                  style={{ flex: 1, fontFamily: 'var(--mono)' }}
                 />
                 <button
+                  type="button"
                   onClick={handleGithubConnect}
                   disabled={!githubToken.trim() || githubConnecting}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
+                  className="btn sm primary"
                 >
                   {githubConnecting ? (
-                    <Icon icon="lucide:loader-2" className="text-xs animate-spin" />
-                  ) : (
-                    'Connect'
-                  )}
+                    <Icon icon="lucide:loader-2" style={{ fontSize: 12, animation: 'spin 1s linear infinite' }} />
+                  ) : 'Connect'}
                 </button>
               </div>
             </div>
@@ -632,31 +798,27 @@ function IntegrationsSection() {
         </div>
 
         {/* Slack */}
-        <div className="flex items-center gap-3 p-4 bg-pilos-card border border-pilos-border rounded-xl">
-          <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0">
-            <Icon icon="logos:slack-icon" className="text-lg" />
+        <div className="tile" style={{ padding: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="tile-logo" style={{ width: 36, height: 36 }}>
+            <Icon icon="logos:slack-icon" style={{ fontSize: 18 }} />
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-medium text-white">Slack</p>
-            <p className="text-[10px] text-zinc-500">Team notifications</p>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>Slack</div>
+            <div className="muted" style={{ fontSize: 11 }}>Team notifications</div>
           </div>
-          <button className="px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-lg transition-colors">
-            Connect
-          </button>
+          <button type="button" className="btn sm">Connect</button>
         </div>
 
         {/* Linear */}
-        <div className="flex items-center gap-3 p-4 bg-pilos-card border border-pilos-border rounded-xl">
-          <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0">
-            <Icon icon="logos:linear-icon" className="text-lg" />
+        <div className="tile" style={{ padding: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="tile-logo" style={{ width: 36, height: 36 }}>
+            <Icon icon="logos:linear-icon" style={{ fontSize: 18 }} />
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-medium text-white">Linear</p>
-            <p className="text-[10px] text-zinc-500">Issue tracking</p>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>Linear</div>
+            <div className="muted" style={{ fontSize: 11 }}>Issue tracking</div>
           </div>
-          <button className="px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-lg transition-colors">
-            Connect
-          </button>
+          <button type="button" className="btn sm">Connect</button>
         </div>
       </div>
     </div>
@@ -758,52 +920,44 @@ function DevicesSection() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-bold text-white mb-1">Devices</h2>
-        <p className="text-xs text-zinc-500">Pair and manage mobile devices</p>
-      </div>
+    <div className="set-sec">
+      <h2 className="h2">Devices</h2>
+      <p className="muted" style={{ fontSize: 12.5, marginTop: -8, marginBottom: 18 }}>
+        Pair and manage mobile devices
+      </p>
 
       {/* Connection status */}
-      <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl">
-        <div className="flex items-center gap-3">
-          <div className={`w-2.5 h-2.5 rounded-full ${relayStatus.connected ? 'bg-green-400' : 'bg-zinc-600'}`} />
-          <div className="flex-1">
-            <p className="text-sm text-white">{relayStatus.connected ? 'Relay Connected' : 'Relay Disconnected'}</p>
-            <p className="text-[10px] text-zinc-500">
+      <div className="tile" style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span className={'li-dot ' + (relayStatus.connected ? 'dot-ok' : 'dot-idle')} style={{ width: 10, height: 10 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, color: 'var(--ink)' }}>{relayStatus.connected ? 'Relay Connected' : 'Relay Disconnected'}</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
               {relayStatus.mobileCount > 0
                 ? `${relayStatus.mobileCount} mobile device${relayStatus.mobileCount > 1 ? 's' : ''} online`
                 : 'No mobile devices connected'}
-            </p>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Pairing Approval Dialog */}
       {pendingRequest && (
-        <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl space-y-3 animate-in fade-in">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
-              <Icon icon="lucide:smartphone" className="text-blue-400 text-lg" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-white">Pairing Request</p>
-              <p className="text-xs text-zinc-400">
-                <span className="text-blue-300 font-medium">{pendingRequest.deviceName}</span> wants to connect
-              </p>
-            </div>
+        <div className="msg-tile accent" style={{ marginBottom: 14 }}>
+          <div className="msg-tile-head">
+            <Icon icon="lucide:smartphone" style={{ fontSize: 16, color: 'var(--accent-2)' }} />
+            Pairing Request
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={handleApprove}
-              className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors"
-            >
+          <div className="msg-tile-body">
+            <span className="muted" style={{ fontSize: 12 }}>
+              <span style={{ color: 'var(--accent-2)', fontWeight: 600 }}>{pendingRequest.deviceName}</span> wants to connect
+            </span>
+          </div>
+          <div className="msg-tile-foot">
+            <button type="button" onClick={handleApprove} className="btn sm primary" style={{ flex: 1, justifyContent: 'center' }}>
               Approve
             </button>
-            <button
-              onClick={handleDeny}
-              className="flex-1 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-lg transition-colors"
-            >
+            <button type="button" onClick={handleDeny} className="btn sm" style={{ flex: 1, justifyContent: 'center' }}>
               Deny
             </button>
           </div>
@@ -811,85 +965,86 @@ function DevicesSection() {
       )}
 
       {/* QR Code Pairing */}
-      <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl space-y-4">
-        <h3 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Pair New Device</h3>
-        <p className="text-xs text-zinc-500">
+      <div className="tile" style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <h3 className="section-label" style={{ margin: 0 }}>Pair New Device</h3>
+        <p className="muted" style={{ fontSize: 11.5, margin: 0 }}>
           Open the Pilos Agents mobile app and scan this QR code to pair your device.
         </p>
 
         {qrDataUrl ? (
-          <div className="flex flex-col items-center gap-3">
-            <div className="p-4 bg-zinc-900 rounded-xl border border-pilos-border">
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+            <div style={{ padding: 16, background: 'var(--panel)', borderRadius: 12, border: '1px solid var(--line)' }}>
               <img src={qrDataUrl} alt="Pairing QR Code" width={200} height={200} />
             </div>
-            <div className="flex items-center gap-2 text-xs text-zinc-400">
-              <Icon icon="lucide:clock" className="text-xs" />
-              <span>Expires in {countdown}</span>
+            <div className="muted" style={{ fontSize: 11.5, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Icon icon="lucide:clock" style={{ fontSize: 11 }} />
+              Expires in {countdown}
             </div>
-            <button
-              onClick={generateQR}
-              className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-            >
-              Regenerate
-            </button>
+            <button type="button" onClick={generateQR} className="btn sm ghost">Regenerate</button>
           </div>
         ) : (
           <button
+            type="button"
             onClick={generateQR}
             disabled={qrLoading || !relayStatus.connected}
-            className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
+            className="btn primary"
+            style={{ width: '100%', justifyContent: 'center' }}
           >
             {qrLoading ? (
               <>
-                <Icon icon="lucide:loader-2" className="text-sm animate-spin" />
+                <Icon icon="lucide:loader-2" style={{ fontSize: 14, animation: 'spin 1s linear infinite' }} />
                 Generating...
               </>
             ) : (
               <>
-                <Icon icon="lucide:qr-code" className="text-sm" />
+                <Icon icon="lucide:qr-code" style={{ fontSize: 14 }} />
                 Generate QR Code
               </>
             )}
           </button>
         )}
         {!relayStatus.connected && (
-          <p className="text-[10px] text-amber-400">Relay server must be connected to generate pairing codes.</p>
+          <p style={{ fontSize: 10.5, color: 'var(--warn)', margin: 0 }}>Relay server must be connected to generate pairing codes.</p>
         )}
       </div>
 
       {/* Paired Devices List */}
-      <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Paired Devices</h3>
+      <div className="tile" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h3 className="section-label" style={{ margin: 0 }}>Paired Devices</h3>
           <button
+            type="button"
             onClick={() => api.mobile.listPairedDevices().then(setDevices).catch(() => {})}
-            className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+            className="btn sm ghost"
+            style={{ height: 22, padding: '0 8px', fontSize: 11 }}
           >
             Refresh
           </button>
         </div>
 
         {devices.length === 0 ? (
-          <p className="text-xs text-zinc-600 py-2">No devices paired yet.</p>
+          <p className="muted" style={{ fontSize: 12, padding: '6px 0' }}>No devices paired yet.</p>
         ) : (
-          <div className="space-y-2">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {devices.map((device) => (
               <div
                 key={device.device_id}
-                className="flex items-center gap-3 p-3 bg-zinc-900 rounded-lg border border-pilos-border"
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: 'var(--panel)', borderRadius: 8, border: '1px solid var(--line)' }}
               >
-                <Icon icon="lucide:smartphone" className="text-zinc-400 text-base flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{device.device_name}</p>
-                  <p className="text-[10px] text-zinc-500">
+                <Icon icon="lucide:smartphone" style={{ fontSize: 16, color: 'var(--ink-3)', flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{device.device_name}</div>
+                  <div className="muted" style={{ fontSize: 11 }}>
                     Paired {new Date(device.created_at).toLocaleDateString()}
                     {device.last_seen_at && ` \u00b7 Last seen ${new Date(device.last_seen_at).toLocaleDateString()}`}
-                  </p>
+                  </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => handleRevoke(device.device_id)}
                   disabled={revoking === device.device_id}
-                  className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 rounded-lg transition-colors disabled:opacity-50"
+                  className="btn sm"
+                  style={{ color: 'var(--err)', borderColor: 'rgba(251,111,111,0.3)' }}
                 >
                   {revoking === device.device_id ? 'Revoking...' : 'Revoke'}
                 </button>
@@ -932,111 +1087,96 @@ function SecuritySection() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-bold text-white mb-1">Security</h2>
-        <p className="text-xs text-zinc-500">Permissions, access control, and privacy</p>
+    <div className="set-sec">
+      <h2 className="h2">Security</h2>
+      <p className="muted" style={{ fontSize: 12.5, marginTop: -8, marginBottom: 18 }}>
+        Permissions, access control, and privacy
+      </p>
+
+      <h3 className="section-label" style={{ marginTop: 18 }}>Permissions</h3>
+      <div className="set-row">
+        <div className="info">
+          <div className="t">Auto-approve read-only operations</div>
+          <div className="d">File reads, searches, and git status run without confirmation</div>
+        </div>
+        <FormToggle
+          checked={autoApproveReads}
+          onChange={(v) => toggle('autoApproveReads', v, setAutoApproveReads)}
+        />
+      </div>
+      <div className="set-row">
+        <div className="info">
+          <div className="t">Confirm destructive actions</div>
+          <div className="d">Require confirmation for file deletes, git push, and resets</div>
+        </div>
+        <FormToggle
+          checked={requireConfirmDestructive}
+          onChange={(v) => toggle('requireConfirmDestructive', v, setRequireConfirmDestructive)}
+        />
+      </div>
+      <div className="set-row">
+        <div className="info">
+          <div className="t">Sandbox mode</div>
+          <div className="d">Restrict shell commands to project directory only</div>
+        </div>
+        <FormToggle
+          checked={sandboxMode}
+          onChange={(v) => toggle('sandboxMode', v, setSandboxMode)}
+        />
       </div>
 
-      {/* Permissions */}
-      <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl space-y-4">
-        <h3 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Permissions</h3>
+      <h3 className="section-label" style={{ marginTop: 22 }}>Session</h3>
+      <FormSelect
+        label="Session timeout"
+        value={sessionTimeout}
+        onChange={(e) => {
+          setSessionTimeout(e.target.value)
+          api.settings.set('security_sessionTimeout', e.target.value)
+        }}
+        options={[
+          { value: '15', label: '15 minutes' },
+          { value: '30', label: '30 minutes' },
+          { value: '60', label: '1 hour' },
+          { value: '120', label: '2 hours' },
+          { value: '0', label: 'Never' },
+        ]}
+      />
+      <p className="muted" style={{ fontSize: 11, marginTop: -8 }}>Auto-lock agent sessions after inactivity</p>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-white">Auto-approve read-only operations</p>
-            <p className="text-[10px] text-zinc-500">File reads, searches, and git status run without confirmation</p>
-          </div>
-          <FormToggle
-            checked={autoApproveReads}
-            onChange={(v) => toggle('autoApproveReads', v, setAutoApproveReads)}
-          />
+      <h3 className="section-label" style={{ marginTop: 22 }}>Privacy</h3>
+      <div className="set-row">
+        <div className="info">
+          <div className="t">Usage telemetry</div>
+          <div className="d">Send anonymous usage data to help improve the product</div>
         </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-white">Confirm destructive actions</p>
-            <p className="text-[10px] text-zinc-500">Require confirmation for file deletes, git push, and resets</p>
-          </div>
-          <FormToggle
-            checked={requireConfirmDestructive}
-            onChange={(v) => toggle('requireConfirmDestructive', v, setRequireConfirmDestructive)}
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-white">Sandbox mode</p>
-            <p className="text-[10px] text-zinc-500">Restrict shell commands to project directory only</p>
-          </div>
-          <FormToggle
-            checked={sandboxMode}
-            onChange={(v) => toggle('sandboxMode', v, setSandboxMode)}
-          />
-        </div>
+        <FormToggle
+          checked={telemetry}
+          onChange={(v) => toggle('telemetry', v, setTelemetry)}
+        />
       </div>
 
-      {/* Session */}
-      <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl space-y-4">
-        <h3 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Session</h3>
-
-        <div>
-          <FormSelect
-            label="Session timeout"
-            value={sessionTimeout}
-            onChange={(e) => {
-              setSessionTimeout(e.target.value)
-              api.settings.set('security_sessionTimeout', e.target.value)
-            }}
-            options={[
-              { value: '15', label: '15 minutes' },
-              { value: '30', label: '30 minutes' },
-              { value: '60', label: '1 hour' },
-              { value: '120', label: '2 hours' },
-              { value: '0', label: 'Never' },
-            ]}
-          />
-          <p className="text-[10px] text-zinc-600 mt-1">Auto-lock agent sessions after inactivity</p>
-        </div>
-      </div>
-
-      {/* Privacy */}
-      <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl space-y-4">
-        <h3 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Privacy</h3>
-
-        <div className="flex items-center justify-between">
+      <h3 className="section-label" style={{ marginTop: 22 }}>Access Control</h3>
+      <div className="tile" style={{ marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <Icon icon="lucide:shield-check" style={{ fontSize: 18, color: 'var(--ok)', marginTop: 2, flexShrink: 0 }} />
           <div>
-            <p className="text-sm text-white">Usage telemetry</p>
-            <p className="text-[10px] text-zinc-500">Send anonymous usage data to help improve the product</p>
-          </div>
-          <FormToggle
-            checked={telemetry}
-            onChange={(v) => toggle('telemetry', v, setTelemetry)}
-          />
-        </div>
-      </div>
-
-      {/* Allowed Paths info */}
-      <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl space-y-3">
-        <h3 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Access Control</h3>
-        <div className="flex items-start gap-3">
-          <Icon icon="lucide:shield-check" className="text-green-400 text-lg mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="text-sm text-white mb-1">Path-based access</p>
-            <p className="text-[10px] text-zinc-500 leading-relaxed">
+            <div className="t" style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>Path-based access</div>
+            <div className="muted" style={{ fontSize: 11, lineHeight: 1.55 }}>
               Agents can only access files within their configured allowed paths. Configure per-agent
               file access in the agent settings under Capabilities &gt; Allowed Paths.
-            </p>
+            </div>
           </div>
         </div>
-        <div className="flex items-start gap-3">
-          <Icon icon="lucide:key-round" className="text-blue-400 text-lg mt-0.5 flex-shrink-0" />
+      </div>
+      <div className="tile">
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <Icon icon="lucide:key-round" style={{ fontSize: 18, color: 'var(--info)', marginTop: 2, flexShrink: 0 }} />
           <div>
-            <p className="text-sm text-white mb-1">MCP server permissions</p>
-            <p className="text-[10px] text-zinc-500 leading-relaxed">
+            <div className="t" style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>MCP server permissions</div>
+            <div className="muted" style={{ fontSize: 11, lineHeight: 1.55 }}>
               Each MCP server runs in its own process with scoped access. Manage connected servers
               in Settings &gt; Integrations.
-            </p>
+            </div>
           </div>
         </div>
       </div>
@@ -1048,7 +1188,7 @@ function PluginsSectionWrapper() {
   const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
   if (!activeProjectPath) {
     return (
-      <div className="text-sm text-zinc-500">Open a project to manage plugins.</div>
+      <div className="muted" style={{ fontSize: 13 }}>Open a project to manage plugins.</div>
     )
   }
   return <PluginsSection projectPath={activeProjectPath} />
@@ -1068,36 +1208,38 @@ function AdvancedSection() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-bold text-white mb-1">Advanced</h2>
-        <p className="text-xs text-zinc-500">Storage management and debug options</p>
-      </div>
+    <div className="set-sec">
+      <h2 className="h2">Advanced</h2>
+      <p className="muted" style={{ fontSize: 12.5, marginTop: -8, marginBottom: 18 }}>
+        Storage management and debug options
+      </p>
 
       {stats && (
-        <div className="p-4 bg-pilos-card border border-pilos-border rounded-xl space-y-3">
-          <h3 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Storage</h3>
-          <div className="grid grid-cols-2 gap-3">
+        <div className="tile" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <h3 className="section-label" style={{ margin: 0 }}>Storage</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
             <div>
-              <p className="text-[10px] text-zinc-500">Conversations</p>
-              <p className="text-sm font-bold text-white">{stats.conversations}</p>
+              <p className="muted" style={{ fontSize: 11, margin: 0 }}>Conversations</p>
+              <p style={{ fontSize: 13.5, fontWeight: 650, color: 'var(--ink)', marginTop: 4, marginBottom: 0 }}>{stats.conversations}</p>
             </div>
             <div>
-              <p className="text-[10px] text-zinc-500">Messages</p>
-              <p className="text-sm font-bold text-white">{stats.messages}</p>
+              <p className="muted" style={{ fontSize: 11, margin: 0 }}>Messages</p>
+              <p style={{ fontSize: 13.5, fontWeight: 650, color: 'var(--ink)', marginTop: 4, marginBottom: 0 }}>{stats.messages}</p>
             </div>
             <div>
-              <p className="text-[10px] text-zinc-500">Database Size</p>
-              <p className="text-sm font-bold text-white">{(stats.dbSizeBytes / 1024 / 1024).toFixed(1)} MB</p>
+              <p className="muted" style={{ fontSize: 11, margin: 0 }}>Database Size</p>
+              <p style={{ fontSize: 13.5, fontWeight: 650, color: 'var(--ink)', marginTop: 4, marginBottom: 0 }}>{(stats.dbSizeBytes / 1024 / 1024).toFixed(1)} MB</p>
             </div>
             <div>
-              <p className="text-[10px] text-zinc-500">Stories</p>
-              <p className="text-sm font-bold text-white">{stats.stories}</p>
+              <p className="muted" style={{ fontSize: 11, margin: 0 }}>Stories</p>
+              <p style={{ fontSize: 13.5, fontWeight: 650, color: 'var(--ink)', marginTop: 4, marginBottom: 0 }}>{stats.stories}</p>
             </div>
           </div>
           <button
+            type="button"
             onClick={handleClearConversations}
-            className="w-full px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-bold rounded-lg transition-all"
+            className="btn sm"
+            style={{ width: '100%', justifyContent: 'center', color: 'var(--err)', borderColor: 'rgba(251,111,111,0.3)' }}
           >
             Clear All Conversations
           </button>
@@ -1136,55 +1278,48 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex-1 flex overflow-hidden">
-      {/* Settings Nav */}
-      <div className="w-56 border-r border-pilos-border bg-pilos-bg p-3 flex-shrink-0">
-        <div className="space-y-0.5">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveNav(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeNav === item.id
-                  ? 'bg-pilos-card text-pilos-blue'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
-              }`}
-            >
-              <Icon icon={item.icon} className={activeNav === item.id ? 'text-pilos-blue' : 'text-zinc-500'} />
-              {item.label}
-            </button>
-          ))}
-        </div>
+    <div className="set-wrap">
+      {/* Settings Nav — matches prototype .set-nav */}
+      <div className="set-nav">
+        {navItems.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => setActiveNav(item.id)}
+            className={'set-nav-item' + (activeNav === item.id ? ' on' : '')}
+          >
+            <Icon icon={item.icon} />
+            {item.label}
+          </button>
+        ))}
 
-        <div className="mt-6 pt-6 border-t border-pilos-border space-y-0.5">
-          <button
-            onClick={() => api.dialog.openExternal('https://pilos.net/docs')}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-zinc-500 hover:text-white hover:bg-zinc-800/50 transition-colors"
-          >
-            <Icon icon="lucide:book-open" className="text-zinc-600" />
-            Documentation
-          </button>
-          <button
-            onClick={() => api.dialog.openExternal('mailto:support@pilos.net')}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-zinc-500 hover:text-white hover:bg-zinc-800/50 transition-colors"
-          >
-            <Icon icon="lucide:life-buoy" className="text-zinc-600" />
-            Support
-          </button>
-        </div>
+        <div className="divider" style={{ margin: '16px 4px' }} />
+
+        <button
+          className="set-nav-item"
+          onClick={() => api.dialog.openExternal('https://pilos.net/docs')}
+        >
+          <Icon icon="lucide:book-open" />
+          Documentation
+        </button>
+        <button
+          className="set-nav-item"
+          onClick={() => api.dialog.openExternal('mailto:support@pilos.net')}
+        >
+          <Icon icon="lucide:life-buoy" />
+          Support
+        </button>
       </div>
 
       {/* Settings Content */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
-        <div className="max-w-xl p-8">
-          {activeNav === 'account' && <AccountSection />}
-          {activeNav === 'general' && <GeneralSection />}
-          {activeNav === 'integrations' && <IntegrationsSection />}
-          {activeNav === 'plugins' && <PluginsSectionWrapper />}
-          {activeNav === 'devices' && <DevicesSection />}
-          {activeNav === 'security' && <SecuritySection />}
-          {activeNav === 'advanced' && <AdvancedSection />}
-        </div>
+      <div className="set-body">
+        {activeNav === 'account' && <AccountSection />}
+        {activeNav === 'general' && <GeneralSection />}
+        {activeNav === 'project' && <ProjectSection />}
+        {activeNav === 'integrations' && <IntegrationsSection />}
+        {activeNav === 'plugins' && <PluginsSectionWrapper />}
+        {activeNav === 'devices' && <DevicesSection />}
+        {activeNav === 'security' && <SecuritySection />}
+        {activeNav === 'advanced' && <AdvancedSection />}
       </div>
     </div>
   )

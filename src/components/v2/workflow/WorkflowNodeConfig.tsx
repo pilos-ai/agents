@@ -557,13 +557,36 @@ export function WorkflowNodeConfig() {
     label: n.data.label,
   }))
 
+  const NODE_TYPE_LABELS: Record<string, string> = {
+    start: 'Schedule node',
+    end: 'End node',
+    mcp_tool: 'MCP tool',
+    ai_prompt: 'AI prompt',
+    agent: 'Agent node',
+    condition: 'Condition',
+    loop: 'Loop',
+    delay: 'Delay',
+    parallel: 'Parallel',
+    merge: 'Merge',
+    variable: 'Variable',
+    note: 'Note',
+    results_display: 'Results display',
+  }
+  const nodeTypeLabel = NODE_TYPE_LABELS[data.type] || data.type
+
   return (
-    <div className="w-80 border-l border-pilos-border flex flex-col bg-pilos-bg flex-shrink-0">
+    <div
+      className="w-80 flex flex-col flex-shrink-0"
+      style={{ background: 'var(--rail)', borderLeft: '1px solid var(--line-2)' }}
+    >
       {/* Header */}
-      <div className="px-4 py-3 border-b border-pilos-border flex-shrink-0">
+      <div
+        className="px-4 py-3 flex-shrink-0"
+        style={{ borderBottom: '1px solid var(--line-2)' }}
+      >
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Step Config</p>
+            <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">{nodeTypeLabel}</p>
             <h3 className="text-sm font-bold text-white mt-0.5">{data.label}</h3>
           </div>
           <button onClick={() => selectNode(null)} className="text-zinc-500 hover:text-white transition-colors">

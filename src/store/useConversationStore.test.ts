@@ -1,6 +1,48 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest'
 import { useConversationStore } from './useConversationStore'
-import type { ClaudeEvent } from '../types'
+import type { ClaudeEvent, AgentCapabilities, AgentDefinition } from '../types'
+
+// Typed factory for AgentCapabilities so team-mode agent fixtures satisfy the
+// full interface. The store under test never reads these fields (runtime only
+// touches agent id/name), so the defaults keep behavior identical.
+function makeCapabilities(overrides: Partial<AgentCapabilities> = {}): AgentCapabilities {
+  return {
+    tools: [],
+    allowedPaths: [],
+    maxTokensPerRequest: 8192,
+    permissionLevel: 'standard',
+    allowedMcpServers: [],
+    contextWindowSize: 128000,
+    conversationHistoryLimit: 50,
+    memoryEnabled: false,
+    memorySummarizationEnabled: false,
+    customInstructions: '',
+    temperature: 0.7,
+    responseFormat: 'markdown',
+    maxRetries: 2,
+    timeoutSeconds: 120,
+    debugMode: false,
+    autoApproveReadOnly: false,
+    ...overrides,
+  }
+}
+
+// Typed factory for AgentDefinition fixtures. The store under test (and the
+// agent-segments util it calls) only read id/name/icon/color, so role,
+// personality and expertise defaults are runtime-inert.
+function makeAgent(overrides: Partial<AgentDefinition> = {}): AgentDefinition {
+  return {
+    id: 'agent',
+    name: 'Agent',
+    icon: '🤖',
+    color: '#000000',
+    role: '',
+    personality: '',
+    expertise: [],
+    capabilities: makeCapabilities(),
+    ...overrides,
+  }
+}
 
 // ── Mock dependencies ────────────────────────────────────────────────────────
 // All vi.mock calls must be at top level so vitest can hoist them.
@@ -21,6 +63,7 @@ vi.mock('../api', () => ({
       updateTitle: vi.fn().mockResolvedValue(null),
       delete: vi.fn().mockResolvedValue(null),
       getMessages: vi.fn().mockResolvedValue([]),
+      getMessagesPage: vi.fn().mockResolvedValue({ messages: [], hasMore: false }),
       saveMessage: vi.fn().mockResolvedValue({ id: 1 }),
       getMessage: vi.fn().mockResolvedValue(null),
       searchMessages: vi.fn().mockResolvedValue({ total: 0, messages: [] }),
@@ -95,7 +138,7 @@ describe('createConversation', () => {
     const newConv = { id: 'new-id', title: 'New Chat', model: 'sonnet', working_directory: '', project_path: '/proj', created_at: '', updated_at: '' }
     api.conversations.create.mockResolvedValue(newConv)
     api.conversations.list.mockResolvedValue([newConv])
-    api.conversations.getMessages.mockResolvedValue([])
+    api.conversations.getMessagesPage.mockResolvedValue({ messages: [], hasMore: false })
 
     const id = await useConversationStore.getState().createConversation('New Chat')
     expect(id).toBe('new-id')
@@ -818,8 +861,8 @@ describe('handleClaudeEvent — result team mode agent segments', () => {
       permissionMode: 'bypass',
       mode: 'team',
       agents: [
-        { id: 'a1', name: 'Alice', prompt: '', icon: '🤖', color: '#ff0000', capabilities: { tools: [] } },
-        { id: 'a2', name: 'Bob', prompt: '', icon: '🤖', color: '#0000ff', capabilities: { tools: [] } },
+        makeAgent({ id: 'a1', name: 'Alice', icon: '🤖', color: '#ff0000' }),
+        makeAgent({ id: 'a2', name: 'Bob', icon: '🤖', color: '#0000ff' }),
       ],
       mcpServers: [],
       draftText: '',
@@ -1025,7 +1068,15 @@ describe('respondToQuestion', () => {
       askUserQuestion: {
         sessionId: 'sess-1',
         toolUseId: 'tu-q',
-        questions: [{ name: 'choice', prompt: 'Pick one', type: 'select', options: ['A', 'B'] }],
+        questions: [{
+          question: 'Pick one',
+          header: 'choice',
+          multiSelect: false,
+          options: [
+            { label: 'A', description: '' },
+            { label: 'B', description: '' },
+          ],
+        }],
       },
     })
 
@@ -1112,7 +1163,7 @@ describe('handleClaudeEvent — content_block_delta team mode agent detection', 
       permissionMode: 'bypass',
       mode: 'team',
       agents: [
-        { id: 'a1', name: 'Alice', prompt: '', icon: '', color: '', capabilities: { tools: [] } },
+        makeAgent({ id: 'a1', name: 'Alice', icon: '', color: '' }),
       ],
       mcpServers: [],
       draftText: '',
@@ -1177,7 +1228,7 @@ describe('sendMessage', () => {
       updated_at: '',
     })
     api.conversations.list.mockResolvedValue([])
-    api.conversations.getMessages.mockResolvedValue([])
+    api.conversations.getMessagesPage.mockResolvedValue({ messages: [], hasMore: false })
     api.conversations.saveMessage.mockResolvedValue({ id: 1 })
     api.claude.startSession.mockResolvedValue(null)
     api.claude.onEvent.mockReturnValue(() => {})
@@ -1270,9 +1321,10 @@ describe('handleClaudeEvent — assistant event extracts tool_use blocks', () =>
 describe('setActiveConversation', () => {
   it('sets activeConversationId and loads messages', async () => {
     const api = await getApi()
-    api.conversations.getMessages.mockResolvedValue([
-      { id: 1, role: 'user', type: 'text', content: 'hello', timestamp: 0 },
-    ])
+    api.conversations.getMessagesPage.mockResolvedValue({
+      messages: [{ id: 1, role: 'user', type: 'text', content: 'hello', timestamp: 0 }],
+      hasMore: false,
+    })
 
     useConversationStore.setState({ activeConversationId: null, messages: [] })
 
@@ -1284,7 +1336,7 @@ describe('setActiveConversation', () => {
 
   it('moves current active session to bgSessions when switching', async () => {
     const api = await getApi()
-    api.conversations.getMessages.mockResolvedValue([])
+    api.conversations.getMessagesPage.mockResolvedValue({ messages: [], hasMore: false })
 
     useConversationStore.setState({
       activeConversationId: 'c-1',
@@ -1302,7 +1354,7 @@ describe('setActiveConversation', () => {
 
   it('restores bg session state when switching to a bg conversation', async () => {
     const api = await getApi()
-    api.conversations.getMessages.mockResolvedValue([])
+    api.conversations.getMessagesPage.mockResolvedValue({ messages: [], hasMore: false })
 
     useConversationStore.setState({
       activeConversationId: 'c-1',
@@ -1337,8 +1389,8 @@ describe('handleClaudeEvent — assistant event team mode paths', () => {
       permissionMode: 'bypass',
       mode: 'team',
       agents: [
-        { id: 'a1', name: 'Alice', prompt: '', icon: '🤖', color: '#ff0000', capabilities: { tools: [] } },
-        { id: 'a2', name: 'Bob', prompt: '', icon: '🤖', color: '#0000ff', capabilities: { tools: [] } },
+        makeAgent({ id: 'a1', name: 'Alice', icon: '🤖', color: '#ff0000' }),
+        makeAgent({ id: 'a2', name: 'Bob', icon: '🤖', color: '#0000ff' }),
       ],
       mcpServers: [],
       draftText: '',
@@ -1447,7 +1499,7 @@ describe('handleClaudeEvent — user event team mode agent attribution', () => {
       permissionMode: 'bypass',
       mode: 'team',
       agents: [
-        { id: 'a1', name: 'Alice', prompt: '', icon: '🤖', color: '#ff0000', capabilities: { tools: [] } },
+        makeAgent({ id: 'a1', name: 'Alice', icon: '🤖', color: '#ff0000' }),
       ],
       mcpServers: [],
       draftText: '',
@@ -1638,7 +1690,7 @@ describe('handleClaudeEvent — content_block_stop team mode agent attribution',
       permissionMode: 'bypass',
       mode: 'team',
       agents: [
-        { id: 'a1', name: 'Alice', prompt: '', icon: '🤖', color: '#ff0000', capabilities: { tools: [] } },
+        makeAgent({ id: 'a1', name: 'Alice', icon: '🤖', color: '#ff0000' }),
       ],
       mcpServers: [],
       draftText: '',

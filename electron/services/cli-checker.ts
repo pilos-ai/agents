@@ -13,6 +13,10 @@ function stripAnsi(text: string): string {
   return text.replace(/\x1b\[[0-9;]*[A-Za-z]|\x1b\].*?(?:\x07|\x1b\\)/g, '')
 }
 
+function parseVersion(output: string): string {
+  return output.trim().replace(/\s*\(.*?\)\s*$/, '')
+}
+
 export function getExpandedEnv(extraBinDirs?: string[]): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(process.env)) {
@@ -97,7 +101,7 @@ export class CliChecker {
     try {
       const output = await this.execWithTimeout('claude', ['--version'], env)
       this.claudePath = 'claude'
-      return { available: true, version: output.trim() }
+      return { available: true, version: parseVersion(output) }
     } catch {
       // Not on PATH — try known install locations
     }
@@ -107,7 +111,7 @@ export class CliChecker {
       try {
         const output = await this.execWithTimeout(resolved, ['--version'], env)
         this.claudePath = resolved
-        return { available: true, version: output.trim() }
+        return { available: true, version: parseVersion(output) }
       } catch (err) {
         return { available: false, error: String(err) }
       }

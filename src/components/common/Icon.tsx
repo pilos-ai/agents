@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { Icon as IconifyIcon, addCollection } from '@iconify/react'
 
 // Register icon sets inline — works offline in Electron
@@ -16,14 +17,17 @@ interface IconProps {
   icon: string
   className?: string
   size?: string
+  style?: CSSProperties
 }
 
-export function Icon({ icon, className = '', size }: IconProps) {
+export function Icon({ icon, className = '', size, style }: IconProps) {
+  const mergedStyle: CSSProperties | undefined =
+    size || style ? { ...(size ? { fontSize: size } : {}), ...(style || {}) } : undefined
   return (
     <IconifyIcon
       icon={icon}
       className={className}
-      style={size ? { fontSize: size } : undefined}
+      style={mergedStyle}
     />
   )
 }

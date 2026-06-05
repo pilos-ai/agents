@@ -1,6 +1,6 @@
 appId: com.pilos.agents
 productName: Pilos Agents
-copyright: Copyright © 2026
+copyright: Copyright © 2025-2026 Pilos AI
 
 afterPack: scripts/afterPack.cjs
 

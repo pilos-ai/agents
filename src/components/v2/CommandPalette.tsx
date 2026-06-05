@@ -27,11 +27,13 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const commands = useMemo<Command[]>(() => {
     const nav: Command[] = [
       { id: 'nav-dashboard', label: 'Go to Command Center', icon: 'lucide:layout-dashboard', category: 'navigation', onSelect: () => setActiveView('dashboard') },
+      { id: 'nav-chat', label: 'Go to Chat', icon: 'lucide:message-square', category: 'navigation', onSelect: () => setActiveView('chat') },
+      { id: 'nav-workflows', label: 'Go to Workflows', icon: 'lucide:workflow', category: 'navigation', onSelect: () => setActiveView('workflows') },
       { id: 'nav-terminal', label: 'Go to Terminal', icon: 'lucide:terminal', category: 'navigation', onSelect: () => setActiveView('terminal') },
-      { id: 'nav-tasks', label: 'Go to Tasks', icon: 'lucide:list-checks', category: 'navigation', onSelect: () => setActiveView('tasks') },
-      { id: 'nav-config', label: 'Go to Agent Swarm', icon: 'lucide:bot', category: 'navigation', onSelect: () => setActiveView('config') },
-      { id: 'nav-analytics', label: 'Go to Performance', icon: 'lucide:activity', category: 'navigation', onSelect: () => setActiveView('analytics') },
-      { id: 'nav-mcp', label: 'Go to MCP Registry', icon: 'lucide:puzzle', category: 'navigation', onSelect: () => setActiveView('mcp') },
+      { id: 'nav-analytics', label: 'Go to Analytics', icon: 'lucide:activity', category: 'navigation', onSelect: () => setActiveView('analytics') },
+      { id: 'nav-agents', label: 'Go to Agents', icon: 'lucide:bot', category: 'navigation', onSelect: () => setActiveView('agents') },
+      { id: 'nav-mcp', label: 'Go to MCP Servers', icon: 'lucide:puzzle', category: 'navigation', onSelect: () => setActiveView('mcp') },
+      { id: 'nav-runs', label: 'Go to Run history', icon: 'lucide:history', category: 'navigation', onSelect: () => setActiveView('runs') },
       { id: 'nav-settings', label: 'Go to Settings', icon: 'lucide:settings', category: 'navigation', onSelect: () => setActiveView('settings') },
     ]
 
@@ -53,7 +55,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         category: 'action',
         onSelect: () => {
           if (activeProjectPath) {
-            setActiveView('terminal')
+            setActiveView('chat')
             useConversationStore.getState().createConversation()
           }
         },

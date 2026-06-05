@@ -29,22 +29,56 @@ interface GeneratedTask {
   enabled: boolean
 }
 
-// ── Color Helpers ──
+const STEP_LABELS = ['Role', 'Integrations', 'Generate', 'Review'] as const
 
-const ROLE_COLORS: Record<string, { bg: string; border: string; text: string; icon: string }> = {
-  blue: { bg: 'bg-blue-500/5', border: 'border-blue-500/30 hover:border-blue-500/60', text: 'text-blue-400', icon: 'bg-blue-500/10' },
-  emerald: { bg: 'bg-emerald-500/5', border: 'border-emerald-500/30 hover:border-emerald-500/60', text: 'text-emerald-400', icon: 'bg-emerald-500/10' },
-  purple: { bg: 'bg-purple-500/5', border: 'border-purple-500/30 hover:border-purple-500/60', text: 'text-purple-400', icon: 'bg-purple-500/10' },
-  amber: { bg: 'bg-amber-500/5', border: 'border-amber-500/30 hover:border-amber-500/60', text: 'text-amber-400', icon: 'bg-amber-500/10' },
-  orange: { bg: 'bg-orange-500/5', border: 'border-orange-500/30 hover:border-orange-500/60', text: 'text-orange-400', icon: 'bg-orange-500/10' },
-  zinc: { bg: 'bg-zinc-500/5', border: 'border-zinc-500/30 hover:border-zinc-500/60', text: 'text-zinc-400', icon: 'bg-zinc-500/10' },
+const PRIORITY_TAG: Record<string, string> = {
+  low: 'tag',
+  medium: 'tag accent',
+  high: 'tag warn',
+  critical: 'tag err',
 }
 
-const PRIORITY_BADGE: Record<string, string> = {
-  low: 'bg-zinc-700 text-zinc-400',
-  medium: 'bg-blue-500/20 text-blue-400',
-  high: 'bg-amber-500/20 text-amber-400',
-  critical: 'bg-red-500/20 text-red-400',
+// ── Wizard shell ──
+
+function WizardShell({
+  step,
+  children,
+  wide,
+}: {
+  step: 1 | 2 | 3 | 4
+  children: React.ReactNode
+  wide?: boolean
+}) {
+  return (
+    <div className="onb">
+      <div className="onb-glow" />
+      <div className={`onb-card pop-in${wide ? ' wide' : ''}`}>
+        {/* Step indicator */}
+        <div className="onb-steps">
+          {STEP_LABELS.map((label, i) => {
+            const n = (i + 1) as 1 | 2 | 3 | 4
+            const done = n < step
+            const active = n === step
+            return (
+              <div key={label} style={{ display: 'contents' }}>
+                <div className={`onb-step${done ? ' done' : ''}${active ? ' active' : ''}`}>
+                  <div className="num">
+                    {done ? <Icon icon="lucide:check" className="text-[14px]" /> : n}
+                  </div>
+                  <div className="lbl">{label}</div>
+                </div>
+                {i < STEP_LABELS.length - 1 && (
+                  <div className={`onb-line${done ? ' done' : ''}`} />
+                )}
+              </div>
+            )
+          })}
+        </div>
+        <div className="divider" />
+        {children}
+      </div>
+    </div>
+  )
 }
 
 // ── Step 1: Role Selection ──
@@ -55,82 +89,115 @@ function RoleSelectionStep({ onSelect }: { onSelect: (role: RoleDefinition, cust
   const selected = ROLES.find((r) => r.id === selectedId)
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-8">
-      <div className="w-full max-w-2xl">
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
-            <Icon icon="lucide:rocket" className="text-blue-400 text-2xl" />
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Set Up Your Workspace</h1>
-          <p className="text-sm text-zinc-500">Select your role and we'll generate tasks and workflows tailored to your work</p>
+    <WizardShell step={1} wide>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em' }}>
+          Set up your workspace
         </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
-          {ROLES.map((role) => {
-            const c = ROLE_COLORS[role.color] || ROLE_COLORS.zinc
-            const isSelected = selectedId === role.id
-            return (
-              <button
-                key={role.id}
-                onClick={() => setSelectedId(role.id)}
-                className={`p-4 rounded-xl border-2 transition-all text-left ${
-                  isSelected
-                    ? `${c.bg} border-${role.color}-500 shadow-lg`
-                    : `bg-pilos-card ${c.border}`
-                }`}
-              >
-                <div className={`w-10 h-10 rounded-lg ${c.icon} flex items-center justify-center mb-3`}>
-                  <Icon icon={role.icon} className={`${c.text} text-lg`} />
-                </div>
-                <p className="text-sm font-bold text-white mb-1">{role.label}</p>
-                <p className="text-[10px] text-zinc-500 leading-relaxed">{role.description}</p>
-                {role.taskHints.length > 0 && isSelected && (
-                  <div className="mt-3 space-y-1">
-                    {role.taskHints.slice(0, 3).map((h, i) => (
-                      <p key={i} className="text-[9px] text-zinc-600 truncate">
-                        <span className={`${c.text} mr-1`}>-</span> {h.split(' — ')[0]}
-                      </p>
-                    ))}
-                  </div>
-                )}
-              </button>
-            )
-          })}
-        </div>
-
-        {selectedId === 'custom' && (
-          <div className="mb-6">
-            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5 block">
-              Describe your role and the workflows you need
-            </label>
-            <textarea
-              value={customDesc}
-              onChange={(e) => setCustomDesc(e.target.value)}
-              placeholder="e.g. I'm a marketing manager who needs to track campaign tasks in Jira, send weekly reports to Slack, and monitor content deadlines..."
-              rows={3}
-              className="w-full px-3 py-2.5 bg-pilos-bg border border-pilos-border rounded-lg text-xs text-white placeholder-zinc-600 outline-none focus:border-blue-500 resize-none"
-            />
-          </div>
-        )}
-
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => useAppStore.getState().completeWorkspaceSetup('skipped')}
-            className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
-          >
-            Skip for now
-          </button>
-          <button
-            onClick={() => selected && onSelect(selected, selectedId === 'custom' ? customDesc : undefined)}
-            disabled={!selected || (selectedId === 'custom' && !customDesc.trim())}
-            className="px-5 py-2 rounded-lg text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:hover:bg-blue-600 transition-colors flex items-center gap-2"
-          >
-            Continue
-            <Icon icon="lucide:arrow-right" className="text-sm" />
-          </button>
+        <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
+          Select your role and we'll generate tasks and workflows tailored to your work.
         </div>
       </div>
-    </div>
+
+      <div className="grid-cards gc-3">
+        {ROLES.map((role) => {
+          const isSelected = selectedId === role.id
+          return (
+            <button
+              key={role.id}
+              type="button"
+              onClick={() => setSelectedId(role.id)}
+              className={`tile hover${isSelected ? ' selected' : ''}`}
+              style={{ padding: 14 }}
+            >
+              <div className="tile-head">
+                <div className="tile-logo">
+                  <Icon icon={role.icon} className="text-[18px]" />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="tile-nm">{role.label}</div>
+                  <div className="tile-desc">{role.description}</div>
+                </div>
+              </div>
+              {role.taskHints.length > 0 && isSelected && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line-2)' }}>
+                  {role.taskHints.slice(0, 3).map((h, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        fontSize: 10.5,
+                        color: 'var(--muted)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      <span style={{ color: 'var(--accent-2)', marginRight: 4 }}>—</span>
+                      {h.split(' — ')[0]}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {selectedId === 'custom' && (
+        <div style={{ marginTop: 14 }}>
+          <label
+            style={{
+              fontFamily: 'var(--mono)',
+              fontSize: 10,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'var(--muted)',
+              display: 'block',
+              marginBottom: 6,
+            }}
+          >
+            Describe your role and the workflows you need
+          </label>
+          <textarea
+            value={customDesc}
+            onChange={(e) => setCustomDesc(e.target.value)}
+            placeholder="e.g. I'm a marketing manager who needs to track campaign tasks in Jira, send weekly reports to Slack, and monitor content deadlines..."
+            rows={3}
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '10px 12px',
+              background: 'var(--panel)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--r-md)',
+              color: 'var(--ink)',
+              fontSize: 12.5,
+              outline: 'none',
+              resize: 'vertical',
+              fontFamily: 'inherit',
+            }}
+          />
+        </div>
+      )}
+
+      <div className="row" style={{ gap: 10, marginTop: 22 }}>
+        <button
+          className="btn ghost"
+          onClick={() => useAppStore.getState().completeWorkspaceSetup('skipped')}
+        >
+          Skip for now
+        </button>
+        <span style={{ marginLeft: 'auto' }} />
+        <button
+          className="btn primary"
+          disabled={!selected || (selectedId === 'custom' && !customDesc.trim())}
+          onClick={() => selected && onSelect(selected, selectedId === 'custom' ? customDesc : undefined)}
+        >
+          Continue
+          <Icon icon="lucide:arrow-right" className="text-[15px]" />
+        </button>
+      </div>
+    </WizardShell>
   )
 }
 
@@ -148,9 +215,73 @@ async function loadJiraStore() {
   }
 }
 
+// ── Integration row helper ──
+
+function IntegrationTile({
+  icon,
+  name,
+  desc,
+  proBadge,
+  connected,
+  connecting,
+  canConnect,
+  disabledReason,
+  onConnect,
+  children,
+}: {
+  icon: string
+  name: string
+  desc: string
+  proBadge?: boolean
+  connected: boolean
+  connecting?: boolean
+  canConnect: boolean
+  disabledReason?: string
+  onConnect?: () => void
+  children?: React.ReactNode
+}) {
+  return (
+    <div className={`tile${connected ? ' selected' : ''}`} style={{ padding: 14 }}>
+      <div className="row" style={{ gap: 12 }}>
+        <div className="tile-logo">
+          <Icon icon={icon} className="text-[20px]" />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <div className="tile-nm">{name}</div>
+            {proBadge && <span className="tag pro">PRO</span>}
+          </div>
+          <div className="tile-desc">{desc}</div>
+        </div>
+        {connected ? (
+          <span className="tag ok">
+            <Icon icon="lucide:check" className="text-[11px]" /> connected
+          </span>
+        ) : disabledReason ? (
+          <span className="muted" style={{ fontSize: 11 }}>{disabledReason}</span>
+        ) : !canConnect ? (
+          <button className="btn sm" disabled>Upgrade</button>
+        ) : (
+          <button className="btn sm" onClick={onConnect} disabled={connecting}>
+            {connecting ? (
+              <>
+                <Icon icon="lucide:loader-2" className="animate-spin text-[12px]" />
+                Connecting...
+              </>
+            ) : (
+              'Connect'
+            )}
+          </button>
+        )}
+      </div>
+      {children}
+    </div>
+  )
+}
+
 // ── Step 2: Integration Check ──
 
-function IntegrationCheckStep({ role, onContinue, onBack }: {
+function IntegrationCheckStep({ onContinue, onBack }: {
   role: RoleDefinition
   onContinue: (integrations: string[]) => void
   onBack: () => void
@@ -164,7 +295,6 @@ function IntegrationCheckStep({ role, onContinue, onBack }: {
   const activeTab = openProjects.find((p) => p.projectPath === activeProjectPath)
   const mcpServers = activeTab?.mcpServers || []
 
-  // Connection state
   const [checked, setChecked] = useState(false)
   const [jiraConnected, setJiraConnected] = useState(false)
   const [jiraConnecting, setJiraConnecting] = useState(false)
@@ -278,189 +408,149 @@ function IntegrationCheckStep({ role, onContinue, onBack }: {
 
   if (!checked) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <Icon icon="lucide:loader-2" className="text-blue-400 text-2xl animate-spin" />
-      </div>
+      <WizardShell step={2}>
+        <div className="row" style={{ justifyContent: 'center', padding: '32px 0' }}>
+          <Icon icon="lucide:loader-2" className="animate-spin text-[22px]" style={{ color: 'var(--accent-2)' }} />
+        </div>
+      </WizardShell>
     )
   }
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-8">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-blue-500/20 flex items-center justify-center mx-auto mb-4 border border-emerald-500/20">
-            <Icon icon="lucide:plug-zap" className="text-emerald-400 text-2xl" />
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Your Integrations</h1>
-          <p className="text-sm text-zinc-500">Connect services to power your workflows</p>
+    <WizardShell step={2}>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em' }}>
+          Your integrations
         </div>
+        <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
+          Connect services to power your workflows. You can add more later in Settings.
+        </div>
+      </div>
 
-        <div className="space-y-3 mb-8">
-          {/* Jira — Pro only */}
-          <div className={`rounded-xl border overflow-hidden ${jiraConnected ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-pilos-card border-pilos-border'}`}>
-            <div className="flex items-center gap-3 p-4">
-              <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                <Icon icon="logos:jira" className="text-lg" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-white">Jira</p>
-                  <span className="text-[9px] font-bold text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded uppercase tracking-wider">Pro</span>
-                </div>
-                <p className="text-[10px] text-zinc-500">Atlassian issue tracking</p>
-              </div>
-              {jiraConnected ? (
-                <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold">
-                  <Icon icon="lucide:check-circle" className="text-xs" /> Connected
-                </span>
-              ) : (
-                <button
-                  onClick={isPro ? handleJiraConnect : undefined}
-                  disabled={!isPro || jiraConnecting}
-                  className="px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-300 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5"
-                >
-                  {jiraConnecting ? (
-                    <><Icon icon="lucide:loader-2" className="text-xs animate-spin" /> Connecting...</>
-                  ) : isPro ? (
-                    'Connect'
-                  ) : (
-                    'Upgrade'
-                  )}
-                </button>
-              )}
-            </div>
-          </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <IntegrationTile
+          icon="logos:jira"
+          name="Jira"
+          desc="Atlassian issue tracking"
+          proBadge
+          connected={jiraConnected}
+          connecting={jiraConnecting}
+          canConnect={isPro}
+          onConnect={handleJiraConnect}
+        />
 
-          {/* GitHub — all tiers */}
-          <div className={`rounded-xl border overflow-hidden ${githubConnected ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-pilos-card border-pilos-border'}`}>
-            <div className="flex items-center gap-3 p-4">
-              <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                <Icon icon="logos:github-icon" className="text-lg" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white">GitHub</p>
-                <p className="text-[10px] text-zinc-500">Issues, PRs, code search</p>
-              </div>
-              {githubConnected ? (
-                <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold">
-                  <Icon icon="lucide:check-circle" className="text-xs" /> Connected
-                </span>
-              ) : !activeProjectPath ? (
-                <span className="text-[10px] text-zinc-600">Open a project first</span>
-              ) : (
-                <button
-                  onClick={() => setShowGithubSetup(!showGithubSetup)}
-                  className="px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-lg transition-colors"
-                >
-                  Connect
-                </button>
-              )}
-            </div>
-            {showGithubSetup && !githubConnected && activeProjectPath && (
-              <div className="border-t border-pilos-border px-4 pb-4 pt-3 space-y-3">
-                <p className="text-[11px] text-zinc-500">
-                  Create a <span className="text-zinc-300">Personal Access Token</span> at GitHub &gt; Settings &gt; Developer settings &gt; Tokens (classic) with <span className="text-zinc-300">repo</span> scope.
-                </p>
-                <div className="flex gap-2">
+        <IntegrationTile
+          icon="logos:github-icon"
+          name="GitHub"
+          desc="Issues, PRs, code search"
+          connected={githubConnected}
+          canConnect={!!activeProjectPath}
+          disabledReason={!activeProjectPath ? 'Open a project first' : undefined}
+          onConnect={() => setShowGithubSetup((v) => !v)}
+        >
+          {showGithubSetup && !githubConnected && activeProjectPath && (
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line-2)' }}>
+              <p className="muted" style={{ fontSize: 11, margin: '0 0 8px' }}>
+                Create a Personal Access Token at GitHub → Settings → Developer settings → Tokens
+                (classic) with <span style={{ color: 'var(--ink-2)' }}>repo</span> scope.
+              </p>
+              <div className="row" style={{ gap: 8 }}>
+                <div className="cli-box" style={{ flex: 1, margin: 0 }}>
+                  <Icon icon="lucide:key-round" className="text-[14px]" style={{ color: 'var(--muted)' }} />
                   <input
                     type="password"
                     value={githubToken}
                     onChange={(e) => setGithubToken(e.target.value)}
                     placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                    className="flex-1 bg-zinc-900 border border-pilos-border rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 font-mono"
                   />
-                  <button
-                    onClick={handleGithubConnect}
-                    disabled={!githubToken.trim() || githubConnecting}
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
-                  >
-                    {githubConnecting ? <Icon icon="lucide:loader-2" className="text-xs animate-spin" /> : 'Connect'}
-                  </button>
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* Slack — all tiers */}
-          <div className={`rounded-xl border overflow-hidden ${slackConnected ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-pilos-card border-pilos-border'}`}>
-            <div className="flex items-center gap-3 p-4">
-              <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                <Icon icon="logos:slack-icon" className="text-lg" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white">Slack</p>
-                <p className="text-[10px] text-zinc-500">Team notifications</p>
-              </div>
-              {slackConnected ? (
-                <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold">
-                  <Icon icon="lucide:check-circle" className="text-xs" /> Connected
-                </span>
-              ) : !activeProjectPath ? (
-                <span className="text-[10px] text-zinc-600">Open a project first</span>
-              ) : (
                 <button
-                  onClick={() => setShowSlackSetup(!showSlackSetup)}
-                  className="px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-lg transition-colors"
+                  onClick={handleGithubConnect}
+                  disabled={!githubToken.trim() || githubConnecting}
+                  className="btn primary sm"
                 >
-                  Connect
+                  {githubConnecting ? (
+                    <Icon icon="lucide:loader-2" className="animate-spin text-[12px]" />
+                  ) : (
+                    'Connect'
+                  )}
                 </button>
-              )}
-            </div>
-            {showSlackSetup && !slackConnected && activeProjectPath && (
-              <div className="border-t border-pilos-border px-4 pb-4 pt-3 space-y-3">
-                <p className="text-[11px] text-zinc-500">
-                  Create a Slack app at <span className="text-zinc-300">api.slack.com/apps</span>, add <span className="text-zinc-300">chat:write</span> + <span className="text-zinc-300">channels:read</span> scopes, then install to your workspace.
-                </p>
-                <div className="space-y-2">
-                  <input
-                    type="password"
-                    value={slackBotToken}
-                    onChange={(e) => setSlackBotToken(e.target.value)}
-                    placeholder="xoxb-xxxxxxxxxxxx"
-                    className="w-full bg-zinc-900 border border-pilos-border rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 font-mono"
-                  />
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={slackTeamId}
-                      onChange={(e) => setSlackTeamId(e.target.value)}
-                      placeholder="Team ID (e.g. T01234567)"
-                      className="flex-1 bg-zinc-900 border border-pilos-border rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 font-mono"
-                    />
-                    <button
-                      onClick={handleSlackConnect}
-                      disabled={!slackBotToken.trim() || !slackTeamId.trim() || slackConnecting}
-                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
-                    >
-                      {slackConnecting ? <Icon icon="lucide:loader-2" className="text-xs animate-spin" /> : 'Connect'}
-                    </button>
-                  </div>
-                </div>
               </div>
-            )}
-          </div>
-        </div>
+            </div>
+          )}
+        </IntegrationTile>
 
-        <p className="text-[10px] text-zinc-600 text-center mb-6">
-          {connected.length > 0
-            ? `Workflows will use ${connected.join(' + ')}. You can configure more in Settings later.`
-            : 'No integrations connected. Workflows will use data processing and AI analysis.'}
-        </p>
-
-        <div className="flex items-center justify-between">
-          <button onClick={onBack} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1">
-            <Icon icon="lucide:arrow-left" className="text-xs" /> Back
-          </button>
-          <button
-            onClick={() => onContinue(connected)}
-            className="px-5 py-2 rounded-lg text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 transition-colors flex items-center gap-2"
-          >
-            Generate Workspace
-            <Icon icon="lucide:sparkles" className="text-sm" />
-          </button>
-        </div>
+        <IntegrationTile
+          icon="logos:slack-icon"
+          name="Slack"
+          desc="Team notifications"
+          connected={slackConnected}
+          canConnect={!!activeProjectPath}
+          disabledReason={!activeProjectPath ? 'Open a project first' : undefined}
+          onConnect={() => setShowSlackSetup((v) => !v)}
+        >
+          {showSlackSetup && !slackConnected && activeProjectPath && (
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line-2)' }}>
+              <p className="muted" style={{ fontSize: 11, margin: '0 0 8px' }}>
+                Create a Slack app at api.slack.com/apps, add{' '}
+                <span style={{ color: 'var(--ink-2)' }}>chat:write</span> +{' '}
+                <span style={{ color: 'var(--ink-2)' }}>channels:read</span> scopes, then install
+                to your workspace.
+              </p>
+              <div className="cli-box" style={{ margin: '0 0 8px' }}>
+                <Icon icon="lucide:key-round" className="text-[14px]" style={{ color: 'var(--muted)' }} />
+                <input
+                  type="password"
+                  value={slackBotToken}
+                  onChange={(e) => setSlackBotToken(e.target.value)}
+                  placeholder="xoxb-xxxxxxxxxxxx"
+                />
+              </div>
+              <div className="row" style={{ gap: 8 }}>
+                <div className="cli-box" style={{ flex: 1, margin: 0 }}>
+                  <Icon icon="lucide:hash" className="text-[14px]" style={{ color: 'var(--muted)' }} />
+                  <input
+                    type="text"
+                    value={slackTeamId}
+                    onChange={(e) => setSlackTeamId(e.target.value)}
+                    placeholder="Team ID (e.g. T01234567)"
+                  />
+                </div>
+                <button
+                  onClick={handleSlackConnect}
+                  disabled={!slackBotToken.trim() || !slackTeamId.trim() || slackConnecting}
+                  className="btn primary sm"
+                >
+                  {slackConnecting ? (
+                    <Icon icon="lucide:loader-2" className="animate-spin text-[12px]" />
+                  ) : (
+                    'Connect'
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+        </IntegrationTile>
       </div>
-    </div>
+
+      <p className="muted" style={{ fontSize: 11, textAlign: 'center', margin: '14px 0 0' }}>
+        {connected.length > 0
+          ? `Workflows will use ${connected.join(' + ')}.`
+          : 'No integrations connected. Workflows will use data processing and AI analysis.'}
+      </p>
+
+      <div className="row" style={{ gap: 10, marginTop: 22 }}>
+        <button className="btn ghost" onClick={onBack}>
+          <Icon icon="lucide:arrow-left" className="text-[15px]" />
+          Back
+        </button>
+        <span style={{ marginLeft: 'auto' }} />
+        <button className="btn primary" onClick={() => onContinue(connected)}>
+          Generate workspace
+          <Icon icon="lucide:sparkles" className="text-[15px]" />
+        </button>
+      </div>
+    </WizardShell>
   )
 }
 
@@ -519,7 +609,6 @@ function GeneratingStep({ role, customDescription, integrations, onComplete, onE
       }
 
       if (event.type === 'session:ended') {
-        // Only treat as error if we haven't received a result yet
         if (sessionIdRef.current) {
           unsub()
           unsubRef.current = null
@@ -603,7 +692,6 @@ function GeneratingStep({ role, customDescription, integrations, onComplete, onE
       unsub()
     })
 
-    // Timeout
     const timeout = setTimeout(() => {
       if (sessionIdRef.current) {
         api.claude.abort(sessionIdRef.current)
@@ -619,23 +707,36 @@ function GeneratingStep({ role, customDescription, integrations, onComplete, onE
   }, [])
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-8">
-      <div className="w-full max-w-sm text-center">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/10 to-purple-500/10 flex items-center justify-center mx-auto mb-6 border border-blue-500/20">
-          <Icon icon="lucide:loader-2" className="text-blue-400 text-2xl animate-spin" />
+    <WizardShell step={3}>
+      <div style={{ textAlign: 'center', padding: '8px 0' }}>
+        <div
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: 14,
+            background: 'var(--accent-soft)',
+            border: '1px solid var(--accent-line)',
+            display: 'grid',
+            placeItems: 'center',
+            margin: '0 auto 14px',
+          }}
+        >
+          <Icon icon="lucide:loader-2" className="animate-spin text-[22px]" style={{ color: 'var(--accent-2)' }} />
         </div>
-        <h2 className="text-lg font-bold text-white mb-2">Generating Your Workspace</h2>
-        <p className="text-sm text-zinc-500 mb-4">{phase}</p>
-        <div className="flex items-center justify-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-          <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" style={{ animationDelay: '0.3s' }} />
-          <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" style={{ animationDelay: '0.6s' }} />
+        <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em' }}>
+          Generating your workspace
         </div>
-        <p className="text-[10px] text-zinc-700 mt-6">
+        <div className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>{phase}</div>
+        <div className="row" style={{ justifyContent: 'center', gap: 6, marginTop: 14 }}>
+          <span className="li-dot dot-run" style={{ width: 7, height: 7 }} />
+          <span className="li-dot dot-run" style={{ width: 7, height: 7, animationDelay: '0.2s' }} />
+          <span className="li-dot dot-run" style={{ width: 7, height: 7, animationDelay: '0.4s' }} />
+        </div>
+        <p className="muted" style={{ fontSize: 11, marginTop: 18 }}>
           Creating {role.label} tasks with workflow templates...
         </p>
       </div>
-    </div>
+    </WizardShell>
   )
 }
 
@@ -658,95 +759,134 @@ function ReviewStep({ tasks, role, onApply, onRegenerate, onBack }: {
   const enabledCount = items.filter((t) => t.enabled).length
 
   return (
-    <div className="flex-1 flex flex-col items-center p-8 overflow-auto">
-      <div className="w-full max-w-2xl">
-        <div className="text-center mb-6">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-blue-500/20 flex items-center justify-center mx-auto mb-4 border border-emerald-500/20">
-            <Icon icon="lucide:check-circle" className="text-emerald-400 text-2xl" />
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Your Workspace is Ready</h1>
-          <p className="text-sm text-zinc-500">
-            {items.length} tasks generated for {role.label}. Toggle off any you don't need.
-          </p>
+    <WizardShell step={4} wide>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em' }}>
+          Your workspace is ready
         </div>
-
-        <div className="space-y-3 mb-8">
-          {items.map((task, idx) => {
-            const isExpanded = expanded === idx
-            return (
-              <div
-                key={idx}
-                className={`rounded-xl border transition-all ${
-                  task.enabled ? 'bg-pilos-card border-pilos-border' : 'bg-pilos-bg border-pilos-border/50 opacity-50'
-                }`}
-              >
-                <div className="flex items-center gap-3 p-4">
-                  <button
-                    onClick={() => toggleItem(idx)}
-                    className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                      task.enabled ? 'bg-blue-600 border-blue-600' : 'border-zinc-600'
-                    }`}
-                  >
-                    {task.enabled && <Icon icon="lucide:check" className="text-white text-[10px]" />}
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold text-white truncate">{task.title}</p>
-                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${PRIORITY_BADGE[task.priority] || PRIORITY_BADGE.medium}`}>
-                        {task.priority}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-zinc-500 mt-0.5 truncate">{task.description}</p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-[10px] text-zinc-600">{task.workflow.nodes.length} nodes</span>
-                    <button
-                      onClick={() => setExpanded(isExpanded ? null : idx)}
-                      className="text-zinc-500 hover:text-zinc-300 transition-colors"
-                    >
-                      <Icon icon={isExpanded ? 'lucide:chevron-up' : 'lucide:chevron-down'} className="text-sm" />
-                    </button>
-                  </div>
-                </div>
-
-                {isExpanded && task.summary.length > 0 && (
-                  <div className="px-4 pb-4 pl-12">
-                    <div className="p-3 rounded-lg bg-pilos-bg border border-pilos-border/50">
-                      <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Workflow Steps</p>
-                      {task.summary.map((step, i) => (
-                        <div key={i} className="flex items-start gap-2 py-0.5">
-                          <span className="text-[10px] text-zinc-700 font-mono w-4 flex-shrink-0">{i + 1}.</span>
-                          <span className="text-[10px] text-zinc-400">{step}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={onBack} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1">
-              <Icon icon="lucide:arrow-left" className="text-xs" /> Back
-            </button>
-            <button onClick={onRegenerate} className="text-xs text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1">
-              <Icon icon="lucide:refresh-cw" className="text-xs" /> Regenerate
-            </button>
-          </div>
-          <button
-            onClick={() => onApply(items.filter((t) => t.enabled))}
-            disabled={enabledCount === 0}
-            className="px-5 py-2 rounded-lg text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-30 transition-colors flex items-center gap-2"
-          >
-            <Icon icon="lucide:rocket" className="text-sm" />
-            Set Up Workspace ({enabledCount} task{enabledCount !== 1 ? 's' : ''})
-          </button>
+        <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
+          {items.length} tasks generated for {role.label}. Toggle off any you don't need.
         </div>
       </div>
-    </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 380, overflowY: 'auto' }}>
+        {items.map((task, idx) => {
+          const isExpanded = expanded === idx
+          return (
+            <div
+              key={idx}
+              className={`tile${task.enabled ? '' : ''}`}
+              style={{ padding: 14, opacity: task.enabled ? 1 : 0.55 }}
+            >
+              <div className="row" style={{ gap: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => toggleItem(idx)}
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: 6,
+                    border: task.enabled ? 'none' : '1.5px solid var(--line-3)',
+                    background: task.enabled ? 'var(--accent)' : 'transparent',
+                    display: 'grid',
+                    placeItems: 'center',
+                    flex: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {task.enabled && (
+                    <Icon icon="lucide:check" className="text-[11px]" style={{ color: '#fff' }} />
+                  )}
+                </button>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="row" style={{ gap: 8 }}>
+                    <div className="tile-nm" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {task.title}
+                    </div>
+                    <span className={PRIORITY_TAG[task.priority] || PRIORITY_TAG.medium}>
+                      {task.priority}
+                    </span>
+                  </div>
+                  <div className="tile-desc" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {task.description}
+                  </div>
+                </div>
+                <div className="row" style={{ gap: 8, flex: 'none' }}>
+                  <span className="muted" style={{ fontSize: 11, fontFamily: 'var(--mono)' }}>
+                    {task.workflow.nodes.length} nodes
+                  </span>
+                  <button
+                    className="btn icon sm ghost"
+                    onClick={() => setExpanded(isExpanded ? null : idx)}
+                  >
+                    <Icon
+                      icon={isExpanded ? 'lucide:chevron-up' : 'lucide:chevron-down'}
+                      className="text-[14px]"
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {isExpanded && task.summary.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: 12,
+                    background: 'var(--panel)',
+                    border: '1px solid var(--line)',
+                    borderRadius: 'var(--r-sm)',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontFamily: 'var(--mono)',
+                      fontSize: 10,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      color: 'var(--muted)',
+                      marginBottom: 8,
+                    }}
+                  >
+                    Workflow steps
+                  </div>
+                  {task.summary.map((s, i) => (
+                    <div key={i} className="row" style={{ gap: 8, padding: '2px 0' }}>
+                      <span
+                        className="muted"
+                        style={{ fontFamily: 'var(--mono)', fontSize: 10, width: 16, flex: 'none' }}
+                      >
+                        {i + 1}.
+                      </span>
+                      <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>{s}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="row" style={{ gap: 10, marginTop: 22 }}>
+        <button className="btn ghost" onClick={onBack}>
+          <Icon icon="lucide:arrow-left" className="text-[15px]" />
+          Back
+        </button>
+        <button className="btn ghost" onClick={onRegenerate}>
+          <Icon icon="lucide:refresh-cw" className="text-[15px]" />
+          Regenerate
+        </button>
+        <span style={{ marginLeft: 'auto' }} />
+        <button
+          className="btn primary"
+          disabled={enabledCount === 0}
+          onClick={() => onApply(items.filter((t) => t.enabled))}
+        >
+          <Icon icon="lucide:rocket" className="text-[15px]" />
+          Set up workspace ({enabledCount} task{enabledCount !== 1 ? 's' : ''})
+        </button>
+      </div>
+    </WizardShell>
   )
 }
 
@@ -779,7 +919,7 @@ export default function RoleWizardPage() {
 
   const handleGenerationError = useCallback((err: string) => {
     setError(err)
-    setStep(2) // Go back to integration step so user can retry
+    setStep(2)
   }, [])
 
   const handleRegenerate = useCallback(() => {
@@ -789,17 +929,14 @@ export default function RoleWizardPage() {
   }, [])
 
   const handleApply = useCallback(async (tasks: GeneratedTask[]) => {
-    // Prompt user to select a working directory for their project
     const dir = await api.dialog.openDirectory()
     if (dir) {
-      // Open the project first, which also triggers loadTasks
       await useProjectStore.getState().openProject(dir)
     }
 
     const taskStore = useTaskStore.getState()
 
     if (taskStore.currentProjectPath) {
-      // Project is open — save tasks directly
       for (const task of tasks) {
         await taskStore.addTask({
           title: task.title,
@@ -816,8 +953,6 @@ export default function RoleWizardPage() {
         })
       }
     } else {
-      // User skipped directory selection — store tasks as pending
-      // They'll be migrated when the first project opens
       const pending = tasks.map((task) => ({
         id: crypto.randomUUID(),
         projectPath: '',
@@ -840,44 +975,50 @@ export default function RoleWizardPage() {
     }
 
     await useAppStore.getState().completeWorkspaceSetup(selectedRole?.id)
-    useAppStore.getState().setActiveView('tasks')
+    useAppStore.getState().setActiveView('workflows')
   }, [selectedRole])
 
   return (
-    <div className="flex-1 flex flex-col bg-pilos-bg">
-      {/* Progress bar */}
-      <div className="flex items-center justify-center gap-2 py-4 px-8">
-        {[1, 2, 3, 4].map((s) => (
-          <div key={s} className="flex items-center gap-2">
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
-              s < step ? 'bg-emerald-500 text-white' :
-              s === step ? 'bg-blue-600 text-white' :
-              'bg-pilos-card border border-pilos-border text-zinc-600'
-            }`}>
-              {s < step ? <Icon icon="lucide:check" className="text-xs" /> : s}
-            </div>
-            {s < 4 && <div className={`w-12 h-0.5 rounded ${s < step ? 'bg-emerald-500' : 'bg-pilos-border'}`} />}
-          </div>
-        ))}
-      </div>
-
-      {/* Error banner */}
+    <>
       {error && (
-        <div className="mx-8 mb-2 flex items-start gap-2 px-4 py-3 rounded-lg bg-red-500/5 border border-red-500/20">
-          <Icon icon="lucide:alert-circle" className="text-red-400 text-sm flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <span className="text-xs text-red-300">{error}</span>
-          </div>
-          <button onClick={() => setError(null)} className="text-zinc-500 hover:text-zinc-300">
-            <Icon icon="lucide:x" className="text-xs" />
+        <div
+          style={{
+            position: 'fixed',
+            top: 16,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 200,
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 8,
+            padding: '10px 14px',
+            borderRadius: 'var(--r-sm)',
+            background: 'rgba(251,111,111,0.12)',
+            border: '1px solid rgba(251,111,111,0.3)',
+            color: 'var(--err)',
+            fontSize: 12,
+            maxWidth: 520,
+            boxShadow: 'var(--shadow-pop)',
+          }}
+        >
+          <Icon icon="lucide:alert-circle" className="text-[14px]" style={{ marginTop: 2 }} />
+          <span style={{ flex: 1 }}>{error}</span>
+          <button
+            onClick={() => setError(null)}
+            style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer' }}
+          >
+            <Icon icon="lucide:x" className="text-[12px]" />
           </button>
         </div>
       )}
 
-      {/* Steps */}
       {step === 1 && <RoleSelectionStep onSelect={handleRoleSelect} />}
       {step === 2 && selectedRole && (
-        <IntegrationCheckStep role={selectedRole} onContinue={handleIntegrationsContinue} onBack={() => setStep(1)} />
+        <IntegrationCheckStep
+          role={selectedRole}
+          onContinue={handleIntegrationsContinue}
+          onBack={() => setStep(1)}
+        />
       )}
       {step === 3 && selectedRole && (
         <GeneratingStep
@@ -897,6 +1038,6 @@ export default function RoleWizardPage() {
           onBack={() => setStep(2)}
         />
       )}
-    </div>
+    </>
   )
 }

@@ -1,7 +1,7 @@
 {
   "name": "pilos-agents",
   "version": "4.1.1",
-  "description": "Pilos Agents — AI-powered multi-agent desktop app",
+  "description": "Pilos Agents — turn AI conversations into automated workflows",
   "author": "Vahe Saroyan <vahe.saroyan.web@gmail.com>",
   "license": "MIT",
   "type": "module",
@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "tsc --noEmit",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:win": "npm run build && electron-builder --win",
     "dist:linux": "npm run build && electron-builder --linux",

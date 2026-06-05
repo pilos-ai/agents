@@ -1,11 +1,27 @@
 import WebSocket from 'ws'
 import crypto from 'crypto'
-import { BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { SettingsStore } from './settings-store'
 import { ClaudeProcess } from '../core/claude-process'
 import { Database, Message } from '../core/database'
 
+// Gate noisy / content-bearing logs to development only; errors stay unconditional.
+const devLog = (...args: unknown[]): void => {
+  if (!app.isPackaged) console.log(...args)
+}
+
 const LICENSE_SERVER = process.env.PILOS_LICENSE_SERVER || 'https://license.pilos.net'
+
+// Keys the mobile relay is allowed to read via settings:get / settings:getAll.
+// Sensitive values (licenseKey, pilos_auth, machineId, privateKey, etc.) are
+// intentionally excluded — they must never leave the desktop process.
+const RELAY_SAFE_SETTINGS = new Set([
+  'theme',
+  'model',
+  'backgroundMode',
+  'notifications',
+  'telemetry',
+])
 
 interface JsonRpcRequest {
   jsonrpc: '2.0'
@@ -60,7 +76,7 @@ export class RelayClient {
     const licenseKey = this.settings.get('licenseKey') as string
     const machineId = this.getOrCreateMachineId()
     if (!licenseKey || !machineId) {
-      console.log('[RelayClient] No license key or machineId — skipping connect')
+      devLog('[RelayClient] No license key or machineId — skipping connect')
       return
     }
 
@@ -68,7 +84,7 @@ export class RelayClient {
 
     // Build relay URL — convert https to wss
     const relayUrl = LICENSE_SERVER.replace(/^http/, 'ws') + '/relay'
-    console.log(`[RelayClient] Connecting to ${relayUrl}`)
+    devLog(`[RelayClient] Connecting to ${relayUrl}`)
 
     try {
       this.ws?.removeAllListeners()
@@ -80,7 +96,7 @@ export class RelayClient {
     }
 
     this.ws.on('open', () => {
-      console.log('[RelayClient] WebSocket open — sending auth')
+      devLog('[RelayClient] WebSocket open — sending auth')
       this.reconnectDelay = 1000 // Reset on successful open
 
       // Authenticate as desktop
@@ -108,7 +124,7 @@ export class RelayClient {
     })
 
     this.ws.on('close', (code, reason) => {
-      console.log(`[RelayClient] Disconnected: ${code} ${reason}`)
+      devLog(`[RelayClient] Disconnected: ${code} ${reason}`)
       this.cleanup()
       if (!this.intentionalClose) {
         this.scheduleReconnect()
@@ -223,7 +239,7 @@ export class RelayClient {
   private handleMessage(msg: Record<string, unknown>): void {
     // Auth success
     if (msg.type === 'auth_success') {
-      console.log(`[RelayClient] Authenticated — mobileCount: ${msg.mobileCount}`)
+      devLog(`[RelayClient] Authenticated — mobileCount: ${msg.mobileCount}`)
       this.mobileCount = (msg.mobileCount as number) || 0
       this.notifyRenderer()
       return
@@ -236,10 +252,10 @@ export class RelayClient {
     if (msg.type === 'status') {
       if (msg.event === 'mobile_connected') {
         this.mobileCount = (msg.mobileCount as number) || 0
-        console.log(`[RelayClient] Mobile connected — count: ${this.mobileCount}`)
+        devLog(`[RelayClient] Mobile connected — count: ${this.mobileCount}`)
       } else if (msg.event === 'mobile_disconnected') {
         this.mobileCount = (msg.mobileCount as number) || 0
-        console.log(`[RelayClient] Mobile disconnected — count: ${this.mobileCount}`)
+        devLog(`[RelayClient] Mobile disconnected — count: ${this.mobileCount}`)
       }
       this.notifyRenderer()
       return
@@ -255,7 +271,7 @@ export class RelayClient {
 
     if (msg.type === 'pairing:request') {
       // Forward pairing request to renderer for approval UI
-      console.log(`[RelayClient] Pairing request from "${msg.deviceName}" (${msg.deviceId})`)
+      devLog(`[RelayClient] Pairing request from "${msg.deviceName}" (${msg.deviceId})`)
       if (!this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('mobile:pairingRequest', {
           requestId: msg.requestId,
@@ -274,7 +290,7 @@ export class RelayClient {
     }
 
     if (msg.type === 'pairing:deviceApproved') {
-      console.log(`[RelayClient] Device approved: ${msg.deviceName}`)
+      devLog(`[RelayClient] Device approved: ${msg.deviceName}`)
       if (!this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('mobile:deviceApproved', {
           deviceId: msg.deviceId,
@@ -285,7 +301,7 @@ export class RelayClient {
     }
 
     if (msg.type === 'pairing:deviceRevoked') {
-      console.log(`[RelayClient] Device revoked: ${msg.deviceId}`)
+      devLog(`[RelayClient] Device revoked: ${msg.deviceId}`)
       if (!this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('mobile:deviceRevoked', {
           deviceId: msg.deviceId,
@@ -303,7 +319,7 @@ export class RelayClient {
 
   private async handleJsonRpc(request: JsonRpcRequest): Promise<void> {
     const { id, method, params = [] } = request
-    console.log(`[RelayClient] RPC: ${method} (id=${id})`)
+    devLog(`[RelayClient] RPC: ${method} (id=${id})`)
 
     try {
       const result = await this.dispatch(method, params)
@@ -368,7 +384,18 @@ export class RelayClient {
       // ── Claude ──
       case 'claude:startSession': {
         const sessionId = params[0] as string
-        const options = (params[1] as Record<string, unknown>) || {}
+        const raw = (params[1] as Record<string, unknown>) || {}
+
+        // Strip fields that must not be controlled by a remote mobile client.
+        // permissionMode and appendSystemPrompt are desktop-only; mcpConfigPath
+        // must not be overridden by an untrusted caller.
+        const options: Record<string, unknown> = {
+          prompt:      raw.prompt,
+          images:      raw.images,
+          projectPath: raw.projectPath,
+          model:       raw.model,
+          resume:      raw.resume,
+        }
 
         // Look up stored CLI session ID for resume (mirrors ipc-handlers.ts logic)
         if (options.resume) {
@@ -457,11 +484,24 @@ export class RelayClient {
         return this.settings.getProjectSettings(params[0] as string)
 
       // ── Settings ──
-      case 'settings:get':
-        return this.settings.get(params[0] as string)
+      // Only expose non-sensitive keys to remote mobile clients. Keys like
+      // licenseKey, pilos_auth, and machineId must never leave the desktop.
+      case 'settings:get': {
+        const key = params[0] as string
+        if (!RELAY_SAFE_SETTINGS.has(key)) {
+          throw new Error('settings:get: key not accessible via relay')
+        }
+        return this.settings.get(key)
+      }
 
-      case 'settings:getAll':
-        return this.settings.getAll()
+      case 'settings:getAll': {
+        const all = this.settings.getAll() as Record<string, unknown>
+        // Allow RELAY_SAFE_SETTINGS keys plus v2_tasks:* — task data is not
+        // sensitive and the mobile task store reads it via this call.
+        return Object.fromEntries(
+          Object.entries(all).filter(([k]) => RELAY_SAFE_SETTINGS.has(k) || k.startsWith('v2_tasks:'))
+        )
+      }
 
       // ── Tasks ──
       case 'tasks:list': {
@@ -507,7 +547,7 @@ export class RelayClient {
 
   private scheduleReconnect(): void {
     if (this.intentionalClose) return
-    console.log(`[RelayClient] Reconnecting in ${this.reconnectDelay}ms`)
+    devLog(`[RelayClient] Reconnecting in ${this.reconnectDelay}ms`)
     this.reconnectTimer = setTimeout(() => {
       this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000)
       this.connect()

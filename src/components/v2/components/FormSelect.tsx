@@ -8,13 +8,11 @@ interface FormSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 export const FormSelect = forwardRef<HTMLSelectElement, FormSelectProps>(
   ({ label, options, className = '', ...props }, ref) => {
     return (
-      <div>
-        {label && (
-          <label className="block text-xs font-medium text-zinc-400 mb-1.5">{label}</label>
-        )}
+      <div className="field">
+        {label && <label>{label}</label>}
         <select
           ref={ref}
-          className={`form-input appearance-none ${className}`}
+          className={`control form-input ${className}`}
           {...props}
         >
           {options.map((opt) => (

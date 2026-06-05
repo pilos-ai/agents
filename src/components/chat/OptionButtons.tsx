@@ -113,20 +113,15 @@ export function OptionButtons({ options }: Props) {
   if (options.length === 0 || isWaiting) return null
 
   return (
-    <div className="flex flex-wrap gap-2 mt-2 ml-1">
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
       {options.map((opt, i) => (
         <button
+          type="button"
           key={i}
           onClick={() => sendMessage(opt.label)}
-          className={`px-3 py-1.5 text-sm rounded-lg transition-colors cursor-pointer ${
-            opt.recommended
-              ? 'bg-blue-600/30 text-blue-300 border border-blue-400/50 hover:bg-blue-600/50 hover:border-blue-400/70'
-              : 'bg-neutral-700/40 text-neutral-300 border border-neutral-600/40 hover:bg-neutral-700/60 hover:border-neutral-500/50'
-          }`}
+          className={'btn sm' + (opt.recommended ? ' primary' : '')}
         >
-          {opt.recommended && (
-            <span className="text-yellow-400 mr-1.5">&#9733;</span>
-          )}
+          {opt.recommended && <span style={{ color: '#fbbf24', marginRight: 4 }}>★</span>}
           {opt.label}
         </button>
       ))}

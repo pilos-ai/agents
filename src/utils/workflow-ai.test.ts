@@ -114,7 +114,10 @@ describe('extractJson', () => {
   })
 
   it('throws when JSON object is incomplete (no closing brace)', () => {
-    expect(() => extractJson('{"incomplete":')).toThrow('Incomplete JSON object in response')
+    // The hardened multi-strategy parser scans for a balanced { ... } block via
+    // walkBalancedObject. With no closing brace the depth never returns to 0, so
+    // no candidate is found and extractJson falls through to the "no object" error.
+    expect(() => extractJson('{"incomplete":')).toThrow('No JSON object found in response')
   })
 
   it('returns deeply nested JSON', () => {

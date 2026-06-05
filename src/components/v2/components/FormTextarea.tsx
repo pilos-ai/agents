@@ -8,13 +8,12 @@ interface FormTextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> 
 export const FormTextarea = forwardRef<HTMLTextAreaElement, FormTextareaProps>(
   ({ label, codeEditor = false, className = '', ...props }, ref) => {
     return (
-      <div>
-        {label && (
-          <label className="block text-xs font-medium text-zinc-400 mb-1.5">{label}</label>
-        )}
+      <div className="field">
+        {label && <label>{label}</label>}
         <textarea
           ref={ref}
-          className={`${codeEditor ? 'code-editor' : 'form-input'} custom-scrollbar ${className}`}
+          className={`control ${codeEditor ? 'mono code-editor' : 'form-input'} ${className}`}
+          style={codeEditor ? { fontFamily: 'var(--mono)', fontSize: 12 } : undefined}
           {...props}
         />
       </div>

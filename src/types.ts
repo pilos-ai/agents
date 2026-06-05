@@ -223,6 +223,10 @@ export interface AgentDefinition {
   personality: string  // system prompt personality text
   expertise: string[]  // e.g. ['implementation', 'debugging']
   capabilities?: AgentCapabilities
+  /** Optional per-agent model override. Falls back to the project's model
+   *  (`ProjectTab.model`) when undefined. Set via the chat aside's per-agent
+   *  dropdown or the agent editor. */
+  model?: string
 }
 
 export type ProjectMode = 'solo' | 'team'
@@ -511,6 +515,12 @@ export interface StorageStats {
 // ── API Types (exposed via preload) ──
 
 export interface ElectronAPI {
+  window: {
+    minimize: () => Promise<void>
+    maximize: () => Promise<void>
+    close: () => Promise<void>
+    isMaximized: () => Promise<boolean>
+  }
   cli: {
     check: () => Promise<CliCheckResult>
     install: () => Promise<boolean>
@@ -546,6 +556,7 @@ export interface ElectronAPI {
     updateTitle: (id: string, title: string) => Promise<void>
     delete: (id: string) => Promise<void>
     getMessages: (conversationId: string) => Promise<ConversationMessage[]>
+    getMessagesPage: (conversationId: string, limit: number, beforeId?: number) => Promise<{ messages: ConversationMessage[]; hasMore: boolean }>
     saveMessage: (conversationId: string, message: Partial<ConversationMessage>) => Promise<ConversationMessage>
     getMessage: (messageId: number) => Promise<ConversationMessage | null>
     searchMessages: (query: string, options: { conversationId?: string; projectPath?: string; limit?: number; offset?: number }) => Promise<SearchResults>

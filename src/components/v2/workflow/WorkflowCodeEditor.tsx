@@ -587,23 +587,47 @@ export function WorkflowCodeEditor({ onClose }: { onClose: () => void }) {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col h-full bg-[#0f0f11]">
+    <div
+      className="flex flex-col h-full"
+      style={{ background: 'var(--rail)' }}
+    >
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 h-12 border-b border-zinc-800 flex-shrink-0">
-        <Icon icon="lucide:layout-list" className="text-violet-400 text-sm" />
-        <span className="text-xs font-bold text-white flex-1">Workflow Block Editor</span>
+      <div
+        className="flex items-center gap-3 px-4 h-12 flex-shrink-0"
+        style={{ borderBottom: '1px solid var(--line-2)' }}
+      >
+        <Icon icon="lucide:layout-list" style={{ fontSize: 14, color: 'var(--accent-2)' }} />
+        <span className="flex-1" style={{ fontSize: 12, fontWeight: 650, color: 'var(--ink)' }}>Workflow Block Editor</span>
         <div className="flex items-center gap-2">
-          {isDirty && <span className="text-[9px] text-amber-400 font-medium px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">unsaved</span>}
-          {validationCount > 0 && <span className="text-[9px] text-amber-400 font-medium px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">{validationCount} warning{validationCount > 1 ? 's' : ''}</span>}
-          <button onClick={handleReset} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-700">
-            <Icon icon="lucide:rotate-ccw" className="text-[10px]" /> Reset
+          {isDirty && (
+            <span
+              style={{
+                fontSize: 9, fontWeight: 550, padding: '2px 8px', borderRadius: 999,
+                color: 'var(--warn)', background: 'rgba(246, 183, 60, 0.12)', border: '1px solid rgba(246, 183, 60, 0.3)',
+              }}
+            >
+              unsaved
+            </span>
+          )}
+          {validationCount > 0 && (
+            <span
+              style={{
+                fontSize: 9, fontWeight: 550, padding: '2px 8px', borderRadius: 999,
+                color: 'var(--warn)', background: 'rgba(246, 183, 60, 0.12)', border: '1px solid rgba(246, 183, 60, 0.3)',
+              }}
+            >
+              {validationCount} warning{validationCount > 1 ? 's' : ''}
+            </span>
+          )}
+          <button onClick={handleReset} className="btn sm ghost">
+            <Icon icon="lucide:rotate-ccw" style={{ fontSize: 12 }} /> Reset
           </button>
-          <button onClick={handleApply} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-lg shadow-blue-500/20">
-            <Icon icon="lucide:check" className="text-[10px]" /> Apply to Canvas
+          <button onClick={handleApply} className="btn sm primary">
+            <Icon icon="lucide:check" style={{ fontSize: 12 }} /> Apply to Canvas
           </button>
-          <div className="w-px h-4 bg-zinc-800" />
-          <button onClick={onClose} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-700">
-            <Icon icon="lucide:x" className="text-[10px]" /> Close
+          <div style={{ width: 1, height: 16, background: 'var(--line-2)' }} />
+          <button onClick={onClose} className="btn sm ghost">
+            <Icon icon="lucide:x" style={{ fontSize: 12 }} /> Close
           </button>
         </div>
       </div>

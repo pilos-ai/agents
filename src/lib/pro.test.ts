@@ -58,8 +58,14 @@ describe('loadProModule', () => {
   it('returns the module when @pilos/pro loads successfully', async () => {
     const fakeModule = { activateLicense: vi.fn(), version: '1.0.0' }
     vi.doMock('@pilos/pro', () => fakeModule)
-    // Re-import so the dynamic import inside loadProModule sees the mock
-    const { loadProModule: loadFresh } = await import('./pro?v=mocked')
+    // Re-import so the dynamic import inside loadProModule sees the mock.
+    // The `?v=mocked` query suffix busts vitest's module cache (forcing a fresh
+    // re-evaluation) but is a *relative* specifier that tsc cannot resolve, so we
+    // suppress that single error and cast back to the real module's type.
+    const { loadProModule: loadFresh } = (await import(
+      // @ts-expect-error vitest cache-busting query suffix ('?v=mocked') is not resolvable by tsc
+      './pro?v=mocked'
+    )) as typeof import('./pro')
     const mod = await loadFresh()
     expect(mod).toEqual(fakeModule)
     vi.doUnmock('@pilos/pro')

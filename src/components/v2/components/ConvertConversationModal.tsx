@@ -152,7 +152,7 @@ export function ConvertConversationModal({ messages, conversationId, onClose }: 
             const tasks = useTaskStore.getState().tasks
             const newTask = tasks[tasks.length - 1]
             if (newTask) selectTask(newTask.id)
-            setActiveView('tasks')
+            setActiveView('workflows')
           })
 
           setProgress('')
@@ -208,60 +208,93 @@ export function ConvertConversationModal({ messages, conversationId, onClose }: 
   }, [])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={isGenerating ? undefined : onClose} />
+    <div
+      className="fade-in"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 100,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'rgba(5,5,7,0.72)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+      }}
+      onClick={isGenerating ? undefined : onClose}
+    >
+      <div
+        className="onb-card pop-in"
+        style={{ width: 560, maxWidth: 'calc(100% - 32px)', padding: 0, overflow: 'hidden' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {!isGenerating && (
+          <button
+            type="button"
+            className="onb-close"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <Icon icon="lucide:x" style={{ fontSize: 15 }} />
+          </button>
+        )}
 
-      <div className="relative w-full max-w-lg mx-4 bg-pilos-card border border-pilos-border rounded-xl shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-pilos-border">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500/20 to-blue-500/20 flex items-center justify-center">
-              <Icon icon="lucide:workflow" className="text-emerald-400 text-sm" />
+        <div style={{ padding: '24px 24px 18px', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              background: 'var(--accent-soft)',
+              border: '1px solid var(--accent-line)',
+              display: 'grid',
+              placeItems: 'center',
+              flex: 'none',
+              color: 'var(--accent-2)',
+            }}
+          >
+            <Icon icon="lucide:workflow" style={{ fontSize: 18 }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 16, fontWeight: 650, letterSpacing: '-0.015em', color: 'var(--ink)' }}>
+              Save as Task
             </div>
-            <div>
-              <h2 className="text-sm font-bold text-white">Save as Task</h2>
-              <p className="text-[10px] text-zinc-500">Convert this conversation into a reusable workflow</p>
+            <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>
+              Convert this conversation into a reusable workflow
             </div>
           </div>
-          {!isGenerating && (
-            <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors">
-              <Icon icon="lucide:x" className="text-sm" />
-            </button>
-          )}
         </div>
 
         {/* Body */}
-        <div className="p-5 space-y-4">
+        <div style={{ padding: '0 24px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
           {/* Conversation stats */}
-          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-pilos-bg border border-pilos-border">
-            <div className="flex items-center gap-1.5">
-              <Icon icon="lucide:message-square" className="text-zinc-500 text-[10px]" />
-              <span className="text-[10px] text-zinc-400">{messages.length} messages</span>
-            </div>
-            <div className="w-px h-3 bg-pilos-border" />
-            <div className="flex items-center gap-1.5">
-              <Icon icon="lucide:wrench" className="text-zinc-500 text-[10px]" />
-              <span className="text-[10px] text-zinc-400">{toolCalls.length} tool calls</span>
-            </div>
-            <div className="w-px h-3 bg-pilos-border" />
-            <div className="flex items-center gap-1.5">
-              <Icon icon="lucide:layers" className="text-zinc-500 text-[10px]" />
-              <span className="text-[10px] text-zinc-400">{uniqueTools.length} unique tools</span>
-            </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <StatTile icon="lucide:message-square" label="Messages" value={messages.length} />
+            <StatTile icon="lucide:wrench" label="Tool calls" value={toolCalls.length} />
+            <StatTile icon="lucide:layers" label="Unique tools" value={uniqueTools.length} />
           </div>
 
           {/* Detected tools preview */}
           {uniqueTools.length > 0 && (
-            <div>
-              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5 block">
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: 10,
+                  fontFamily: 'var(--mono)',
+                  letterSpacing: '0.1em',
+                  textTransform: 'uppercase',
+                  color: 'var(--ink-3)',
+                  marginBottom: 8,
+                  fontWeight: 600,
+                }}
+              >
                 Detected Tools
               </label>
-              <div className="flex flex-wrap gap-1.5">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {uniqueTools.map((tool) => (
-                  <span
-                    key={tool}
-                    className="px-2 py-0.5 rounded-md bg-pilos-bg border border-pilos-border text-[10px] text-zinc-400"
-                  >
+                  <span key={tool} className="tag accent">
                     {tool}
                   </span>
                 ))}
@@ -270,64 +303,124 @@ export function ConvertConversationModal({ messages, conversationId, onClose }: 
           )}
 
           {/* Optional description */}
-          <div>
-            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5 block">
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label
+              style={{
+                display: 'block',
+                fontSize: 10,
+                fontFamily: 'var(--mono)',
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                color: 'var(--ink-3)',
+                marginBottom: 8,
+                fontWeight: 600,
+              }}
+            >
               Description (optional)
             </label>
             <textarea
+              className="control"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               disabled={isGenerating}
               placeholder="Refine what this workflow should do, or leave empty to auto-detect from the conversation..."
               rows={3}
-              className="w-full px-3 py-2.5 bg-pilos-bg border border-pilos-border rounded-lg text-xs text-white placeholder-zinc-600 outline-none focus:border-pilos-blue resize-none disabled:opacity-50"
+              style={{
+                width: '100%',
+                minHeight: 80,
+                padding: '10px 12px',
+                resize: 'vertical',
+                lineHeight: 1.5,
+                display: 'block',
+                fontFamily: 'inherit',
+                opacity: isGenerating ? 0.5 : 1,
+              }}
             />
           </div>
 
           {/* Progress */}
           {isGenerating && (
-            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
-              <Icon icon="lucide:loader-2" className="text-emerald-400 text-sm animate-spin flex-shrink-0" />
-              <span className="text-xs text-emerald-300">{progress || 'Processing...'}</span>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '10px 12px',
+                borderRadius: 'var(--r-sm)',
+                background: 'var(--accent-soft)',
+                border: '1px solid var(--accent-line)',
+                color: 'var(--accent-2)',
+              }}
+            >
+              <Icon icon="lucide:loader-2" className="animate-spin" style={{ fontSize: 14, flexShrink: 0 }} />
+              <span style={{ fontSize: 12.5 }}>{progress || 'Processing...'}</span>
             </div>
           )}
 
           {/* Error */}
           {error && (
-            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-red-500/5 border border-red-500/20">
-              <Icon icon="lucide:alert-circle" className="text-red-400 text-sm flex-shrink-0 mt-0.5" />
-              <span className="text-xs text-red-300">{error}</span>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 10,
+                padding: '10px 12px',
+                borderRadius: 'var(--r-sm)',
+                background: 'rgba(251, 111, 111, 0.08)',
+                border: '1px solid rgba(251, 111, 111, 0.3)',
+                color: 'var(--err)',
+              }}
+            >
+              <Icon icon="lucide:alert-circle" style={{ fontSize: 14, flexShrink: 0, marginTop: 2 }} />
+              <span style={{ fontSize: 12.5 }}>{error}</span>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-pilos-border bg-pilos-bg/50">
-          <span className="text-[10px] text-zinc-600">
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+            padding: '14px 24px',
+            background: 'var(--panel)',
+            borderTop: '1px solid var(--line)',
+            borderBottomLeftRadius: 'var(--r-xl)',
+            borderBottomRightRadius: 'var(--r-xl)',
+          }}
+        >
+          <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
             {isGenerating ? 'Pilos is analyzing...' : 'Generates task + workflow from conversation'}
           </span>
-          <div className="flex items-center gap-2">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {isGenerating ? (
               <button
+                type="button"
+                className="btn"
                 onClick={handleCancel}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-red-400 border border-red-500/30 hover:bg-red-500/10 transition-colors"
+                style={{
+                  color: 'var(--err)',
+                  borderColor: 'rgba(251, 111, 111, 0.35)',
+                  background: 'rgba(251, 111, 111, 0.07)',
+                }}
               >
                 Cancel
               </button>
             ) : (
               <>
-                <button
-                  onClick={onClose}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:text-white transition-colors"
-                >
+                <button type="button" className="btn" onClick={onClose}>
                   Cancel
                 </button>
                 <button
+                  type="button"
+                  className="btn primary"
                   onClick={handleConvert}
                   disabled={messages.length < 4}
-                  className="px-4 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 disabled:hover:bg-emerald-600 transition-colors flex items-center gap-1.5"
+                  style={messages.length < 4 ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
                 >
-                  <Icon icon="lucide:workflow" className="text-xs" />
+                  <Icon icon="lucide:workflow" style={{ fontSize: 14 }} />
                   Convert
                 </button>
               </>
@@ -335,6 +428,48 @@ export function ConvertConversationModal({ messages, conversationId, onClose }: 
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function StatTile({ icon, label, value }: { icon: string; label: string; value: number }) {
+  return (
+    <div
+      className="tile"
+      style={{
+        flex: 1,
+        padding: '12px 14px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        alignItems: 'center',
+        textAlign: 'center',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          color: 'var(--muted)',
+        }}
+      >
+        <Icon icon={icon} style={{ fontSize: 13 }} />
+        <span
+          style={{
+            fontSize: 10.5,
+            fontFamily: 'var(--mono)',
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            fontWeight: 600,
+          }}
+        >
+          {label}
+        </span>
+      </div>
+      <span style={{ fontSize: 22, fontWeight: 650, letterSpacing: '-0.02em', color: 'var(--ink)', lineHeight: 1 }}>
+        {value}
+      </span>
     </div>
   )
 }

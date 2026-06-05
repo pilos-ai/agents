@@ -1,10 +1,15 @@
 import { spawn, ChildProcess, exec } from 'child_process'
 import { randomUUID } from 'crypto'
 import { writeFile, readFile } from 'fs/promises'
-import { BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { SettingsStore } from '../services/settings-store'
 import { getExpandedEnv, findClaudeBinary } from '../services/cli-checker'
 import path from 'path'
+
+// Gate noisy / content-bearing logs to development only; errors stay unconditional.
+const devLog = (...args: unknown[]): void => {
+  if (!app.isPackaged) console.log(...args)
+}
 
 export interface ClaudeSessionOptions {
   prompt?: string
@@ -114,14 +119,14 @@ export class ClaudeProcess {
     // Use expanded env with known CLI install dirs + discovered deps, strip Claude env vars
     const env = getExpandedEnv(extraDirs)
     for (const k of Object.keys(env)) {
-      if (k.startsWith('CLAUDE')) delete env[k]
+      if (k.startsWith('CLAUDE') || k.startsWith('ANTHROPIC')) delete env[k]
     }
 
     const claudeBin = findClaudeBinary()
 
-    console.log(`[ClaudeProcess] Starting session ${sessionId} (permissionMode=${permissionMode})`)
-    console.log(`[ClaudeProcess] Args: ${claudeBin} ${args.join(' ')}`)
-    console.log(`[ClaudeProcess] CWD: ${cwd}`)
+    devLog(`[ClaudeProcess] Starting session ${sessionId} (permissionMode=${permissionMode})`)
+    devLog(`[ClaudeProcess] Args: ${claudeBin} ${args.join(' ')}`)
+    devLog(`[ClaudeProcess] CWD: ${cwd}`)
 
     const proc = spawn(claudeBin, args, {
       cwd,
@@ -144,7 +149,7 @@ export class ClaudeProcess {
 
     // Surface stdin write errors so the UI doesn't hang in "processing" forever
     proc.stdin!.on('error', (err: Error) => {
-      console.log(`[ClaudeProcess] stdin error for ${sessionId}: ${err.message}`)
+      devLog(`[ClaudeProcess] stdin error for ${sessionId}: ${err.message}`)
       this.emit(sessionId, { type: 'session:error', sessionId, error: `stdin error: ${err.message}` })
     })
 
@@ -157,7 +162,7 @@ export class ClaudeProcess {
 
     proc.stdout!.on('data', (chunk: Buffer) => {
       const text = chunk.toString()
-      console.log(`[ClaudeProcess] stdout: ${text.slice(0, 200)}`)
+      devLog(`[ClaudeProcess] stdout: ${text.slice(0, 200)}`)
       session.buffer += text
       const lines = session.buffer.split('\n')
       // Keep the last incomplete line in buffer
@@ -178,7 +183,7 @@ export class ClaudeProcess {
 
     proc.stderr!.on('data', (chunk: Buffer) => {
       const text = chunk.toString()
-      console.log(`[ClaudeProcess] stderr: ${text.slice(0, 500)}`)
+      devLog(`[ClaudeProcess] stderr: ${text.slice(0, 500)}`)
       this.emit(sessionId, { type: 'stderr', data: text })
       // Surface context-window / API errors so the UI doesn't stay frozen
       const lower = text.toLowerCase()
@@ -194,13 +199,13 @@ export class ClaudeProcess {
     })
 
     proc.on('close', (code: number | null) => {
-      console.log(`[ClaudeProcess] Session ${sessionId} closed with code ${code}`)
+      devLog(`[ClaudeProcess] Session ${sessionId} closed with code ${code}`)
       this.sessions.delete(sessionId)
       this.emit(sessionId, { type: 'session:ended', sessionId, exitCode: code })
     })
 
     proc.on('error', (err: Error) => {
-      console.log(`[ClaudeProcess] Session ${sessionId} error: ${err.message}`)
+      devLog(`[ClaudeProcess] Session ${sessionId} error: ${err.message}`)
       this.sessions.delete(sessionId)
       this.emit(sessionId, { type: 'session:error', sessionId, error: err.message })
     })
@@ -216,7 +221,7 @@ export class ClaudeProcess {
   sendMessage(sessionId: string, message: string, images?: Array<{ data: string; mediaType: string }>): void {
     const session = this.sessions.get(sessionId)
     if (!session?.process.stdin?.writable) {
-      console.log(`[ClaudeProcess] Cannot send message - stdin not writable for ${sessionId}`)
+      devLog(`[ClaudeProcess] Cannot send message - stdin not writable for ${sessionId}`)
       return
     }
 
@@ -243,7 +248,7 @@ export class ClaudeProcess {
       type: 'user',
       message: { role: 'user', content },
     })
-    console.log(`[ClaudeProcess] Sending: ${payload.slice(0, 200)}...`)
+    devLog(`[ClaudeProcess] Sending: ${payload.slice(0, 200)}...`)
     session.process.stdin.write(payload + '\n')
   }
 
@@ -259,7 +264,7 @@ export class ClaudeProcess {
     if (allowed) {
       if (always) {
         session.alwaysAllowed.add(tool.name)
-        console.log(`[ClaudeProcess] Always allow: ${tool.name}`)
+        devLog(`[ClaudeProcess] Always allow: ${tool.name}`)
       }
       await this.executeAndReport(sessionId, session, tool)
     } else {
@@ -322,7 +327,7 @@ export class ClaudeProcess {
   }
 
   private handleClaudeEvent(sessionId: string, event: Record<string, unknown>): void {
-    console.log(`[ClaudeProcess] Event: ${event.type}`, JSON.stringify(event).slice(0, 500))
+    devLog(`[ClaudeProcess] Event: ${event.type}`, JSON.stringify(event).slice(0, 500))
 
     const session = this.sessions.get(sessionId)
 
@@ -398,12 +403,12 @@ export class ClaudeProcess {
             const toolUseId = block.tool_use_id as string
             const tool = session.pendingToolUses.get(toolUseId)
             if (tool) {
-              console.log(`[ClaudeProcess] Tool denied by CLI: ${tool.name}`, JSON.stringify(tool.input).slice(0, 200))
+              devLog(`[ClaudeProcess] Tool denied by CLI: ${tool.name}`, JSON.stringify(tool.input).slice(0, 200))
               session.pendingToolUses.delete(toolUseId)
 
               // If "always allowed", auto-execute without asking
               if (session.alwaysAllowed.has(tool.name)) {
-                console.log(`[ClaudeProcess] Auto-executing (always allowed): ${tool.name}`)
+                devLog(`[ClaudeProcess] Auto-executing (always allowed): ${tool.name}`)
                 this.executeAndReport(sessionId, session, tool)
               } else {
                 session.deniedTool = tool
@@ -431,7 +436,7 @@ export class ClaudeProcess {
       case 'Bash': {
         const command = String(input.command || '')
         if (!command) throw new Error('No command provided')
-        console.log(`[ClaudeProcess] Executing approved Bash: ${command.slice(0, 200)}`)
+        devLog(`[ClaudeProcess] Executing approved Bash: ${command.slice(0, 200)}`)
 
         return new Promise((resolve, reject) => {
           exec(command, {
@@ -457,7 +462,7 @@ export class ClaudeProcess {
         const filePath = String(input.file_path || '')
         const content = String(input.content || '')
         if (!filePath) throw new Error('No file path provided')
-        console.log(`[ClaudeProcess] Executing approved Write: ${filePath}`)
+        devLog(`[ClaudeProcess] Executing approved Write: ${filePath}`)
         await writeFile(filePath, content, 'utf8')
         return `File written: ${filePath}`
       }
@@ -467,7 +472,7 @@ export class ClaudeProcess {
         const oldStr = String(input.old_string || '')
         const newStr = String(input.new_string || '')
         if (!filePath) throw new Error('No file path provided')
-        console.log(`[ClaudeProcess] Executing approved Edit: ${filePath}`)
+        devLog(`[ClaudeProcess] Executing approved Edit: ${filePath}`)
         const existing = await readFile(filePath, 'utf8')
         if (!existing.includes(oldStr)) {
           throw new Error(`old_string not found in ${filePath}`)

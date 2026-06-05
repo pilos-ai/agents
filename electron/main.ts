@@ -153,10 +153,17 @@ async function createWindow() {
   } catch (err) {
     console.error('Failed to open database:', err)
     // Show error in renderer and quit — the app cannot function without a database
-    const safeErr = String(err).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
     mainWindow.webContents.once('did-finish-load', () => {
+      // JSON.stringify gives safe JS-string escaping for any error text,
+      // avoiding the entity-escaping pitfall with JS string literal context.
+      // Use innerText (not innerHTML) so error text is never parsed as HTML,
+      // preventing injection via crafted filesystem paths.
+      const safeErr = JSON.stringify(String(err))
+      // The `\\n` (escaped here so the backtick interpolates the two-char
+      // sequence `\n` into the JS source) becomes a proper newline escape
+      // inside the single-quoted string literal at execute time.
       mainWindow!.webContents.executeJavaScript(
-        `document.body.innerHTML = '<div style="color:#f87171;padding:2rem;font-family:monospace">Failed to open database: ${safeErr}.<br>Check that the app data directory is writable.</div>'`
+        `(function(){var d=document.createElement('div');d.style.cssText='color:#f87171;padding:2rem;font-family:monospace;white-space:pre-wrap';d.innerText='Failed to open database: '+${safeErr}+'.\\nCheck that the app data directory is writable.';document.body.replaceChildren(d)})()`
       )
     })
     app.quit()
@@ -166,6 +173,12 @@ async function createWindow() {
 
   metricsCollector = new MetricsCollector(database, settings)
   metricsCollector.init()
+
+  // Build slow indexes after the window is ready so the main thread isn't
+  // blocked during startup on large existing databases.
+  mainWindow.webContents.once('did-finish-load', () => {
+    database.buildIndexesDeferred()
+  })
 
   // Store last right-click spell params so IPC shell:showContextMenu can include suggestions
   let lastSpellParams: { misspelledWord: string; suggestions: string[] } | null = null
@@ -225,10 +238,28 @@ async function createWindow() {
   registerMetricsHandlers(settings, () => metricsCollector, () => relayClient)
 
   setupAutoUpdater(mainWindow)
+  ipcMain.removeHandler('update:install')
   ipcMain.handle('update:install', () => {
     isQuitting = true
     installUpdate()
   })
+
+  // Window controls (used by the in-app titlebar traffic lights / chrome).
+  // Native traffic lights still work on macOS via the OS — these are additive.
+  // removeHandler guards prevent "second handler" errors when createWindow()
+  // is called again via the macOS `activate` event.
+  ipcMain.removeHandler('window:minimize')
+  ipcMain.handle('window:minimize', () => mainWindow?.minimize())
+  ipcMain.removeHandler('window:maximize')
+  ipcMain.handle('window:maximize', () => {
+    if (!mainWindow) return
+    if (mainWindow.isMaximized()) mainWindow.unmaximize()
+    else mainWindow.maximize()
+  })
+  ipcMain.removeHandler('window:close')
+  ipcMain.handle('window:close', () => mainWindow?.close())
+  ipcMain.removeHandler('window:isMaximized')
+  ipcMain.handle('window:isMaximized', () => !!mainWindow?.isMaximized())
 
   mainWindow.on('close', (event) => {
     if (!isQuitting && settings.get('backgroundMode') !== false) {

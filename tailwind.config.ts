@@ -6,17 +6,22 @@ export default {
     extend: {
       colors: {
         pilos: {
-          bg: '#09090b',
-          card: '#111113',
-          blue: '#3b82f6',
-          orange: '#ff6154',
-          green: '#10b981',
-          border: '#27272a',
+          // Legacy aliases — remap to prototype tokens so existing Tailwind
+          // class usage keeps working without a sweeping rename.
+          bg: 'var(--desk)',
+          card: 'var(--surface)',
+          blue: 'var(--accent)',
+          orange: 'var(--warn)',
+          green: 'var(--ok)',
+          border: 'var(--line-3)',
         },
+        // New prototype accent classes
+        'pilos-accent': 'var(--accent)',
+        'pilos-accent-2': 'var(--accent-2)',
       },
       fontFamily: {
-        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: ['Figtree', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       animation: {
         'pulse-soft': 'pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',

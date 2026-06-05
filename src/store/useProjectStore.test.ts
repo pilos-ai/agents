@@ -1,6 +1,56 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useProjectStore, getActiveProjectTab } from './useProjectStore'
-import type { ClaudeEvent } from '../types'
+import type { ClaudeEvent, AgentCapabilities, ConversationMessage, AgentDefinition, McpServer } from '../types'
+
+// Typed factory for AgentCapabilities so mock agents satisfy the full type
+// without repeating the ~15 required fields. Runtime shape is unchanged for
+// the code under test (it only reads the fields the test asserts on).
+const caps = (o?: Partial<AgentCapabilities>): AgentCapabilities => ({
+  tools: [],
+  allowedPaths: [],
+  maxTokensPerRequest: 4096,
+  permissionLevel: 'standard',
+  allowedMcpServers: [],
+  contextWindowSize: 128000,
+  conversationHistoryLimit: 50,
+  memoryEnabled: false,
+  memorySummarizationEnabled: false,
+  customInstructions: '',
+  temperature: 0.7,
+  responseFormat: 'markdown',
+  maxRetries: 2,
+  timeoutSeconds: 120,
+  debugMode: false,
+  autoApproveReadOnly: false,
+  ...o,
+})
+
+// Typed factory for AgentDefinition. The mocks historically used a `prompt`
+// field (which the type does not have); it is mapped to `personality`. All
+// other required fields (role, expertise) get sensible defaults. The code
+// under test only reads id/name/capabilities/agents, so behavior is unchanged.
+const agent = (o: Partial<AgentDefinition> & { prompt?: string }): AgentDefinition => {
+  const { prompt, ...rest } = o
+  return {
+    id: '',
+    name: '',
+    icon: '',
+    color: '',
+    role: '',
+    personality: prompt ?? '',
+    expertise: [],
+    capabilities: caps(),
+    ...rest,
+  }
+}
+
+// Typed factory for McpServer. Adds the required `icon`/`description` fields
+// that the mocks omitted; the code under test does not read them.
+const mcp = (o: Partial<McpServer> & Pick<McpServer, 'id' | 'name' | 'enabled' | 'config'>): McpServer => ({
+  icon: '',
+  description: '',
+  ...o,
+})
 
 // ── Mock dependencies ─────────────────────────────────────────────────────────
 // All vi.mock calls must be at top level so vitest can hoist them.
@@ -210,7 +260,7 @@ describe('openProject', () => {
         tier: 'free', maxAgents: 3, maxMcpServers: 3, maxProjects: 2,
         teamMode: false, teamSync: false, premiumAgents: false, enabledFeatures: [],
       },
-    } as ReturnType<typeof licenseStore.getState>)
+    } as unknown as ReturnType<typeof licenseStore.getState>)
 
     useProjectStore.setState({
       openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj2')],
@@ -412,10 +462,10 @@ describe('addProjectAgent', () => {
       activeProjectPath: '/proj1',
     })
 
-    useProjectStore.getState().addProjectAgent({
+    useProjectStore.getState().addProjectAgent(agent({
       id: 'agent-1', name: 'TestBot', prompt: 'You are a test bot',
-      icon: '🤖', color: '#ff0000', capabilities: { tools: [] },
-    })
+      icon: '🤖', color: '#ff0000', capabilities: caps(),
+    }))
 
     const tab = useProjectStore.getState().openProjects[0]
     expect(tab.agents).toHaveLength(1)
@@ -426,9 +476,9 @@ describe('addProjectAgent', () => {
   it('does nothing when no active project', () => {
     useProjectStore.setState({ openProjects: [], activeProjectPath: null })
 
-    useProjectStore.getState().addProjectAgent({
-      id: 'agent-1', name: 'TestBot', prompt: '', icon: '', color: '', capabilities: { tools: [] },
-    })
+    useProjectStore.getState().addProjectAgent(agent({
+      id: 'agent-1', name: 'TestBot', prompt: '', icon: '', color: '', capabilities: caps(),
+    }))
 
     expect(useProjectStore.getState().openProjects).toHaveLength(0)
   })
@@ -440,18 +490,18 @@ describe('addProjectAgent', () => {
         tier: 'free', maxAgents: 1, maxMcpServers: 3, maxProjects: 3,
         teamMode: false, teamSync: false, premiumAgents: false, enabledFeatures: [],
       },
-    } as ReturnType<typeof licenseStore.getState>)
+    } as unknown as ReturnType<typeof licenseStore.getState>)
 
     useProjectStore.setState({
       openProjects: [makeProjectTab('/proj1', {
-        agents: [{ id: 'existing', name: 'Existing', prompt: '', icon: '', color: '', capabilities: { tools: [] } }],
+        agents: [{ id: 'existing', name: 'Existing', prompt: '', icon: '', color: '', capabilities: caps() }],
       })],
       activeProjectPath: '/proj1',
     })
 
-    useProjectStore.getState().addProjectAgent({
-      id: 'new-agent', name: 'New', prompt: '', icon: '', color: '', capabilities: { tools: [] },
-    })
+    useProjectStore.getState().addProjectAgent(agent({
+      id: 'new-agent', name: 'New', prompt: '', icon: '', color: '', capabilities: caps(),
+    }))
 
     expect(useProjectStore.getState().openProjects[0].agents).toHaveLength(1)
   })
@@ -463,8 +513,8 @@ describe('removeProjectAgent', () => {
     useProjectStore.setState({
       openProjects: [makeProjectTab('/proj1', {
         agents: [
-          { id: 'agent-1', name: 'Agent 1', prompt: '', icon: '', color: '', capabilities: { tools: [] } },
-          { id: 'agent-2', name: 'Agent 2', prompt: '', icon: '', color: '', capabilities: { tools: [] } },
+          { id: 'agent-1', name: 'Agent 1', prompt: '', icon: '', color: '', capabilities: caps() },
+          { id: 'agent-2', name: 'Agent 2', prompt: '', icon: '', color: '', capabilities: caps() },
         ],
       })],
       activeProjectPath: '/proj1',
@@ -484,7 +534,7 @@ describe('updateProjectAgent', () => {
     const api = await getApi()
     useProjectStore.setState({
       openProjects: [makeProjectTab('/proj1', {
-        agents: [{ id: 'agent-1', name: 'Old Name', prompt: '', icon: '', color: '', capabilities: { tools: [] } }],
+        agents: [{ id: 'agent-1', name: 'Old Name', prompt: '', icon: '', color: '', capabilities: caps() }],
       })],
       activeProjectPath: '/proj1',
     })
@@ -506,10 +556,10 @@ describe('addProjectMcpServer', () => {
       activeProjectPath: '/proj1',
     })
 
-    useProjectStore.getState().addProjectMcpServer({
+    useProjectStore.getState().addProjectMcpServer(mcp({
       id: 'mcp-1', name: 'Test MCP', enabled: true,
       config: { type: 'stdio', command: 'npx', args: ['mcp-server'] },
-    })
+    }))
 
     const servers = useProjectStore.getState().openProjects[0].mcpServers
     expect(servers).toHaveLength(1)
@@ -524,7 +574,7 @@ describe('addProjectMcpServer', () => {
         tier: 'free', maxAgents: 3, maxMcpServers: 1, maxProjects: 3,
         teamMode: false, teamSync: false, premiumAgents: false, enabledFeatures: [],
       },
-    } as ReturnType<typeof licenseStore.getState>)
+    } as unknown as ReturnType<typeof licenseStore.getState>)
 
     useProjectStore.setState({
       openProjects: [makeProjectTab('/proj1', {
@@ -533,9 +583,9 @@ describe('addProjectMcpServer', () => {
       activeProjectPath: '/proj1',
     })
 
-    useProjectStore.getState().addProjectMcpServer({
+    useProjectStore.getState().addProjectMcpServer(mcp({
       id: 'mcp-2', name: 'New', enabled: true, config: { type: 'stdio', command: 'cmd2', args: [] },
-    })
+    }))
 
     expect(useProjectStore.getState().openProjects[0].mcpServers).toHaveLength(1)
   })
@@ -617,7 +667,7 @@ describe('setDraftImages', () => {
       openProjects: [makeProjectTab('/proj1')],
       activeProjectPath: '/proj1',
     })
-    const images = [{ base64: 'abc', mimeType: 'image/png' as const, name: 'test.png', size: 100 }]
+    const images = [{ data: 'abc', mediaType: 'image/png', name: 'test.png' }]
 
     useProjectStore.getState().setDraftImages(images)
 
@@ -978,8 +1028,8 @@ describe('setProjectAgents', () => {
     })
 
     const agents = [
-      { id: 'a1', name: 'Agent 1', prompt: '', icon: '', color: '', capabilities: { tools: [] } },
-      { id: 'a2', name: 'Agent 2', prompt: '', icon: '', color: '', capabilities: { tools: [] } },
+      agent({ id: 'a1', name: 'Agent 1', prompt: '', icon: '', color: '', capabilities: caps() }),
+      agent({ id: 'a2', name: 'Agent 2', prompt: '', icon: '', color: '', capabilities: caps() }),
     ]
 
     useProjectStore.getState().setProjectAgents(agents)
@@ -1009,7 +1059,7 @@ describe('setProjectMcpServers', () => {
     })
 
     const servers = [
-      { id: 'mcp-1', name: 'Server A', enabled: true, config: { type: 'stdio' as const, command: 'cmd', args: [] } },
+      mcp({ id: 'mcp-1', name: 'Server A', enabled: true, config: { type: 'stdio' as const, command: 'cmd', args: [] } }),
     ]
 
     useProjectStore.getState().setProjectMcpServers(servers)
@@ -1053,7 +1103,7 @@ describe('setProjectModel — aborts active session', () => {
       abortSession: mockAbortSession,
       loadConversations: mockLoadConversations,
       handleClaudeEvent: mockHandleClaudeEvent,
-    })
+    } as unknown as ReturnType<typeof convStore.getState>)
 
     useProjectStore.setState({
       openProjects: [makeProjectTab('/proj1')],
@@ -1087,7 +1137,7 @@ describe('setProjectModel — aborts active session', () => {
       abortSession: mockAbortSession,
       loadConversations: mockLoadConversations,
       handleClaudeEvent: mockHandleClaudeEvent,
-    })
+    } as unknown as ReturnType<typeof convStore.getState>)
 
     useProjectStore.setState({
       openProjects: [makeProjectTab('/proj1')],
@@ -1120,7 +1170,7 @@ describe('setProjectModel — aborts active session', () => {
       abortSession: mockAbortSession,
       loadConversations: mockLoadConversations,
       handleClaudeEvent: mockHandleClaudeEvent,
-    })
+    } as unknown as ReturnType<typeof convStore.getState>)
 
     useProjectStore.setState({
       openProjects: [makeProjectTab('/proj1')],
@@ -1144,7 +1194,7 @@ describe('setProjectAgents', () => {
         tier: 'pro', maxAgents: 2, maxMcpServers: 10, maxProjects: 10,
         teamMode: true, teamSync: false, premiumAgents: true, enabledFeatures: [],
       },
-    } as ReturnType<typeof licenseStore.getState>)
+    } as unknown as ReturnType<typeof licenseStore.getState>)
 
     useProjectStore.setState({
       openProjects: [makeProjectTab('/proj1')],
@@ -1152,9 +1202,9 @@ describe('setProjectAgents', () => {
     })
 
     const agents = [
-      { id: 'a1', name: 'A1', prompt: '', icon: '', color: '', capabilities: { tools: [] } },
-      { id: 'a2', name: 'A2', prompt: '', icon: '', color: '', capabilities: { tools: [] } },
-      { id: 'a3', name: 'A3', prompt: '', icon: '', color: '', capabilities: { tools: [] } },
+      agent({ id: 'a1', name: 'A1', prompt: '', icon: '', color: '', capabilities: caps() }),
+      agent({ id: 'a2', name: 'A2', prompt: '', icon: '', color: '', capabilities: caps() }),
+      agent({ id: 'a3', name: 'A3', prompt: '', icon: '', color: '', capabilities: caps() }),
     ]
     useProjectStore.getState().setProjectAgents(agents)
 
@@ -1170,7 +1220,7 @@ describe('setProjectAgents', () => {
     useProjectStore.setState({ openProjects: [], activeProjectPath: null })
 
     useProjectStore.getState().setProjectAgents([
-      { id: 'a1', name: 'A1', prompt: '', icon: '', color: '', capabilities: { tools: [] } },
+      agent({ id: 'a1', name: 'A1', prompt: '', icon: '', color: '', capabilities: caps() }),
     ])
 
     expect(api.projects.setSettings).not.toHaveBeenCalled()
@@ -1602,13 +1652,13 @@ describe('routeClaudeEvent — applyEventToSnapshot branches', () => {
     return {
       conversations: [],
       activeConversationId: 'conv-snap-1',
-      messages: [],
+      messages: [] as ConversationMessage[],
       streaming: {
         text: '',
         contentBlocks: [] as import('../types').ContentBlock[],
         thinking: '',
         isStreaming: false,
-        currentAgentName: null,
+        currentAgentName: null as string | null,
         retrying: false,
         _partialJson: '',
         _turnTokens: 0,
@@ -1875,7 +1925,7 @@ describe('routeClaudeEvent — applyEventToSnapshot branches', () => {
     const bgTab = makeProjectTab('/proj-snap-team', {
       snapshot: snap,
       mode: 'team' as const,
-      agents: [{ id: 'a1', name: 'Alice', prompt: '', icon: '🤖', color: '#f00', capabilities: { tools: [] } }],
+      agents: [{ id: 'a1', name: 'Alice', prompt: '', icon: '🤖', color: '#f00', capabilities: caps() }],
     })
 
     const map = new Map([['sess-snap-team', '/proj-snap-team']])
@@ -1945,7 +1995,7 @@ describe('routeClaudeEvent — applyEventToSnapshot branches', () => {
     const bgTab = makeProjectTab('/proj-snap-user-team', {
       snapshot: snap,
       mode: 'team' as const,
-      agents: [{ id: 'a2', name: 'Bob', prompt: '', icon: '🤖', color: '#00f', capabilities: { tools: [] } }],
+      agents: [{ id: 'a2', name: 'Bob', prompt: '', icon: '🤖', color: '#00f', capabilities: caps() }],
     })
 
     const map = new Map([['sess-snap-user-team', '/proj-snap-user-team']])

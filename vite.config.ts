@@ -44,6 +44,9 @@ const repetitionDetectionPath = path.resolve(__dirname, 'packages/repetition-det
 const electronEntries: Parameters<typeof electron>[0] = [
   {
     entry: 'electron/main.ts',
+    onstart(args) {
+      args.startup()
+    },
     vite: {
       plugins: [optionalPackageStubs()],
       define: {

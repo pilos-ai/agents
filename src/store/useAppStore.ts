@@ -5,7 +5,30 @@ import type { DependencyCheckResult, DependencyName } from '../types'
 export type CliStatus = 'checking' | 'ready' | 'missing' | 'installing' | 'install_failed' | 'error' | 'needs_login' | 'logging_in'
 export type SetupStatus = 'checking_deps' | 'deps_missing' | 'checking_cli' | 'ready' | 'missing' | 'installing' | 'install_failed' | 'error' | 'needs_login' | 'logging_in'
 export type SettingsSection = 'project' | 'agents' | 'mcp' | 'plugins' | 'integrations' | 'license' | 'general'
-export type AppView = 'dashboard' | 'terminal' | 'tasks' | 'results' | 'config' | 'analytics' | 'settings' | (string & {})
+export type AppView =
+  | 'dashboard'
+  | 'chat'
+  | 'workflows'
+  | 'terminal'
+  | 'analytics'
+  | 'agents'
+  | 'mcp'
+  | 'runs'
+  | 'settings'
+  | (string & {})
+
+// Migration: map legacy persisted view keys to their new equivalents.
+//   'tasks'    → 'workflows'   (Tasks page → Workflows page)
+//   'results'  → 'runs'        (Results page → Runs page)
+//   'config'   → 'agents'      (ConfigPage agents tab is now Agents page)
+//   'terminal' was previously aliased to 'chat'; it's now a real view so leave it.
+function migrateView(v: unknown): AppView {
+  if (typeof v !== 'string') return 'dashboard'
+  if (v === 'tasks') return 'workflows'
+  if (v === 'results') return 'runs'
+  if (v === 'config') return 'agents'
+  return v as AppView
+}
 
 interface AppStore {
   // Setup / Dependencies
@@ -85,7 +108,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   activeRightTab: 'terminal',
   terminalFontSize: 13,
 
-  setActiveView: (view) => set({ activeView: view }),
+  setActiveView: (view) => set({ activeView: migrateView(view) }),
 
   checkDependencies: async () => {
     set({ setupStatus: 'checking_deps', dependencyResult: null })
@@ -94,7 +117,21 @@ export const useAppStore = create<AppStore>((set, get) => ({
       set({ dependencyResult: result })
 
       if (!result.allFound) {
+        // Other system deps (Node/Git) are missing. We still resolve cliStatus to
+        // a definitive value so the onboarding install affordance can render instead
+        // of hanging on the initial 'checking' spinner. We skip the auth check here —
+        // auth is only meaningful once the full environment is in place.
         set({ setupStatus: 'deps_missing' })
+        try {
+          const cliCheck = await api.cli.check()
+          if (cliCheck.available) {
+            set({ cliStatus: 'ready', cliVersion: cliCheck.version })
+          } else {
+            set({ cliStatus: 'missing', cliError: cliCheck.error })
+          }
+        } catch (err) {
+          set({ cliStatus: 'error', cliError: String(err) })
+        }
         return
       }
 

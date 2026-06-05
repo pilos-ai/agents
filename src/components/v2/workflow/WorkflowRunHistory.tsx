@@ -99,8 +99,14 @@ export function WorkflowRunHistory({ onClose }: { onClose: () => void }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   return (
-    <div className="w-80 border-l border-pilos-border flex flex-col bg-pilos-bg flex-shrink-0">
-      <div className="px-4 py-3 border-b border-pilos-border flex-shrink-0">
+    <div
+      className="w-80 flex flex-col flex-shrink-0"
+      style={{ background: 'var(--rail)', borderLeft: '1px solid var(--line-2)' }}
+    >
+      <div
+        className="px-4 py-3 flex-shrink-0"
+        style={{ borderBottom: '1px solid var(--line-2)' }}
+      >
         <div className="flex items-center justify-between">
           <div>
             <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Run History</p>

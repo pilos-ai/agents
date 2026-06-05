@@ -56,30 +56,49 @@ Agent Nodes:
 - The agent has full tool access: file editing, bash commands, git operations, MCP tools
 - Output includes "result" (text response) and "toolsUsed" (list of tools invoked)`
 
-/** Extract JSON from Claude's response, handling surrounding text or code fences */
+/** Extract a JSON object from Claude's response. Tries multiple strategies
+ *  to recover from LLM quirks (markdown fences, prose around the object,
+ *  trailing commas) before failing. */
 export function extractJson(text: string): string {
-  let cleaned = text.trim()
+  const trimmed = text.trim()
 
-  // Strip markdown code fences
-  const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)
-  if (fenceMatch) {
-    cleaned = fenceMatch[1].trim()
+  // Strategy 1: explicit ```json fence (most reliable, Claude usually obeys this).
+  const fenceJson = trimmed.match(/```json\s*\n?([\s\S]*?)\n?\s*```/)
+  if (fenceJson) return sanitizeJson(fenceJson[1].trim())
+
+  // Strategy 2: unlabeled ``` fence whose body looks like JSON.
+  const fenceAny = trimmed.match(/```\s*\n?([\s\S]*?)\n?\s*```/)
+  if (fenceAny && fenceAny[1].trim().startsWith('{')) {
+    return sanitizeJson(fenceAny[1].trim())
   }
 
-  // If it doesn't start with {, try to find the JSON object
-  if (!cleaned.startsWith('{')) {
-    const firstBrace = cleaned.indexOf('{')
-    if (firstBrace === -1) throw new Error('No JSON object found in response')
-    cleaned = cleaned.slice(firstBrace)
+  // Strategy 3: find the largest `{...}` block via balanced-brace scan.
+  // Search starts from the LAST `{` that begins a parseable object; that
+  // handles "prose first, JSON second" responses without getting tripped
+  // up by stray `{` in the prose.
+  const candidates: string[] = []
+  for (let i = 0; i < trimmed.length; i++) {
+    if (trimmed[i] !== '{') continue
+    const slice = walkBalancedObject(trimmed, i)
+    if (slice) candidates.push(slice)
+  }
+  if (candidates.length > 0) {
+    // Prefer the longest candidate — usually the actual response object.
+    candidates.sort((a, b) => b.length - a.length)
+    return sanitizeJson(candidates[0])
   }
 
-  // Find the matching closing brace, respecting quoted strings
+  throw new Error('No JSON object found in response')
+}
+
+/** Walk forward from a `{` and return the substring including its matching `}`,
+ *  or null if there's no balanced match. Respects string quoting + escapes. */
+function walkBalancedObject(s: string, start: number): string | null {
   let depth = 0
-  let end = -1
   let inString = false
   let escaped = false
-  for (let i = 0; i < cleaned.length; i++) {
-    const ch = cleaned[i]
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i]
     if (escaped) { escaped = false; continue }
     if (ch === '\\' && inString) { escaped = true; continue }
     if (ch === '"') { inString = !inString; continue }
@@ -87,13 +106,23 @@ export function extractJson(text: string): string {
     if (ch === '{') depth++
     else if (ch === '}') {
       depth--
-      if (depth === 0) { end = i; break }
+      if (depth === 0) return s.slice(start, i + 1)
     }
   }
+  return null
+}
 
-  if (end === -1) throw new Error('Incomplete JSON object in response')
-
-  return cleaned.slice(0, end + 1)
+/** Sanitize common LLM JSON quirks before JSON.parse:
+ *  - trailing commas before `]` or `}`
+ *  - smart quotes → ASCII quotes (outside of strings is harmless;
+ *    inside is rare and Claude almost never does this) */
+function sanitizeJson(s: string): string {
+  return s
+    // Smart quotes that occasionally leak in from copy-paste reasoning text
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    // Trailing commas before } or ]
+    .replace(/,(\s*[}\]])/g, '$1')
 }
 
 /** Look up a tool definition from the catalog */

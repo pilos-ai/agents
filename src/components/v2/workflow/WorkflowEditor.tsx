@@ -20,6 +20,7 @@ export function WorkflowEditor() {
   const setEditingTaskId = useWorkflowStore((s) => s.setEditingTaskId)
   const chatMode = useWorkflowStore((s) => s.chatMode)
   const task = useTaskStore((s) => s.tasks.find((t) => t.id === editingTaskId))
+  const tasksLoaded = useTaskStore((s) => s.tasks.length > 0 || s.currentProjectPath !== null)
   const resultsCanvasOpen = useWorkflowStore((s) => s.resultsCanvasOpen)
   const setResultsCanvasOpen = useWorkflowStore((s) => s.setResultsCanvasOpen)
   const [showHistory, setShowHistory] = useState(false)
@@ -105,44 +106,89 @@ export function WorkflowEditor() {
   // Clean up flash timer on unmount
   useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current) }, [])
 
+  // If the task disappeared from the store while the editor is still mounted
+  // (e.g. deleted on another tab or via a race), render a placeholder with a
+  // way back instead of silently showing an empty canvas reading nothing.
+  if (editingTaskId && !task && tasksLoaded) {
+    return (
+      <div
+        className="flex-1 flex flex-col items-center justify-center gap-3 text-center"
+        style={{ background: 'var(--rail)', padding: 32 }}
+      >
+        <div
+          style={{
+            width: 56, height: 56, borderRadius: 16,
+            background: 'var(--surface)', border: '1px solid var(--line)',
+            display: 'grid', placeItems: 'center',
+          }}
+        >
+          <Icon icon="lucide:file-x" style={{ fontSize: 22, color: 'var(--ink-3)' }} />
+        </div>
+        <div>
+          <h3 style={{ fontSize: 14, fontWeight: 650, color: 'var(--ink-2)', margin: 0 }}>
+            This workflow no longer exists
+          </h3>
+          <p style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 6, maxWidth: 320 }}>
+            It may have been deleted. Go back to the workflow list to pick another.
+          </p>
+        </div>
+        <button type="button" className="btn primary" onClick={() => setEditingTaskId(null)}>
+          <Icon icon="lucide:arrow-left" style={{ fontSize: 14 }} />
+          Back to workflows
+        </button>
+      </div>
+    )
+  }
+
   return (
     <ReactFlowProvider>
-      <div className="flex-1 flex flex-col overflow-hidden relative">
+      <div
+        className="flex-1 flex flex-col overflow-hidden relative"
+        style={{ background: 'var(--rail)' }}
+      >
         {/* Top bar */}
-        <div className="flex items-center gap-3 px-4 h-11 border-b border-pilos-border flex-shrink-0 bg-pilos-bg">
+        <div
+          className="flex items-center gap-3 px-4 h-11 flex-shrink-0"
+          style={{ background: 'var(--rail)', borderBottom: '1px solid var(--line-2)' }}
+        >
           <button
             onClick={() => setEditingTaskId(null)}
-            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-white transition-colors"
+            className="btn sm ghost"
+            title="Back to workflow list"
           >
-            <Icon icon="lucide:arrow-left" className="text-sm" />
+            <Icon icon="lucide:arrow-left" style={{ fontSize: 13 }} />
             Back
           </button>
-          <div className="w-px h-4 bg-pilos-border" />
+          <div style={{ width: 1, height: 16, background: 'var(--line-2)' }} />
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <Icon icon="lucide:workflow" className="text-blue-400 text-sm flex-shrink-0" />
-            <span className="text-xs font-bold text-white truncate">{task?.title || 'Workflow Editor'}</span>
-            <span className="text-[10px] font-mono text-zinc-700">{editingTaskId?.slice(0, 8)}</span>
+            <Icon icon="lucide:workflow" style={{ fontSize: 14, color: 'var(--ink-3)', flexShrink: 0 }} />
+            <span className="truncate" style={{ fontSize: 12, fontWeight: 650, color: 'var(--ink)' }}>{task?.title || 'Workflow Editor'}</span>
+            <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--faint)' }}>{editingTaskId?.slice(0, 8)}</span>
             {flash && (
-              <span className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-opacity ${
-                flash.type === 'success'
-                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                  : 'bg-red-500/10 text-red-400 border border-red-500/20'
-              }`}>
-                <Icon icon={flash.type === 'success' ? 'lucide:check' : 'lucide:x'} className="text-[9px]" />
+              <span
+                className="flex items-center gap-1"
+                style={{
+                  padding: '2px 8px', borderRadius: 'var(--r-sm)', fontSize: 10, fontWeight: 550,
+                  background: flash.type === 'success' ? 'rgba(62, 207, 142, 0.12)' : 'rgba(251, 111, 111, 0.12)',
+                  color: flash.type === 'success' ? 'var(--ok)' : 'var(--err)',
+                  border: '1px solid ' + (flash.type === 'success' ? 'rgba(62, 207, 142, 0.3)' : 'rgba(251, 111, 111, 0.3)'),
+                }}
+              >
+                <Icon icon={flash.type === 'success' ? 'lucide:check' : 'lucide:x'} style={{ fontSize: 9 }} />
                 {flash.msg}
               </span>
             )}
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-zinc-600">
+            <span style={{ fontSize: 10, color: 'var(--muted)' }}>
               {useWorkflowStore.getState().nodes.length} nodes · {useWorkflowStore.getState().edges.length} connections
             </span>
             <button
               onClick={handleExport}
               title="Export workflow as JSON"
-              className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
+              className="btn sm ghost"
             >
-              <Icon icon="lucide:download" className="text-[10px]" />
+              <Icon icon="lucide:download" style={{ fontSize: 12 }} />
               Export
             </button>
             <div className="relative">
@@ -150,62 +196,71 @@ export function WorkflowEditor() {
                 ref={importBtnRef}
                 onClick={() => setShowImportMenu((v) => !v)}
                 title="Import workflow"
-                className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
+                className="btn sm ghost"
               >
-                <Icon icon="lucide:upload" className="text-[10px]" />
+                <Icon icon="lucide:upload" style={{ fontSize: 12 }} />
                 Import
               </button>
               {showImportMenu && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowImportMenu(false)} />
-                  <div className="absolute right-0 top-full mt-1 z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-hidden min-w-[180px]">
+                  <div
+                    className="absolute right-0 top-full mt-1 z-50 overflow-hidden"
+                    style={{
+                      background: 'var(--panel)',
+                      border: '1px solid var(--line)',
+                      borderRadius: 'var(--r-sm)',
+                      boxShadow: '0 12px 32px -8px rgba(0,0,0,0.6)',
+                      minWidth: 180,
+                    }}
+                  >
                     <button
                       onClick={handleImportFile}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-800 transition-colors text-left"
+                      className="w-full flex items-center gap-2 text-left"
+                      style={{ padding: '8px 12px', fontSize: 11, color: 'var(--ink-2)', background: 'transparent', border: 'none' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                     >
-                      <Icon icon="lucide:file" className="text-[10px] text-zinc-500" />
+                      <Icon icon="lucide:file" style={{ fontSize: 11, color: 'var(--muted)' }} />
                       Import from .pilos file
                     </button>
                     <button
                       onClick={handleImportClipboard}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-800 transition-colors text-left"
+                      className="w-full flex items-center gap-2 text-left"
+                      style={{ padding: '8px 12px', fontSize: 11, color: 'var(--ink-2)', background: 'transparent', border: 'none' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                     >
-                      <Icon icon="lucide:clipboard" className="text-[10px] text-zinc-500" />
+                      <Icon icon="lucide:clipboard" style={{ fontSize: 11, color: 'var(--muted)' }} />
                       Import from clipboard
                     </button>
                   </div>
                 </>
               )}
             </div>
-            <div className="w-px h-4 bg-pilos-border" />
+            <div style={{ width: 1, height: 16, background: 'var(--line-2)' }} />
             <button
               onClick={() => { setResultsCanvasOpen(!resultsCanvasOpen); if (!resultsCanvasOpen) setShowHistory(false) }}
               title="View execution results"
-              className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] transition-colors ${
-                resultsCanvasOpen ? 'bg-cyan-600/10 text-cyan-400' : 'text-zinc-500 hover:text-white hover:bg-zinc-800'
-              }`}
+              className={'btn sm' + (resultsCanvasOpen ? '' : ' ghost')}
             >
-              <Icon icon="lucide:layout-dashboard" className="text-[10px]" />
+              <Icon icon="lucide:layout-dashboard" style={{ fontSize: 12 }} />
               Results
             </button>
             <button
               onClick={() => { setShowHistory(!showHistory); if (!showHistory) setResultsCanvasOpen(false) }}
               title="Run history"
-              className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] transition-colors ${
-                showHistory ? 'bg-blue-600/10 text-blue-400' : 'text-zinc-500 hover:text-white hover:bg-zinc-800'
-              }`}
+              className={'btn sm' + (showHistory ? '' : ' ghost')}
             >
-              <Icon icon="lucide:history" className="text-[10px]" />
+              <Icon icon="lucide:history" style={{ fontSize: 12 }} />
               History
             </button>
             <button
               onClick={() => { setShowCodeEditor((v) => !v); setShowHistory(false); setResultsCanvasOpen(false) }}
               title="Edit workflow JSON"
-              className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] transition-colors ${
-                showCodeEditor ? 'bg-violet-600/10 text-violet-400' : 'text-zinc-500 hover:text-white hover:bg-zinc-800'
-              }`}
+              className={'btn sm' + (showCodeEditor ? '' : ' ghost')}
             >
-              <Icon icon="lucide:file-code" className="text-[10px]" />
+              <Icon icon="lucide:file-code" style={{ fontSize: 12 }} />
               JSON
             </button>
           </div>
@@ -216,13 +271,16 @@ export function WorkflowEditor() {
 
         {/* Block editor — full overlay */}
         {showCodeEditor && (
-          <div className="absolute inset-0 z-20 bg-pilos-bg flex flex-col">
+          <div
+            className="absolute inset-0 z-20 flex flex-col"
+            style={{ background: 'var(--rail)' }}
+          >
             <WorkflowCodeEditor onClose={() => setShowCodeEditor(false)} />
           </div>
         )}
 
         {/* Main content */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden" style={{ background: 'var(--win)' }}>
           {resultsCanvasOpen ? (
             <WorkflowResultsCanvas onClose={() => setResultsCanvasOpen(false)} />
           ) : (

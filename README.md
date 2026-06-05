@@ -52,25 +52,40 @@ No lock-in. Claude Code CLI does all the AI work. Pilos is the visual layer on t
 
 ## Features
 
-### Free (MIT)
+Every feature below ships in the app. Pilos is free to use with generous limits — paid tiers lift the count limits and unlock team collaboration.
 
 - **Workflow Builder** — convert any agent conversation into a reusable, shareable workflow
 - **Multi-Agent Teams** — 5 built-in roles (PM, Architect, Developer, Designer, Product) that collaborate on tasks
-- **Multi-Project Tabs** — work on multiple projects simultaneously with isolated conversations and context
+- **Multi-Project Tabs** — work on multiple projects with isolated conversations and context
 - **Integrated Terminal** — full terminal emulator (xterm.js) embedded alongside agent output
-- **MCP Integrations** — built-in servers for GitHub, Supabase, and Filesystem — one-click setup, no JSON editing
+- **MCP Integrations** — connect GitHub, Supabase, Filesystem, Sentry, and more — one-click setup, no JSON editing
+- **Scheduled Automation** — run workflows on a cron schedule (daily, weekly, on push, etc.)
+- **Browser MCP** — let Claude see and interact with your browser via a Chrome extension
+- **Computer Use** — macOS screen automation (screenshot, click, type) for visual tasks
 - **Persistent Memory** — SQLite-backed project memory that carries across sessions and restarts
 - **Permission Modes** — auto-approve, ask-before-running, or read-only — you control what agents can do
 - **Auto Updates** — automatic update checks with in-app install
 
-### Pro
+## Pricing
 
-- **Scheduled Automation** — run workflows on a cron schedule (daily, weekly, on push, etc.)
-- **Browser MCP** — let Claude see and interact with your browser via a Chrome extension
-- **Computer Use** — macOS screen automation (screenshot, click, type) for visual tasks
-- **Jira Integration** — read and update Jira issues directly from the agent conversation
-- **Sentry Integration** — query errors, issues, and AI-powered root cause analysis
-- **Premium MCP Templates** — one-click setup for Notion, Linear, Slack, and more
+What changes between tiers is the count limits, team collaboration, premium agent templates, and Jira integration — not the core feature set above.
+
+| | **Free** | **Pro** | **Teams** |
+|---|---|---|---|
+| **Price** | $0 (MIT) | $12/mo · $96/yr (save 33%) | $19/seat |
+| Agents | Up to 3 | Unlimited | Unlimited |
+| MCP servers | Up to 3 | Unlimited | Unlimited |
+| Projects | Up to 3 | Unlimited | Unlimited |
+| Workflow builder | ✓ | ✓ | ✓ |
+| Multi-agent roles | ✓ | ✓ | ✓ |
+| Integrated terminal | ✓ | ✓ | ✓ |
+| Scheduled automation | ✓ | ✓ | ✓ |
+| Persistent memory | ✓ | ✓ | ✓ |
+| Team mode | — | ✓ | ✓ |
+| Premium agent templates | — | ✓ | ✓ |
+| Jira integration | — | ✓ | ✓ |
+| Team sync | — | — | ✓ |
+| Per-seat team access | — | — | ✓ |
 
 See [pilos.net/pricing](https://pilos.net/pricing) for plans.
 

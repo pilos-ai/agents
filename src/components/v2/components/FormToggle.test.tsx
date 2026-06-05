@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { FormToggle } from './FormToggle'
 
@@ -12,21 +12,29 @@ describe('FormToggle', () => {
   })
 
   it('does not render label when not provided', () => {
+    // The component always renders the decorative `.switch`/`.knob` spans, so we
+    // assert that no text-bearing label span is rendered rather than expecting
+    // zero <span> elements.
     const { container } = render(<FormToggle checked={false} onChange={() => {}} />)
-    expect(container.querySelector('span')).toBeNull()
+    const textSpans = Array.from(container.querySelectorAll('span')).filter(
+      (span) => span.textContent && span.textContent.trim().length > 0,
+    )
+    expect(textSpans).toHaveLength(0)
   })
 
-  it('calls onChange when toggled', async () => {
+  it('calls onChange when toggled', () => {
+    // The visible switch is decorative; the real <input type="checkbox"> has
+    // `pointer-events: none`, so we toggle it directly via fireEvent.click.
     const onChange = vi.fn()
     render(<FormToggle checked={false} onChange={onChange} label="Toggle" />)
-    await userEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('checkbox'))
     expect(onChange).toHaveBeenCalledWith(true)
   })
 
-  it('calls onChange with false when unchecked', async () => {
+  it('calls onChange with false when unchecked', () => {
     const onChange = vi.fn()
     render(<FormToggle checked={true} onChange={onChange} label="Toggle" />)
-    await userEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('checkbox'))
     expect(onChange).toHaveBeenCalledWith(false)
   })
 
@@ -46,9 +54,13 @@ describe('FormToggle', () => {
   })
 
   it('does not fire onChange when disabled', async () => {
+    // Use the real click affordance (the <label>) via userEvent, which honours
+    // the disabled state of the associated control. fireEvent.click bypasses
+    // `disabled` in jsdom, so it cannot exercise this contract.
     const onChange = vi.fn()
-    render(<FormToggle checked={false} onChange={onChange} disabled />)
-    await userEvent.click(screen.getByRole('checkbox'))
+    const { container } = render(<FormToggle checked={false} onChange={onChange} disabled />)
+    const labelEl = container.querySelector('label') as HTMLLabelElement
+    await userEvent.click(labelEl)
     expect(onChange).not.toHaveBeenCalled()
   })
 })

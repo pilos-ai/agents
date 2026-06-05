@@ -27,6 +27,11 @@ vi.mock('../api', () => ({
       setActiveProject: vi.fn().mockResolvedValue(null),
       getProjects: vi.fn().mockResolvedValue([]),
     },
+    // sendChatMessage + aiFixWorkflow write the active project's MCP config
+    // before starting the Claude session. Returns { configPath, warnings }.
+    mcp: {
+      writeConfig: vi.fn().mockResolvedValue({ configPath: '/tmp/mcp.json', warnings: [] }),
+    },
   },
 }))
 
@@ -49,8 +54,12 @@ vi.mock('./useTaskStore', () => ({
 
 vi.mock('./useProjectStore', () => ({
   useProjectStore: {
+    // sendChatMessage + aiFixWorkflow read `openProjects.find(...)` to mirror
+    // the active project's model / permissionMode / mcpServers. In production
+    // openProjects is always an array, so the mock must provide one.
     getState: vi.fn(() => ({
       activeProjectPath: '/test-project',
+      openProjects: [],
     })),
   },
 }))
@@ -96,6 +105,19 @@ async function getWorkflowValidation() {
   return mod as unknown as { validateWorkflow: Mock }
 }
 
+async function getProjectStore() {
+  const mod = await import('./useProjectStore')
+  return (mod as unknown as { useProjectStore: { getState: Mock } }).useProjectStore
+}
+
+// Default project-store state every test starts from. In production
+// openProjects is always an array; the chat/AI-fix paths call
+// `openProjects.find(...)`, so this must be present.
+const defaultProjectStoreState = {
+  activeProjectPath: '/test-project',
+  openProjects: [] as { projectPath: string; model?: string; permissionMode?: string; mcpServers?: unknown[] }[],
+}
+
 function makeNode(id: string, type: WorkflowNodeData['type'] = 'mcp_tool'): Node<WorkflowNodeData> {
   return {
     id,
@@ -131,6 +153,12 @@ beforeEach(async () => {
   // Reset shared task store state to known defaults
   const taskStore = await getTaskStore()
   taskStore.getState.mockReturnValue({ ...mockTaskStoreState })
+  // Reset the project store to its known default. Some tests (loadJiraProjects)
+  // override getState with a state that omits openProjects; without this reset
+  // that override would leak into later tests and crash the chat/AI-fix paths
+  // that call `openProjects.find(...)`.
+  const projectStore = await getProjectStore()
+  projectStore.getState.mockReturnValue({ ...defaultProjectStoreState })
 })
 
 // ── setEditingTaskId ──────────────────────────────────────────────────────────
@@ -195,7 +223,7 @@ describe('loadWorkflow', () => {
     expect(nodes[0].type).toBe('start')
   })
 
-  it('opens chat mode for empty workflow (only start node)', async () => {
+  it('does not auto-open chat mode for an empty workflow (manual palette is the default)', async () => {
     const taskStore = await getTaskStore()
     taskStore.getState.mockReturnValue({
       tasks: [{ id: 'task-empty', workflow: { nodes: [], edges: [] } }],
@@ -203,7 +231,10 @@ describe('loadWorkflow', () => {
     })
 
     useWorkflowStore.getState().loadWorkflow('task-empty')
-    expect(useWorkflowStore.getState().chatMode).toBe(true)
+    // loadWorkflow always defaults to the manual node palette. Auto-opening AI
+    // mode for empty workflows was removed because it hid the palette and
+    // confused new users (see loadWorkflow comment in useWorkflowStore.ts).
+    expect(useWorkflowStore.getState().chatMode).toBe(false)
   })
 
   it('does not open chat mode for non-empty workflow', async () => {
@@ -559,7 +590,7 @@ describe('tool panel helpers', () => {
   })
 
   it('clearValidation sets validationResult to null', () => {
-    useWorkflowStore.setState({ validationResult: { valid: false, errors: ['Missing end'] } })
+    useWorkflowStore.setState({ validationResult: { valid: false, issues: [{ type: 'error', message: 'Missing end' }] } })
     useWorkflowStore.getState().clearValidation()
     expect(useWorkflowStore.getState().validationResult).toBeNull()
   })
@@ -2034,7 +2065,7 @@ describe('retryNode — nodeOutputs hydration from completed steps', () => {
     await useWorkflowStore.getState().retryNode('n1')
 
     // The ctx passed to executeSingleNode should have n0's output hydrated
-    expect(capturedCtx?.nodeOutputs?.['n0']).toEqual({ data: 'from-n0' })
+    expect(capturedCtx!.nodeOutputs!['n0']).toEqual({ data: 'from-n0' })
   })
 
   it('calls the onLog callback when executeSingleNode calls it', async () => {
@@ -2458,7 +2489,7 @@ describe('startExecution — onFail callback persists failed run result', () => 
     const { executeWorkflow } = await getWorkflowExecutor()
     expect(executeWorkflow).toHaveBeenCalled()
     expect(capturedCallbacks).not.toBeNull()
-    expect(typeof capturedCallbacks?.onFail).toBe('function')
+    expect(typeof capturedCallbacks!.onFail).toBe('function')
 
     // Now call onFail directly to simulate workflow failure
     capturedCallbacks!.onFail('Tool timed out')

@@ -1,7 +1,16 @@
+/**
+ * MessageBubble — pilos-prototype-styled chat message.
+ *
+ * Implements the prototype's `.cmsg` markup (see pilos-handoff/app/screen_chat.jsx
+ * lines 38–58): 30×30 .cav avatar, .cbody with .chead (name/role/time) and
+ * .ctext (paragraphs / code-blocks / msg-tools).
+ *
+ * Behavior preserved 1:1: still routes ToolUseBlock / ToolResultBlock /
+ * ThinkingBlock / Ask / Plan blocks through their dedicated components; still
+ * detects trailing options + PM story blocks; still wires Reply via store.
+ */
 import { memo, useMemo, useState, useEffect } from 'react'
-import { Icon } from '../common/Icon'
 import type { ConversationMessage, ContentBlock } from '../../types'
-import { AGENT_COLORS } from '../../data/agent-templates'
 import { ToolUseBlock } from './ToolUseBlock'
 import { ToolResultBlock } from './ToolResultBlock'
 import { ThinkingBlock } from './ThinkingBlock'
@@ -36,6 +45,44 @@ function loadPmStory() {
 interface Props {
   message: ConversationMessage
   isLast?: boolean
+  /** When true, this message is grouped under the previous bubble:
+   *  hide avatar + header, render the body indented to align. */
+  grouped?: boolean
+}
+
+const COLOR_GRADIENT: Record<string, string> = {
+  blue: 'cav-grad-blue',
+  purple: 'cav-grad-purple',
+  green: 'cav-grad-green',
+  pink: 'cav-grad-pink',
+  orange: 'cav-grad-orange',
+  cyan: 'cav-grad-cyan',
+  yellow: 'cav-grad-yellow',
+  red: 'cav-grad-red',
+  indigo: 'cav-grad-indigo',
+}
+
+function avatarClass(color?: string, isUser?: boolean) {
+  if (isUser) return 'cav-grad-user'
+  if (color && COLOR_GRADIENT[color]) return COLOR_GRADIENT[color]
+  return 'cav-grad-claude'
+}
+
+function formatTime(ts: number): string {
+  if (!ts) return ''
+  const d = new Date(ts)
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+function avatarCode(message: ConversationMessage): string {
+  if (message.role === 'user') return 'YOU'
+  if (message.agentName) return message.agentName.slice(0, 2).toUpperCase()
+  return 'CL'
+}
+
+function displayName(message: ConversationMessage): string {
+  if (message.role === 'user') return 'You'
+  return message.agentName || 'Claude'
 }
 
 function ReplyButton({ message }: { message: ConversationMessage }) {
@@ -43,20 +90,46 @@ function ReplyButton({ message }: { message: ConversationMessage }) {
   if (message.type !== 'text' || !message.content) return null
   return (
     <button
+      type="button"
       onClick={(e) => { e.stopPropagation(); setReplyTo(message) }}
-      className="absolute top-1.5 right-1.5 opacity-0 group-hover/bubble:opacity-100 p-1 rounded bg-neutral-600/80 hover:bg-neutral-500/80 text-neutral-300 transition-opacity cursor-pointer select-none"
+      className="mini-ico reply-mini"
+      style={{ width: 22, height: 22, marginLeft: 4 }}
       title="Reply"
     >
-      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
       </svg>
     </button>
   )
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, isLast }: Props) {
+function MessageImages({ images }: { images: NonNullable<ConversationMessage['images']> }) {
+  return (
+    <div className="ctext-images">
+      {images.map((img, i) =>
+        img.mediaType === 'application/pdf' ? (
+          <div key={i} className="pdf-thumb">PDF · {img.name || 'document.pdf'}</div>
+        ) : (
+          <img
+            key={i}
+            src={`data:${img.mediaType};base64,${img.data}`}
+            alt={img.name || 'attachment'}
+          />
+        )
+      )}
+    </div>
+  )
+}
+
+export const MessageBubble = memo(function MessageBubble({ message, isLast, grouped }: Props) {
   const isUser = message.role === 'user'
   const [, forceUpdate] = useState(0)
+  // When grouped under the previous bubble, render a placeholder avatar (transparent)
+  // so the body stays aligned with the avatar column, and skip the header entirely.
+  const renderHeader = !grouped
+  const avatarNode = grouped
+    ? <div className="cav" aria-hidden style={{ background: 'transparent', visibility: 'hidden' }} />
+    : null
 
   useEffect(() => {
     if (!pmStoryAttempted) {
@@ -69,112 +142,88 @@ export const MessageBubble = memo(function MessageBubble({ message, isLast }: Pr
     return detectOptions(message.content)
   }, [message.content, isUser, isLast])
 
-  // Detect story blocks in assistant messages (only if PM module loaded)
   const storyBlocks = useMemo(() => {
     if (isUser || !pmStoryModule) return []
     return pmStoryModule.detectStoryBlocks(message.content)
   }, [message.content, isUser])
 
-  // Agent-attributed message (team mode) — may also have tool blocks
-  if (!isUser && message.agentName) {
-    const colors = AGENT_COLORS[message.agentColor || 'blue'] || AGENT_COLORS.blue
-    // Extract non-text blocks (tool_use, tool_result) from contentBlocks
-    const toolBlocks = message.contentBlocks?.filter(b => b.type !== 'text') || []
-
-    return (
-      <div className="flex flex-col items-start">
-        {message.replyToId && <MessageReference replyToId={message.replyToId} />}
-        <div className="flex items-center gap-1.5 mb-1 ml-1">
-          {message.agentIcon && <Icon icon={message.agentIcon} className="text-base" />}
-          <span className={`text-xs font-semibold ${colors.text}`}>{message.agentName}</span>
-        </div>
-        {message.content && (
-          <div className={`group/bubble relative max-w-[85%] min-w-0 overflow-hidden rounded-lg px-4 py-2.5 select-text ${colors.bgLight} border-l-2 ${colors.border} text-neutral-100`}>
-            <div className="markdown-content text-sm">
-              <MarkdownRenderer content={message.content} />
-            </div>
-            <ReplyButton message={message} />
-          </div>
-        )}
-        {/* Render tool blocks (Edit, Write, Bash, etc.) after agent text */}
-        {toolBlocks.length > 0 && (
-          <div className="w-full space-y-1 mt-1">
-            {toolBlocks.map((block, i) => renderContentBlock(block, i, false))}
-          </div>
-        )}
-        {options.length > 0 && <OptionButtons options={options} />}
-      </div>
-    )
-  }
-
-  // Thinking message (persisted from background tab processing)
+  // ──── Thinking message (persisted) — renders as a subtle italic tile ────
   if (message.type === 'thinking' && message.content) {
     return (
-      <div className="flex flex-col items-start">
-        <div className="max-w-[85%] min-w-0 overflow-hidden rounded-lg px-4 py-2.5 bg-neutral-800/30 text-neutral-400 text-xs italic border-l-2 border-neutral-600 select-text">
-          <div className="mb-1 text-neutral-500 text-[10px] uppercase tracking-wider font-medium">Thinking</div>
-          <div className="whitespace-pre-wrap break-words select-text">{message.content}</div>
+      <div className={'cmsg' + (grouped ? ' grouped' : '')}>
+        {avatarNode ?? <div className={`cav ${avatarClass(message.agentColor)}`}>{avatarCode(message)}</div>}
+        <div className="cbody">
+          {renderHeader && (
+            <div className="chead">
+              <span className="cname">{displayName(message)}</span>
+              <span className="crole">thinking</span>
+              {message.timestamp ? <span className="ctime">{formatTime(message.timestamp)}</span> : null}
+            </div>
+          )}
+          <div className="ctext">
+            <div className="thinking-box">
+              <span className="head">Thinking</span>
+              <span className="thinking-body">{message.content}</span>
+            </div>
+          </div>
         </div>
       </div>
     )
   }
 
-  // Non-agent message with content blocks (solo mode)
-  if (message.contentBlocks && message.contentBlocks.length > 0) {
+  // ──── Solo-mode message with contentBlocks (mixed text + tool blocks) ────
+  // Render as a single .cmsg wrapping the concatenated text and tool blocks.
+  if (!isUser && message.contentBlocks && message.contentBlocks.length > 0) {
     return (
-      <div className="space-y-2">
-        {message.replyToId && <MessageReference replyToId={message.replyToId} />}
-        {message.contentBlocks.map((block, i) => renderContentBlock(block, i, isLast && i === message.contentBlocks!.length - 1))}
+      <div className={'cmsg' + (grouped ? ' grouped' : '')}>
+        {avatarNode ?? <div className={`cav ${avatarClass(message.agentColor)}`}>{avatarCode(message)}</div>}
+        <div className="cbody">
+          {renderHeader && (
+            <div className="chead">
+              <span className="cname">{displayName(message)}</span>
+              {message.agentName && <span className="crole">assistant</span>}
+              {message.timestamp ? <span className="ctime">{formatTime(message.timestamp)}</span> : null}
+            </div>
+          )}
+          {message.replyToId && <MessageReference replyToId={message.replyToId} />}
+          <div className="ctext">
+            {message.contentBlocks.map((block, i) => renderContentBlock(block, i, isLast && i === message.contentBlocks!.length - 1))}
+          </div>
+          {options.length > 0 && <OptionButtons options={options} />}
+        </div>
       </div>
     )
   }
 
-  // Simple text message
+  // ──── Standard text message (user or agent) ────
   return (
-    <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
-      {message.replyToId && <MessageReference replyToId={message.replyToId} />}
-      <div
-        className={`group/bubble relative max-w-[85%] min-w-0 overflow-hidden rounded-lg px-4 py-2.5 select-text ${
-          isUser
-            ? 'bg-blue-600 text-white'
-            : 'bg-neutral-800/60 text-neutral-100'
-        }`}
-      >
-        {/* Show attached files */}
-        {message.images && message.images.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-2">
-            {message.images.map((img, i) =>
-              img.mediaType === 'application/pdf' ? (
-                <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-md bg-black/20 border border-white/10">
-                  <svg className="w-5 h-5 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                  </svg>
-                  <span className="text-xs truncate max-w-[200px]">{img.name || 'document.pdf'}</span>
-                </div>
-              ) : (
-                <img
-                  key={i}
-                  src={`data:${img.mediaType};base64,${img.data}`}
-                  alt={img.name || 'attachment'}
-                  className="max-h-48 max-w-full rounded-md"
-                />
-              )
-            )}
+    <div className={'cmsg' + (isUser ? ' user' : '') + (grouped ? ' grouped' : '')}>
+      {avatarNode ?? <div className={`cav ${avatarClass(message.agentColor, isUser)}`}>{avatarCode(message)}</div>}
+      <div className="cbody">
+        {renderHeader && (
+          <div className="chead">
+            <span className="cname">{displayName(message)}</span>
+            {!isUser && message.agentName && <span className="crole">assistant</span>}
+            {message.timestamp ? <span className="ctime">{formatTime(message.timestamp)}</span> : null}
+            {!isUser && message.type === 'text' && message.content ? (
+              <ReplyButton message={message} />
+            ) : null}
           </div>
         )}
-        {isUser ? (
-          <p className="text-sm whitespace-pre-wrap break-words select-text">{message.content}</p>
-        ) : (
-          <div className="markdown-content text-sm">
+        {message.replyToId && <MessageReference replyToId={message.replyToId} />}
+        <div className="ctext">
+          {message.images && message.images.length > 0 && <MessageImages images={message.images} />}
+          {isUser ? (
+            <p style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{message.content}</p>
+          ) : (
             <MarkdownRenderer content={message.content} />
-          </div>
-        )}
-        <ReplyButton message={message} />
+          )}
+        </div>
+        {storyBlocks.length > 0 && storyBlocks.map((block, i) => (
+          <SaveStoryButton key={i} rawBlock={block} />
+        ))}
+        {options.length > 0 && <OptionButtons options={options} />}
       </div>
-      {storyBlocks.length > 0 && storyBlocks.map((block, i) => (
-        <SaveStoryButton key={i} rawBlock={block} />
-      ))}
-      {options.length > 0 && <OptionButtons options={options} />}
     </div>
   )
 })
@@ -209,8 +258,8 @@ function SaveStoryButton({ rawBlock }: { rawBlock: string }) {
 
   if (saved) {
     return (
-      <div className="mt-2 flex items-center gap-1.5 text-xs text-green-400">
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--ok)' }}>
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
         </svg>
         Saved to Stories
@@ -220,10 +269,12 @@ function SaveStoryButton({ rawBlock }: { rawBlock: string }) {
 
   return (
     <button
+      type="button"
       onClick={handleSave}
-      className="mt-2 px-3 py-1.5 text-xs bg-purple-600 hover:bg-purple-500 text-white rounded-md transition-colors flex items-center gap-1.5"
+      className="btn sm"
+      style={{ marginTop: 8 }}
     >
-      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
       </svg>
       Save as Story
@@ -236,12 +287,8 @@ function renderContentBlock(block: ContentBlock, index: number, isLastBlock?: bo
     case 'text': {
       const options = isLastBlock ? detectOptions(block.text) : []
       return (
-        <div key={index} className="flex flex-col items-start">
-          <div className="max-w-[85%] min-w-0 overflow-hidden rounded-lg px-4 py-2.5 bg-neutral-800/60 text-neutral-100 select-text">
-            <div className="markdown-content text-sm">
-              <MarkdownRenderer content={block.text} />
-            </div>
-          </div>
+        <div key={index}>
+          <MarkdownRenderer content={block.text} />
           {options.length > 0 && <OptionButtons options={options} />}
         </div>
       )

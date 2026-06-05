@@ -298,6 +298,34 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   },
 
   removeTask: async (id) => {
+    // If the task is currently executing, abort it cleanly before deletion so
+    // the executor doesn't keep writing run results into a now-orphaned task.
+    if (get().activeExecutions[id]) {
+      get().stopTask(id)
+      // Drop the active-execution entry immediately so any UI subscribed to
+      // it stops rendering progress for a deleted task.
+      get().setActiveExecution(id, null)
+    }
+
+    // If the workflow editor is open for this task, close it. Otherwise the
+    // editor stays mounted reading a deleted task and falls back to the
+    // missing-task placeholder, which is jarring.
+    const wfState = useWorkflowStore.getState()
+    if (wfState.editingTaskId === id) {
+      // Clear directly instead of going through setEditingTaskId(null) to
+      // skip the save-on-close path (the task is being deleted anyway).
+      useWorkflowStore.setState({
+        editingTaskId: null,
+        nodes: [],
+        edges: [],
+        selectedNodeId: null,
+        history: [],
+        historyIndex: -1,
+        execution: null,
+        resultsCanvasOpen: false,
+      })
+    }
+
     const tasks = get().tasks.filter((t) => t.id !== id)
     set({ tasks })
     await api.settings.set(taskStorageKey(get().currentProjectPath!), tasks)
@@ -424,7 +452,35 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
 
   runTaskWorkflow: async (taskId, trigger = 'manual') => {
     const task = get().tasks.find((t) => t.id === taskId)
-    if (!task?.workflow?.nodes?.length) return
+    if (!task) {
+      console.warn('[runTaskWorkflow] No task found for id', taskId)
+      return
+    }
+    if (!task.workflow?.nodes?.length) {
+      // Surface a no-op failed run so the user sees feedback in the runs UI
+      // instead of a silent click.
+      const now = new Date().toISOString()
+      const run: TaskRun = {
+        id: crypto.randomUUID(),
+        taskId,
+        startedAt: now,
+        completedAt: now,
+        duration: 0,
+        status: 'failed',
+        trigger,
+        actions: [{ type: 'error', description: 'Workflow has no steps. Open the editor and add nodes before running.' }],
+        summary: 'Cannot run: workflow has no steps',
+        logs: [`[${now}] Workflow has no nodes — open the editor to add steps.`],
+      }
+      const tasks = get().tasks.map((t) => {
+        if (t.id !== taskId) return t
+        const runs = [run, ...t.runs].slice(0, MAX_RUNS_PER_TASK)
+        return { ...t, status: 'failed' as TaskStatus, runs, updatedAt: now }
+      })
+      set({ tasks })
+      await api.settings.set(taskStorageKey(get().currentProjectPath!), tasks)
+      return
+    }
 
     const nodes = task.workflow.nodes
     const edges = task.workflow.edges || []

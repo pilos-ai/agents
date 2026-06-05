@@ -4,8 +4,9 @@ import { useLicenseStore } from '../../../store/useLicenseStore'
 import { api } from '../../../api'
 
 const TIER_FEATURES = [
-  { tier: 'free', features: ['Up to 3 agents', 'Up to 3 MCP servers', 'Solo mode', 'Workflow builder'] },
-  { tier: 'pro', features: ['Unlimited agents & MCP servers', 'Team mode', 'Premium agent templates', 'Priority support'] },
+  { tier: 'free', label: 'Free', features: ['Up to 3 agents', 'Up to 3 MCP servers', 'Solo mode', 'Workflow builder'] },
+  { tier: 'pro', label: 'Pro', features: ['Unlimited agents & MCP servers', 'Team mode', 'Premium agent templates', 'Priority support'] },
+  { tier: 'teams', label: 'Teams', features: ['Everything in Pro', 'Per-seat team access', 'Team mode & sync', 'Shared workspaces'] },
 ]
 
 export default function LoginPage() {
@@ -53,233 +54,302 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex-1 flex items-center justify-center overflow-y-auto">
-      <div className="w-full max-w-md mx-4">
-        {/* Logo & Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 shadow-xl shadow-blue-600/20 mb-5">
-            <Icon icon="lucide:bot" className="text-white text-3xl" />
-          </div>
-          <h1 className="text-2xl font-extrabold text-white mb-1">Welcome to Pilos</h1>
-          <p className="text-sm text-zinc-500">
-            {mode === 'recover' ? 'Recover your license key' : 'Sign in to start managing your AI agents'}
-          </p>
-        </div>
-
-        {/* Login Card */}
-        <div className="bg-pilos-card border border-pilos-border rounded-xl overflow-hidden">
-          {/* Tab Selector — hidden in recover mode */}
-          {mode !== 'recover' && (
-            <div className="flex border-b border-pilos-border">
-              <button
-                onClick={() => setMode('login')}
-                className={`flex-1 px-4 py-3 text-xs font-bold uppercase tracking-widest transition-colors ${
-                  mode === 'login'
-                    ? 'text-white bg-pilos-bg border-b-2 border-blue-500'
-                    : 'text-zinc-600 hover:text-zinc-400'
-                }`}
-              >
-                License Key
-              </button>
-              <button
-                onClick={() => setMode('free')}
-                className={`flex-1 px-4 py-3 text-xs font-bold uppercase tracking-widest transition-colors ${
-                  mode === 'free'
-                    ? 'text-white bg-pilos-bg border-b-2 border-blue-500'
-                    : 'text-zinc-600 hover:text-zinc-400'
-                }`}
-              >
-                Free Plan
-              </button>
+    <div className="onb">
+      <div className="onb-glow" />
+      <div className="onb-card pop-in" style={{ width: 480 }}>
+        {/* Header */}
+        <div className="row" style={{ gap: 12 }}>
+          <div className="rail-logo" style={{ width: 40, height: 40 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em' }}>
+              Welcome to Pilos
             </div>
-          )}
-
-          {/* Recover mode header */}
-          {mode === 'recover' && (
-            <div className="flex items-center gap-2 px-6 pt-5 pb-2">
-              <Icon icon="lucide:search" className="text-blue-400 text-sm" />
-              <span className="text-xs font-bold text-zinc-300 uppercase tracking-widest">Recover License</span>
+            <div className="muted" style={{ fontSize: 12.5 }}>
+              {mode === 'recover'
+                ? 'Recover your license key'
+                : mode === 'free'
+                  ? 'Start with the free plan'
+                  : 'Sign in with your license key'}
             </div>
-          )}
-
-          <div className="p-6 space-y-4">
-            {/* Recovered key success banner */}
-            {recoveredKey && mode === 'login' && (
-              <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
-                <Icon icon="lucide:check-circle" className="text-emerald-400 text-sm flex-shrink-0 mt-0.5" />
-                <div className="text-xs text-emerald-300">
-                  License key recovered! Click "Activate & Sign In" to continue.
-                </div>
-              </div>
-            )}
-
-            {/* Email */}
-            <div>
-              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5 block">
-                Email Address
-              </label>
-              <div className="relative">
-                <Icon icon="lucide:mail" className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 text-sm" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@company.com"
-                  disabled={isValidating}
-                  className="w-full pl-9 pr-3 py-2.5 bg-pilos-bg border border-pilos-border rounded-lg text-sm text-white placeholder-zinc-600 outline-none focus:border-blue-500 disabled:opacity-50 transition-colors"
-                  onKeyDown={(e) => e.key === 'Enter' && (mode === 'recover' ? handleRecover() : handleLogin())}
-                />
-              </div>
-            </div>
-
-            {/* License Key — only in login mode */}
-            {mode === 'login' && (
-              <div>
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5 block">
-                  License Key
-                </label>
-                <div className="relative">
-                  <Icon icon="lucide:key-round" className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 text-sm" />
-                  <input
-                    type="text"
-                    value={licenseKey}
-                    onChange={(e) => setLicenseKey(e.target.value)}
-                    placeholder="PILOS-XXXX-XXXX-XXXX"
-                    disabled={isValidating}
-                    className="w-full pl-9 pr-3 py-2.5 bg-pilos-bg border border-pilos-border rounded-lg text-sm text-white placeholder-zinc-600 outline-none focus:border-blue-500 disabled:opacity-50 font-mono transition-colors"
-                    onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Recovery info text */}
-            {mode === 'recover' && (
-              <p className="text-xs text-zinc-500">
-                Enter the email address associated with your license. If a valid license is found, your key will be recovered.
-              </p>
-            )}
-
-            {/* Error */}
-            {error && (
-              <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-red-500/5 border border-red-500/20">
-                <Icon icon="lucide:alert-circle" className="text-red-400 text-sm flex-shrink-0 mt-0.5" />
-                <span className="text-xs text-red-300">{error}</span>
-              </div>
-            )}
-
-            {/* Submit */}
-            {mode === 'recover' ? (
-              <button
-                onClick={handleRecover}
-                disabled={isValidating || !email.trim()}
-                className="w-full py-2.5 rounded-lg text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
-              >
-                {isValidating ? (
-                  <>
-                    <Icon icon="lucide:loader-2" className="text-sm animate-spin" />
-                    Searching...
-                  </>
-                ) : (
-                  <>
-                    <Icon icon="lucide:search" className="text-sm" />
-                    Recover License
-                  </>
-                )}
-              </button>
-            ) : (
-              <button
-                onClick={handleLogin}
-                disabled={isValidating || !email.trim() || (mode === 'login' && !licenseKey.trim())}
-                className="w-full py-2.5 rounded-lg text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
-              >
-                {isValidating ? (
-                  <>
-                    <Icon icon="lucide:loader-2" className="text-sm animate-spin" />
-                    Validating...
-                  </>
-                ) : mode === 'login' ? (
-                  <>
-                    <Icon icon="lucide:log-in" className="text-sm" />
-                    Activate & Sign In
-                  </>
-                ) : (
-                  <>
-                    <Icon icon="lucide:arrow-right" className="text-sm" />
-                    Continue with Free Plan
-                  </>
-                )}
-              </button>
-            )}
-
-            {/* Links */}
-            {mode === 'login' && (
-              <div className="text-center space-y-1.5">
-                <button
-                  onClick={handleGetLicense}
-                  className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                >
-                  Don't have a license key? Get one at pilos.net
-                </button>
-                <button
-                  onClick={() => { setMode('recover'); setRecoveredKey(null) }}
-                  className="text-xs text-zinc-500 hover:text-zinc-400 transition-colors block mx-auto"
-                >
-                  Lost your license key? Recover it
-                </button>
-              </div>
-            )}
-
-            {mode === 'recover' && (
-              <div className="text-center">
-                <button
-                  onClick={() => setMode('login')}
-                  className="text-xs text-zinc-500 hover:text-zinc-400 transition-colors"
-                >
-                  Back to login
-                </button>
-              </div>
-            )}
           </div>
         </div>
 
-        {/* Feature comparison — hidden in recover mode */}
+        {/* Mode tabs — hidden in recover */}
         {mode !== 'recover' && (
-          <div className="mt-6 grid grid-cols-2 gap-3">
-            {TIER_FEATURES.map(({ tier, features }) => (
-              <div
-                key={tier}
-                className={`p-4 rounded-xl border transition-colors ${
-                  (mode === 'login' && tier === 'pro') || (mode === 'free' && tier === 'free')
-                    ? 'border-blue-500/30 bg-blue-500/5'
-                    : 'border-pilos-border bg-pilos-card'
-                }`}
-              >
-                <div className="flex items-center gap-1.5 mb-2.5">
-                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
-                    tier === 'pro'
-                      ? 'bg-amber-500/20 text-amber-400'
-                      : 'bg-zinc-700 text-zinc-400'
-                  }`}>
-                    {tier}
-                  </span>
-                </div>
-                <ul className="space-y-1.5">
-                  {features.map((f) => (
-                    <li key={f} className="flex items-start gap-1.5">
-                      <Icon icon="lucide:check" className="text-emerald-500 text-[10px] mt-0.5 flex-shrink-0" />
-                      <span className="text-[11px] text-zinc-400">{f}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+          <div className="seg" style={{ marginTop: 18, width: '100%' }}>
+            <button
+              className={mode === 'login' ? 'on' : ''}
+              onClick={() => setMode('login')}
+              style={{ flex: 1 }}
+            >
+              License key
+            </button>
+            <button
+              className={mode === 'free' ? 'on' : ''}
+              onClick={() => setMode('free')}
+              style={{ flex: 1 }}
+            >
+              Free plan
+            </button>
           </div>
         )}
 
-        {/* Version */}
-        <p className="text-center text-[10px] text-zinc-700 mt-6">
-          Pilos Agents v2.1.0-alpha
+        <div className="divider" />
+
+        {/* Recovered key success */}
+        {recoveredKey && mode === 'login' && (
+          <div
+            className="row"
+            style={{
+              gap: 8,
+              padding: '10px 12px',
+              borderRadius: 'var(--r-sm)',
+              background: 'rgba(62,207,142,0.08)',
+              border: '1px solid rgba(62,207,142,0.25)',
+              color: 'var(--ok)',
+              fontSize: 12,
+              marginBottom: 12,
+              alignItems: 'flex-start',
+            }}
+          >
+            <Icon icon="lucide:check-circle" className="text-[14px]" style={{ marginTop: 2 }} />
+            License key recovered! Click "Activate & Sign In" to continue.
+          </div>
+        )}
+
+        {/* Email */}
+        <div style={{ marginBottom: 12 }}>
+          <label
+            style={{
+              fontFamily: 'var(--mono)',
+              fontSize: 10,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'var(--muted)',
+              display: 'block',
+              marginBottom: 6,
+            }}
+          >
+            Email address
+          </label>
+          <div className="cli-box" style={{ margin: 0 }}>
+            <Icon icon="lucide:mail" className="text-[14px]" style={{ color: 'var(--muted)' }} />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@company.com"
+              disabled={isValidating}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  if (mode === 'recover') handleRecover()
+                  else handleLogin()
+                }
+              }}
+            />
+          </div>
+        </div>
+
+        {/* License key — login mode only */}
+        {mode === 'login' && (
+          <div style={{ marginBottom: 12 }}>
+            <label
+              style={{
+                fontFamily: 'var(--mono)',
+                fontSize: 10,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: 'var(--muted)',
+                display: 'block',
+                marginBottom: 6,
+              }}
+            >
+              License key
+            </label>
+            <div className="cli-box" style={{ margin: 0 }}>
+              <Icon icon="lucide:key-round" className="text-[14px]" style={{ color: 'var(--muted)' }} />
+              <input
+                type="text"
+                value={licenseKey}
+                onChange={(e) => setLicenseKey(e.target.value)}
+                placeholder="PILOS-XXXX-XXXX-XXXX"
+                disabled={isValidating}
+                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Recovery info */}
+        {mode === 'recover' && (
+          <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+            Enter the email address associated with your license. If a valid license is found, your key will be recovered.
+          </p>
+        )}
+
+        {/* Error */}
+        {error && (
+          <div
+            className="row"
+            style={{
+              gap: 8,
+              padding: '10px 12px',
+              borderRadius: 'var(--r-sm)',
+              background: 'rgba(251,111,111,0.08)',
+              border: '1px solid rgba(251,111,111,0.25)',
+              color: 'var(--err)',
+              fontSize: 12,
+              margin: '4px 0 12px',
+              alignItems: 'flex-start',
+            }}
+          >
+            <Icon icon="lucide:alert-circle" className="text-[14px]" style={{ marginTop: 2 }} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Submit */}
+        {mode === 'recover' ? (
+          <button
+            onClick={handleRecover}
+            disabled={isValidating || !email.trim()}
+            className="btn primary"
+            style={{ width: '100%', justifyContent: 'center' }}
+          >
+            {isValidating ? (
+              <>
+                <Icon icon="lucide:loader-2" className="animate-spin text-[15px]" />
+                Searching...
+              </>
+            ) : (
+              <>
+                <Icon icon="lucide:search" className="text-[15px]" />
+                Recover license
+              </>
+            )}
+          </button>
+        ) : (
+          <button
+            onClick={handleLogin}
+            disabled={isValidating || !email.trim() || (mode === 'login' && !licenseKey.trim())}
+            className="btn primary"
+            style={{ width: '100%', justifyContent: 'center' }}
+          >
+            {isValidating ? (
+              <>
+                <Icon icon="lucide:loader-2" className="animate-spin text-[15px]" />
+                Validating...
+              </>
+            ) : mode === 'login' ? (
+              <>
+                <Icon icon="lucide:log-in" className="text-[15px]" />
+                Activate & Sign In
+              </>
+            ) : (
+              <>
+                <Icon icon="lucide:arrow-right" className="text-[15px]" />
+                Continue with free plan
+              </>
+            )}
+          </button>
+        )}
+
+        {/* Sub-links */}
+        {mode === 'login' && (
+          <div style={{ textAlign: 'center', marginTop: 14 }}>
+            <button
+              onClick={handleGetLicense}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--accent-2)',
+                fontSize: 12,
+                cursor: 'pointer',
+                padding: 0,
+              }}
+            >
+              Don't have a license key? Get one at pilos.net
+            </button>
+            <div style={{ marginTop: 6 }}>
+              <button
+                onClick={() => {
+                  setMode('recover')
+                  setRecoveredKey(null)
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--muted)',
+                  fontSize: 11.5,
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+              >
+                Lost your license key? Recover it
+              </button>
+            </div>
+          </div>
+        )}
+
+        {mode === 'recover' && (
+          <div style={{ textAlign: 'center', marginTop: 14 }}>
+            <button
+              onClick={() => setMode('login')}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--muted)',
+                fontSize: 11.5,
+                cursor: 'pointer',
+                padding: 0,
+              }}
+            >
+              Back to login
+            </button>
+          </div>
+        )}
+
+        {/* Tier comparison */}
+        {mode !== 'recover' && (
+          <>
+            <div className="divider" />
+            <div className="grid-cards gc-2">
+              {TIER_FEATURES.map(({ tier, label, features }) => {
+                const highlighted =
+                  (mode === 'login' && tier === 'pro') || (mode === 'free' && tier === 'free')
+                return (
+                  <div key={tier} className={`tile${highlighted ? ' selected' : ''}`} style={{ padding: 14 }}>
+                    <div style={{ marginBottom: 8 }}>
+                      <span className={tier === 'pro' ? 'tag pro' : 'tag'}>{label}</span>
+                    </div>
+                    <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                      {features.map((f) => (
+                        <li
+                          key={f}
+                          className="row"
+                          style={{ gap: 6, alignItems: 'flex-start', padding: '2px 0' }}
+                        >
+                          <Icon
+                            icon="lucide:check"
+                            className="text-[11px]"
+                            style={{ color: 'var(--ok)', marginTop: 3, flex: 'none' }}
+                          />
+                          <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>{f}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
+
+        <p
+          className="muted"
+          style={{ textAlign: 'center', fontSize: 10, marginTop: 18, fontFamily: 'var(--mono)' }}
+        >
+          Pilos Agents v{__APP_VERSION__}
         </p>
       </div>
     </div>

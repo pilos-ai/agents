@@ -1,3 +1,8 @@
+/**
+ * ThinkingBlock — collapsed "Thinking…" tile that lives inside a .ctext flow.
+ * Restyled to the prototype's subtle muted card with italic body + tdots
+ * animation in the header (matches the chat typing indicator vocabulary).
+ */
 import { useState } from 'react'
 
 interface Props {
@@ -8,28 +13,25 @@ export function ThinkingBlock({ text }: Props) {
   const [expanded, setExpanded] = useState(false)
 
   return (
-    <div className="my-1">
+    <div className="thinking-box">
       <button
+        type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 px-3 py-1.5 text-neutral-500 hover:text-neutral-300 transition-colors text-xs"
+        style={{
+          background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+          display: 'inline-flex', alignItems: 'center', gap: 8, color: 'inherit', font: 'inherit',
+        }}
       >
-        <svg
-          className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
-        <span className="italic">Thinking...</span>
-        <span className="text-neutral-600">({text.length} chars)</span>
+        <span className="head">
+          Thinking
+          <span className="tdots"><span /><span /><span /></span>
+        </span>
+        <span style={{ fontStyle: 'normal', color: 'var(--faint)', fontSize: 11 }}>
+          {text.length} chars · {expanded ? 'hide' : 'show'}
+        </span>
       </button>
-
       {expanded && (
-        <div className="ml-5 mt-1 px-3 py-2 rounded-md bg-neutral-900/50 border border-neutral-800 text-neutral-400 text-xs whitespace-pre-wrap max-h-60 overflow-y-auto">
-          {text}
-        </div>
+        <span className="thinking-body">{text}</span>
       )}
     </div>
   )

@@ -30,3 +30,11 @@ Thumbs.db
 npm-debug.log*
 /coverage/
 /.claude/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Playwright MCP
+.playwright-mcp/

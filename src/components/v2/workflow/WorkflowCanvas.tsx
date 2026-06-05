@@ -104,6 +104,23 @@ export function WorkflowCanvas() {
     return () => window.removeEventListener('keydown', handler)
   }, [undo, redo, removeNode, duplicateNode, copyNode, pasteNode, selectedNodeId])
 
+  // Auto-fit when nodes appear in bulk — AI generation, template load, or
+  // opening a saved workflow — so freshly created nodes never spawn off-screen.
+  // Single manual drag-drops and node moves/removals are left alone (their id
+  // set's net additions are 0 or 1 on a non-empty canvas), so the viewport
+  // isn't yanked while the user is editing.
+  const prevNodeIdsRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const current = new Set(nodes.map((n) => n.id))
+    const addedCount = [...current].filter((id) => !prevNodeIdsRef.current.has(id)).length
+    const wasEmpty = prevNodeIdsRef.current.size === 0
+    prevNodeIdsRef.current = current
+    if (nodes.length > 0 && (addedCount > 1 || (wasEmpty && addedCount > 0))) {
+      const t = setTimeout(() => reactFlowRef.current?.fitView({ padding: 0.3, duration: 400 }), 60)
+      return () => clearTimeout(t)
+    }
+  }, [nodes])
+
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
@@ -269,7 +286,7 @@ export function WorkflowCanvas() {
   }, [edges, nodes])
 
   return (
-    <div className="flex-1 relative">
+    <div className="flex-1 relative" style={{ background: 'var(--win)', minHeight: 0 }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -298,6 +315,15 @@ export function WorkflowCanvas() {
           style={{ width: 140, height: 90 }}
         />
       </ReactFlow>
+
+      {/* Edge vignette — softly fades content into the canvas background near the
+          pane edges, so a node that's partially scrolled past the edge dissolves
+          "off-screen" instead of looking hard-cropped. Non-interactive; painted
+          above the canvas but before the controls/overlays (DOM order). */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ boxShadow: 'inset 0 0 40px 8px var(--win)' }}
+      />
 
       {/* Empty canvas guidance */}
       {nodes.length === 0 && (

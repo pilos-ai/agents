@@ -4980,8 +4980,8 @@ describe('results_display node — output shape', () => {
 describe('mcp_tool node — direct tool output shape and variable resolution', () => {
   it('jira_search output accessible via dotted path', async () => {
     const { api: mockApi } = await import('../api')
-    vi.mocked(mockApi.jira.getIssues).mockResolvedValueOnce([
-      { key: 'KAN-1', summary: 'Fix bug', status: 'To Do', priority: 'High', id: '1', description: '' },
+    vi.mocked(mockApi.jira!.getIssues).mockResolvedValueOnce([
+      { key: 'KAN-1', summary: 'Fix bug', status: { name: 'To Do', categoryKey: 'new' }, priority: { name: 'High' }, id: '1', description: '', issuetype: { name: 'Task', subtask: false }, created: '2024-01-01', updated: '2024-01-01' },
     ])
     const ctx = makeCtx()
     await runNode(makeNode('t', 'mcp_tool', {
@@ -4995,9 +4995,9 @@ describe('mcp_tool node — direct tool output shape and variable resolution', (
 
   it('jira_search count used in downstream variable set', async () => {
     const { api: mockApi } = await import('../api')
-    vi.mocked(mockApi.jira.getIssues).mockResolvedValueOnce([
-      { key: 'KAN-2', summary: 'A', status: 'To Do', priority: 'High', id: '2', description: '' },
-      { key: 'KAN-3', summary: 'B', status: 'To Do', priority: 'High', id: '3', description: '' },
+    vi.mocked(mockApi.jira!.getIssues).mockResolvedValueOnce([
+      { key: 'KAN-2', summary: 'A', status: { name: 'To Do', categoryKey: 'new' }, priority: { name: 'High' }, id: '2', description: '', issuetype: { name: 'Task', subtask: false }, created: '2024-01-01', updated: '2024-01-01' },
+      { key: 'KAN-3', summary: 'B', status: { name: 'To Do', categoryKey: 'new' }, priority: { name: 'High' }, id: '3', description: '', issuetype: { name: 'Task', subtask: false }, created: '2024-01-01', updated: '2024-01-01' },
     ])
     const ctx = makeCtx()
     await runNode(makeNode('t', 'mcp_tool', {
@@ -5013,8 +5013,8 @@ describe('mcp_tool node — direct tool output shape and variable resolution', (
 
 describe('agent node — output shape and variable resolution after deepParseJsonStrings', () => {
   function mockAgentResult(resultJson: string) {
-    const listeners: Array<(e: unknown) => void> = []
-    vi.mocked(api.claude.onEvent).mockImplementation((cb: (e: unknown) => void) => {
+    const listeners: Array<(e: ClaudeEvent) => void> = []
+    vi.mocked(api.claude.onEvent).mockImplementation((cb: (e: ClaudeEvent) => void) => {
       listeners.push(cb)
       return () => {}
     })

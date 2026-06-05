@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Icon } from '../common/Icon'
+import { IconPicker } from '../common/IconPicker'
 import { GradientAvatar } from './components/GradientAvatar'
 import { AGENT_TEMPLATE_CATEGORIES, AGENT_COLORS, DEFAULT_CAPABILITIES } from '../../data/agent-templates'
 import { api } from '../../api'
@@ -12,6 +13,12 @@ interface AddAgentDialogProps {
   onClose: () => void
   onAdd: (agent: AgentDefinition) => void
   existingIds: string[]
+  /** When provided, the dialog opens in edit mode and pre-fills its custom
+   *  form from this agent. On save it calls `onUpdate` (the project store's
+   *  `updateProjectAgent`) instead of `onAdd`. When omitted, the dialog
+   *  behaves exactly as before (create flow). */
+  agent?: AgentDefinition | null
+  onUpdate?: (id: string, updates: Partial<AgentDefinition>) => void
 }
 
 type Tab = 'templates' | 'custom'
@@ -49,7 +56,8 @@ Rules:
 - icon must use the 'lucide:' prefix`
 }
 
-export function AddAgentDialog({ open, onClose, onAdd, existingIds }: AddAgentDialogProps) {
+export function AddAgentDialog({ open, onClose, onAdd, existingIds, agent, onUpdate }: AddAgentDialogProps) {
+  const isEdit = !!agent
   const [tab, setTab] = useState<Tab>('templates')
   const [search, setSearch] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
@@ -76,13 +84,24 @@ export function AddAgentDialog({ open, onClose, onAdd, existingIds }: AddAgentDi
   useEffect(() => {
     if (open) {
       setSearch('')
-      setTab('templates')
       setAiPrompt('')
       setAiError('')
       setIsGenerating(false)
-      setTimeout(() => searchRef.current?.focus(), 100)
+      if (agent) {
+        // Edit mode: jump straight to the custom form pre-filled from the agent.
+        setTab('custom')
+        setCustomName(agent.name)
+        setCustomRole(agent.role)
+        setCustomIcon(agent.icon || 'lucide:bot')
+        setCustomColor(agent.color || 'blue')
+        setCustomPersonality(agent.personality || '')
+        setCustomExpertise((agent.expertise || []).join(', '))
+      } else {
+        setTab('templates')
+        setTimeout(() => searchRef.current?.focus(), 100)
+      }
     }
-  }, [open])
+  }, [open, agent])
 
   // Clean up on unmount
   useEffect(() => {
@@ -205,17 +224,34 @@ export function AddAgentDialog({ open, onClose, onAdd, existingIds }: AddAgentDi
 
   const handleAddCustom = () => {
     if (!customName.trim() || !customRole.trim()) return
-    const agent: AgentDefinition = {
+    const expertise = customExpertise.split(',').map((s) => s.trim()).filter(Boolean)
+
+    if (isEdit && agent && onUpdate) {
+      // Edit mode: patch the existing agent in place, preserving its id,
+      // capabilities and model override.
+      onUpdate(agent.id, {
+        name: customName.trim(),
+        role: customRole.trim(),
+        icon: customIcon,
+        color: customColor,
+        personality: customPersonality.trim(),
+        expertise,
+      })
+      onClose()
+      return
+    }
+
+    const newAgent: AgentDefinition = {
       id: `custom-${Date.now()}`,
       name: customName.trim(),
       role: customRole.trim(),
       icon: customIcon,
       color: customColor,
       personality: customPersonality.trim(),
-      expertise: customExpertise.split(',').map((s) => s.trim()).filter(Boolean),
+      expertise,
       capabilities: { ...DEFAULT_CAPABILITIES },
     }
-    onAdd(agent)
+    onAdd(newAgent)
     onClose()
     // Reset form
     setCustomName('')
@@ -229,51 +265,49 @@ export function AddAgentDialog({ open, onClose, onAdd, existingIds }: AddAgentDi
   const lowerSearch = search.toLowerCase()
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-pilos-bg border border-pilos-border rounded-xl shadow-2xl w-[640px] max-h-[80vh] flex flex-col">
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }} onClick={onClose} />
+      <div
+        style={{
+          position: 'relative', width: 640, maxHeight: '80vh',
+          background: 'var(--win)',
+          border: '1px solid var(--line-3)',
+          borderRadius: 'var(--r-xl)',
+          boxShadow: 'var(--shadow-pop)',
+          display: 'flex', flexDirection: 'column',
+        }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-pilos-border">
-          <h2 className="text-sm font-bold text-white">Add Agent</h2>
-          <button onClick={onClose} className="p-1 text-zinc-500 hover:text-white rounded transition-colors">
-            <Icon icon="lucide:x" className="text-sm" />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--line-2)' }}>
+          <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)', margin: 0 }}>{isEdit ? 'Edit Agent' : 'Add Agent'}</h2>
+          <button type="button" onClick={onClose} className="mini-ico">
+            <Icon icon="lucide:x" style={{ fontSize: 14 }} />
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-pilos-border px-5">
-          <button
-            onClick={() => setTab('templates')}
-            className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
-              tab === 'templates' ? 'text-blue-400 border-blue-400' : 'text-zinc-500 border-transparent hover:text-white'
-            }`}
-          >
-            Templates
-          </button>
-          <button
-            onClick={() => setTab('custom')}
-            className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
-              tab === 'custom' ? 'text-blue-400 border-blue-400' : 'text-zinc-500 border-transparent hover:text-white'
-            }`}
-          >
-            Custom Agent
-          </button>
-        </div>
+        {/* Tabs — hidden in edit mode (a single agent is being edited) */}
+        {!isEdit && (
+          <div className="seg" style={{ margin: '10px 18px 4px', alignSelf: 'flex-start' }}>
+            <button type="button" onClick={() => setTab('templates')} className={tab === 'templates' ? 'on' : ''}>Templates</button>
+            <button type="button" onClick={() => setTab('custom')} className={tab === 'custom' ? 'on' : ''}>Custom Agent</button>
+          </div>
+        )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div style={{ flex: 1, overflowY: 'auto' }} className="custom-scrollbar">
           {tab === 'templates' ? (
-            <div className="p-5">
+            <div style={{ padding: 18 }}>
               {/* Search */}
-              <div className="relative mb-4">
-                <Icon icon="lucide:search" className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 text-xs" />
+              <div style={{ position: 'relative', marginBottom: 16 }}>
+                <Icon icon="lucide:search" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontSize: 12 }} />
                 <input
                   ref={searchRef}
                   type="text"
                   placeholder="Search templates..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 bg-pilos-card border border-pilos-border rounded-lg text-xs text-white placeholder-zinc-600 outline-none focus:border-blue-500/50"
+                  className="control"
+                  style={{ paddingLeft: 30 }}
                 />
               </div>
 
@@ -288,31 +322,33 @@ export function AddAgentDialog({ open, onClose, onAdd, existingIds }: AddAgentDi
                 if (filtered.length === 0) return null
 
                 return (
-                  <div key={cat.name} className="mb-5">
-                    <h3 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2">{cat.name}</h3>
-                    <div className="grid grid-cols-2 gap-2">
+                  <div key={cat.name} style={{ marginBottom: 18 }}>
+                    <h3 className="section-label" style={{ marginBottom: 8 }}>{cat.name}</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
                       {filtered.map((template) => {
                         const alreadyAdded = existingIds.includes(template.id)
                         return (
                           <button
+                            type="button"
                             key={template.id}
                             onClick={() => !alreadyAdded && handleAddTemplate(template)}
                             disabled={alreadyAdded}
-                            className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
-                              alreadyAdded
-                                ? 'border-pilos-border/50 opacity-40 cursor-not-allowed'
-                                : 'border-pilos-border hover:border-zinc-600 hover:bg-zinc-800/50'
-                            }`}
+                            className={'tile' + (alreadyAdded ? '' : ' hover')}
+                            style={{
+                              padding: 12, display: 'flex', alignItems: 'center', gap: 12,
+                              opacity: alreadyAdded ? 0.4 : 1,
+                              cursor: alreadyAdded ? 'not-allowed' : 'pointer',
+                            }}
                           >
                             <GradientAvatar gradient={template.color} icon={template.icon} size="sm" />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-xs font-bold text-white truncate">{template.name}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{template.name}</span>
                                 {alreadyAdded && (
-                                  <Icon icon="lucide:check" className="text-[10px] text-green-400 flex-shrink-0" />
+                                  <Icon icon="lucide:check" style={{ fontSize: 10, color: 'var(--ok)', flexShrink: 0 }} />
                                 )}
                               </div>
-                              <p className="text-[10px] text-zinc-500 truncate">{template.role}</p>
+                              <p className="muted" style={{ fontSize: 10.5, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{template.role}</p>
                             </div>
                           </button>
                         )
@@ -323,120 +359,127 @@ export function AddAgentDialog({ open, onClose, onAdd, existingIds }: AddAgentDi
               })}
             </div>
           ) : (
-            <div className="p-5 space-y-4 max-w-md">
+            <div style={{ padding: 18, maxWidth: 460 }}>
               {/* AI Generate Section */}
               {isPro ? (
-                <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg space-y-2">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Icon icon="lucide:sparkles" className="text-blue-400 text-xs" />
-                    <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wide">AI Generate</span>
+                <div className="msg-tile accent" style={{ marginBottom: 14 }}>
+                  <div className="msg-tile-head">
+                    <Icon icon="lucide:sparkles" style={{ fontSize: 12, color: 'var(--accent-2)' }} />
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--accent-2)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>AI Generate</span>
                   </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={aiPrompt}
-                      onChange={(e) => setAiPrompt(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault()
-                          handleGenerate()
-                        }
-                      }}
-                      placeholder="Describe the agent you need..."
-                      disabled={isGenerating}
-                      className="flex-1 px-3 py-1.5 bg-pilos-card border border-pilos-border rounded-lg text-xs text-white placeholder-zinc-600 outline-none focus:border-blue-500/50 disabled:opacity-50"
-                    />
-                    {isGenerating ? (
-                      <button
-                        onClick={handleCancelGenerate}
-                        className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
-                      >
-                        <Icon icon="lucide:square" className="text-[10px]" />
-                        Stop
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleGenerate}
-                        disabled={!aiPrompt.trim()}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shrink-0"
-                      >
-                        <Icon icon="lucide:sparkles" className="text-[10px]" />
-                        Generate
-                      </button>
-                    )}
-                  </div>
-                  {/* Suggestions */}
-                  {!aiPrompt && !isGenerating && (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {AI_SUGGESTIONS.map((s) => (
-                        <button
-                          key={s}
-                          onClick={() => setAiPrompt(s)}
-                          className="px-2 py-0.5 text-[10px] text-zinc-500 hover:text-blue-400 bg-zinc-800/50 hover:bg-blue-500/10 rounded transition-colors truncate max-w-[280px]"
-                        >
-                          {s}
+                  <div className="msg-tile-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        type="text"
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault()
+                            handleGenerate()
+                          }
+                        }}
+                        placeholder="Describe the agent you need..."
+                        disabled={isGenerating}
+                        className="control"
+                        style={{ flex: 1 }}
+                      />
+                      {isGenerating ? (
+                        <button type="button" onClick={handleCancelGenerate} className="btn sm">
+                          <Icon icon="lucide:square" style={{ fontSize: 10 }} />
+                          Stop
                         </button>
-                      ))}
+                      ) : (
+                        <button type="button" onClick={handleGenerate} disabled={!aiPrompt.trim()} className="btn sm primary">
+                          <Icon icon="lucide:sparkles" style={{ fontSize: 10 }} />
+                          Generate
+                        </button>
+                      )}
                     </div>
-                  )}
-                  {isGenerating && (
-                    <div className="flex items-center gap-2 text-[10px] text-blue-400">
-                      <div className="w-3 h-3 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" />
-                      Generating agent definition...
-                    </div>
-                  )}
-                  {aiError && (
-                    <p className="text-[10px] text-red-400">{aiError}</p>
-                  )}
+                    {!aiPrompt && !isGenerating && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {AI_SUGGESTIONS.map((s) => (
+                          <button
+                            type="button"
+                            key={s}
+                            onClick={() => setAiPrompt(s)}
+                            className="btn sm ghost"
+                            style={{ fontSize: 10, height: 22, padding: '0 8px' }}
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {isGenerating && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10.5, color: 'var(--accent-2)' }}>
+                        <div style={{ width: 12, height: 12, border: '2px solid rgba(96,165,250,0.3)', borderTopColor: 'var(--accent-2)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                        Generating agent definition...
+                      </div>
+                    )}
+                    {aiError && <p style={{ fontSize: 10.5, color: 'var(--err)', margin: 0 }}>{aiError}</p>}
+                  </div>
                 </div>
               ) : (
-                <div className="p-3 bg-zinc-800/30 border border-pilos-border rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <Icon icon="lucide:sparkles" className="text-zinc-600 text-xs" />
-                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide">AI Generate</span>
-                    <span className="px-1.5 py-0.5 text-[9px] font-bold bg-amber-500/15 text-amber-400 rounded ml-auto">PRO</span>
+                <div className="tile" style={{ padding: 12, marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Icon icon="lucide:sparkles" style={{ fontSize: 12, color: 'var(--muted)' }} />
+                    <span className="section-label" style={{ margin: 0 }}>AI Generate</span>
+                    <span className="tag pro" style={{ marginLeft: 'auto' }}>PRO</span>
                   </div>
-                  <p className="text-[10px] text-zinc-600 mt-1">Upgrade to Pro to generate agent configurations with AI.</p>
+                  <p className="muted" style={{ fontSize: 10.5, marginTop: 6, marginBottom: 0 }}>Upgrade to Pro to generate agent configurations with AI.</p>
                 </div>
               )}
 
               {/* Name */}
-              <div>
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide mb-1 block">Name</label>
+              <div className="field">
+                <label>Name</label>
                 <input
                   type="text"
                   value={customName}
                   onChange={(e) => setCustomName(e.target.value)}
                   placeholder="e.g. QA, DevOps, Data Engineer"
-                  className="w-full px-3 py-2 bg-pilos-card border border-pilos-border rounded-lg text-xs text-white placeholder-zinc-600 outline-none focus:border-blue-500/50"
+                  className="control"
                 />
               </div>
 
               {/* Role */}
-              <div>
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide mb-1 block">Role</label>
+              <div className="field">
+                <label>Role</label>
                 <input
                   type="text"
                   value={customRole}
                   onChange={(e) => setCustomRole(e.target.value)}
                   placeholder="e.g. Quality Assurance Engineer"
-                  className="w-full px-3 py-2 bg-pilos-card border border-pilos-border rounded-lg text-xs text-white placeholder-zinc-600 outline-none focus:border-blue-500/50"
+                  className="control"
                 />
               </div>
 
+              {/* Icon */}
+              <div className="field">
+                <label>Icon</label>
+                <IconPicker value={customIcon} onChange={setCustomIcon} />
+              </div>
+
               {/* Color */}
-              <div>
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide mb-1 block">Color</label>
-                <div className="flex gap-2 flex-wrap">
+              <div className="field">
+                <label>Color</label>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {COLOR_OPTIONS.map((c) => {
-                    const styles = AGENT_COLORS[c]
+                    void AGENT_COLORS[c]
                     return (
                       <button
+                        type="button"
                         key={c}
                         onClick={() => setCustomColor(c)}
-                        className={`w-7 h-7 rounded-lg border-2 transition-all ${styles.bgLight} ${
-                          customColor === c ? 'border-white scale-110' : 'border-transparent hover:border-zinc-600'
-                        }`}
+                        className={'cav cav-grad-' + c}
+                        style={{
+                          width: 28, height: 28, borderRadius: 8, padding: 0,
+                          border: customColor === c ? '2px solid var(--ink)' : '2px solid transparent',
+                          transform: customColor === c ? 'scale(1.08)' : 'none',
+                          transition: 'transform 0.15s, border-color 0.15s',
+                          cursor: 'pointer',
+                        }}
                         title={c}
                       />
                     )
@@ -445,36 +488,36 @@ export function AddAgentDialog({ open, onClose, onAdd, existingIds }: AddAgentDi
               </div>
 
               {/* Personality */}
-              <div>
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide mb-1 block">Personality / System Prompt</label>
+              <div className="field">
+                <label>Personality / System Prompt</label>
                 <textarea
                   value={customPersonality}
                   onChange={(e) => setCustomPersonality(e.target.value)}
                   placeholder="Describe how this agent should behave..."
                   rows={3}
-                  className="w-full px-3 py-2 bg-pilos-card border border-pilos-border rounded-lg text-xs text-white placeholder-zinc-600 outline-none focus:border-blue-500/50 resize-none"
+                  className="control"
                 />
               </div>
 
               {/* Expertise */}
-              <div>
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide mb-1 block">Expertise (comma-separated)</label>
+              <div className="field">
+                <label>Expertise (comma-separated)</label>
                 <input
                   type="text"
                   value={customExpertise}
                   onChange={(e) => setCustomExpertise(e.target.value)}
                   placeholder="e.g. testing, automation, CI/CD"
-                  className="w-full px-3 py-2 bg-pilos-card border border-pilos-border rounded-lg text-xs text-white placeholder-zinc-600 outline-none focus:border-blue-500/50"
+                  className="control"
                 />
               </div>
 
               {/* Preview */}
               {customName && (
-                <div className="flex items-center gap-3 p-3 rounded-lg border border-pilos-border bg-pilos-card/50">
+                <div className="tile" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12 }}>
                   <GradientAvatar gradient={customColor} icon={customIcon} size="sm" />
                   <div>
-                    <span className="text-xs font-bold text-white">{customName}</span>
-                    <p className="text-[10px] text-zinc-500">{customRole || 'Custom Agent'}</p>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink)' }}>{customName}</span>
+                    <p className="muted" style={{ fontSize: 10.5, margin: 0 }}>{customRole || 'Custom Agent'}</p>
                   </div>
                 </div>
               )}
@@ -484,19 +527,15 @@ export function AddAgentDialog({ open, onClose, onAdd, existingIds }: AddAgentDi
 
         {/* Footer */}
         {tab === 'custom' && (
-          <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-pilos-border">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, padding: '12px 18px', borderTop: '1px solid var(--line-2)' }}>
+            <button type="button" onClick={onClose} className="btn sm ghost">Cancel</button>
             <button
-              onClick={onClose}
-              className="px-4 py-2 text-zinc-500 hover:text-white text-xs font-medium transition-colors"
-            >
-              Cancel
-            </button>
-            <button
+              type="button"
               onClick={handleAddCustom}
               disabled={!customName.trim() || !customRole.trim()}
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-xs font-bold rounded-lg shadow-lg shadow-blue-600/20 transition-all"
+              className="btn primary"
             >
-              Add Agent
+              {isEdit ? 'Save' : 'Add Agent'}
             </button>
           </div>
         )}

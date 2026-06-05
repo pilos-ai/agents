@@ -1,3 +1,9 @@
+/**
+ * MarkdownRenderer — renders markdown inside a `.ctext` flow so it inherits
+ * the prototype's text colour / typography. Inline `<code>` adopts the
+ * prototype's `.cmsg .ctext code` chip styling; code fences delegate to the
+ * restyled CodeBlock.
+ */
 import { useMemo, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -27,7 +33,7 @@ export function MarkdownRenderer({ content }: Props) {
             <a
               href={href}
               onClick={handleLinkClick}
-              className="text-blue-400 hover:text-blue-300 underline cursor-pointer"
+              style={{ color: 'var(--accent-2)', textDecoration: 'underline', cursor: 'pointer' }}
               title={href}
               {...props}
             >
@@ -40,11 +46,8 @@ export function MarkdownRenderer({ content }: Props) {
           const isInline = !match && !className
 
           if (isInline) {
-            return (
-              <code className={className} {...props}>
-                {children}
-              </code>
-            )
+            // .cmsg .ctext code styling kicks in automatically.
+            return <code {...props}>{children}</code>
           }
 
           return (

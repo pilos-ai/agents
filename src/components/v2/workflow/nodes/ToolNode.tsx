@@ -26,7 +26,7 @@ export function ToolNode({ data, selected }: ToolNodeProps) {
   const si = statusIcon[execStatus]
 
   return (
-    <div className={`w-[180px] bg-pilos-card border-2 rounded-lg transition-all ${border}`}>
+    <div className={`w-[200px] bg-pilos-card border-2 rounded-lg transition-all ${border}`}>
       <Handle type="target" position={Position.Top} className="!w-2.5 !h-2.5 !bg-blue-500 !border-2 !border-pilos-bg" />
 
       <div className="px-3 py-2.5">

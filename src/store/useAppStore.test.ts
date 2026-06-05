@@ -41,8 +41,19 @@ beforeEach(() => {
 
 describe('setActiveView', () => {
   it('updates activeView', () => {
+    useAppStore.getState().setActiveView('workflows')
+    expect(useAppStore.getState().activeView).toBe('workflows')
+  })
+
+  it('migrates legacy view names to their current equivalents', () => {
     useAppStore.getState().setActiveView('tasks')
-    expect(useAppStore.getState().activeView).toBe('tasks')
+    expect(useAppStore.getState().activeView).toBe('workflows')
+
+    useAppStore.getState().setActiveView('results')
+    expect(useAppStore.getState().activeView).toBe('runs')
+
+    useAppStore.getState().setActiveView('config')
+    expect(useAppStore.getState().activeView).toBe('agents')
   })
 
   it('can be set to any string view', () => {

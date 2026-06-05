@@ -1,7 +1,33 @@
+/**
+ * MCP page — pixel-faithful port of pilos-handoff/app/screen_mcp.jsx.
+ *
+ * Layout: 3-column grid of `.tile` cards, each with logo + name + description +
+ * switch (`.switch.on`), Edit/Configure buttons. Wired to the real per-project
+ * MCP server state in `useProjectStore`. Switch toggles `mcpServer.enabled`.
+ *
+ * The prototype showed a catalog of available servers too; we keep that idea
+ * by combining the project's configured servers with the
+ * `MCP_SERVER_TEMPLATES` catalog — adding a template flips it on for the
+ * project.
+ */
+import { useMemo, useState } from 'react'
+import { McpIcon } from '../../mcp/McpIcon'
+import { useProjectStore } from '../../../store/useProjectStore'
+import { MCP_SERVER_TEMPLATES } from '../../../data/mcp-server-templates'
+import { IconMcp, IconPlus, IconChevR } from '../PilosIcons'
 import { Icon } from '../../common/Icon'
 import { McpServerManager } from '../../mcp/McpServerManager'
-import { useProjectStore } from '../../../store/useProjectStore'
 import type { McpServer } from '../../../types'
+
+type FilterTab = 'All' | 'Connected' | 'Available'
+
+function Switch({ on, onClick }: { on: boolean; onClick: () => void }) {
+  return (
+    <button className={'switch' + (on ? ' on' : '')} onClick={onClick} aria-label="Toggle">
+      <span className="knob" />
+    </button>
+  )
+}
 
 export default function McpPage() {
   const openProjects = useProjectStore((s) => s.openProjects)
@@ -15,112 +41,171 @@ export default function McpPage() {
   const mcpServers = activeProject?.mcpServers || []
   const enabledCount = mcpServers.filter((s) => s.enabled).length
 
+  const [filter, setFilter] = useState<FilterTab>('All')
+  const [showManager, setShowManager] = useState(false)
+
+  // Combine project's configured servers + remaining template suggestions.
+  type Card = { id: string; name: string; description: string; icon: string; configured: McpServer | null }
+  const cards: Card[] = useMemo(() => {
+    const configuredIds = new Set(mcpServers.map((s) => s.id))
+    const configured: Card[] = mcpServers.map((s) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      icon: s.icon,
+      configured: s,
+    }))
+    const suggestions: Card[] = MCP_SERVER_TEMPLATES
+      .filter((t) => !configuredIds.has(t.id) && !mcpServers.some((s) => s.name.toLowerCase() === t.name.toLowerCase()))
+      .map((t) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        icon: t.icon,
+        configured: null,
+      }))
+    return [...configured, ...suggestions]
+  }, [mcpServers])
+
+  const visible = cards.filter((c) => {
+    if (filter === 'All') return true
+    if (filter === 'Connected') return c.configured?.enabled
+    return !c.configured
+  })
+
+  const handleToggle = (card: Card) => {
+    if (card.configured) {
+      toggleProjectMcpServer(card.configured.id)
+    } else {
+      // Find the template and add it (enabled by default)
+      const tmpl = MCP_SERVER_TEMPLATES.find((t) => t.id === card.id)
+      if (!tmpl) return
+      if (tmpl.config.type !== 'stdio') return
+      addProjectMcpServer({
+        id: crypto.randomUUID(),
+        name: tmpl.name,
+        icon: tmpl.icon,
+        description: tmpl.description,
+        enabled: true,
+        config: {
+          type: 'stdio',
+          command: tmpl.config.command,
+          args: tmpl.config.args,
+          env: tmpl.config.env,
+        },
+      })
+    }
+  }
+
   if (!activeProjectPath) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          <Icon icon="lucide:folder-open" className="text-zinc-800 text-3xl mx-auto mb-3" />
-          <h3 className="text-sm font-medium text-zinc-500 mb-1">No project open</h3>
-          <p className="text-xs text-zinc-600">Open a project to manage MCP servers</p>
+      <div className="main">
+        <div className="main-head">
+          <div className="main-title">
+            <IconMcp size={17} style={{ color: 'var(--ink-3)' }} />
+            MCP Servers
+          </div>
+        </div>
+        <div className="main-body" style={{ display: 'grid', placeItems: 'center' }}>
+          <div style={{ textAlign: 'center' }}>
+            <Icon icon="lucide:folder-open" style={{ fontSize: 32, color: 'var(--faint)', display: 'inline-block', marginBottom: 10 }} />
+            <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-2)', margin: 0 }}>No project open</h3>
+            <p className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>Open a project to manage MCP servers</p>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex-1 overflow-y-auto custom-scrollbar">
-      <div className="max-w-3xl mx-auto px-6 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-emerald-600 to-teal-700 rounded-xl flex items-center justify-center">
-              <Icon icon="lucide:puzzle" className="text-white text-lg" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">MCP Registry</h1>
-              <p className="text-xs text-zinc-500">Model Context Protocol servers extend what Claude can do</p>
-            </div>
-          </div>
+    <div className="main">
+      <div className="main-head">
+        <div className="main-title">
+          <IconMcp size={17} style={{ color: 'var(--ink-3)' }} />
+          MCP Servers
         </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="p-3 bg-pilos-card border border-pilos-border rounded-lg">
-            <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider block mb-1">Total Servers</span>
-            <span className="text-xl font-bold text-white font-mono">{mcpServers.length}</span>
-          </div>
-          <div className="p-3 bg-pilos-card border border-pilos-border rounded-lg">
-            <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider block mb-1">Active</span>
-            <span className="text-xl font-bold text-emerald-400 font-mono">{enabledCount}</span>
-          </div>
-          <div className="p-3 bg-pilos-card border border-pilos-border rounded-lg">
-            <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider block mb-1">Disabled</span>
-            <span className="text-xl font-bold text-zinc-500 font-mono">{mcpServers.length - enabledCount}</span>
-          </div>
+        <div className="main-sub">
+          · {enabledCount} connected · {cards.length} available
         </div>
-
-        {/* Auto-injected info */}
-        <div className="mb-6 p-3 bg-blue-500/5 border border-blue-500/15 rounded-lg">
-          <div className="flex items-start gap-2.5">
-            <Icon icon="lucide:zap" className="text-blue-400 text-sm mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-xs font-medium text-blue-300 mb-1">Auto-Injected Tools</p>
-              <p className="text-[11px] text-zinc-400 leading-relaxed">
-                Jira MCP is automatically available when connected via Integrations. Computer Use MCP activates when enabled in Settings. These don't appear in the list below — they're injected at runtime.
-              </p>
-            </div>
+        <div className="main-actions">
+          <div className="seg">
+            {(['All', 'Connected', 'Available'] as FilterTab[]).map((f) => (
+              <button
+                key={f}
+                className={filter === f ? 'on' : ''}
+                onClick={() => setFilter(f)}
+              >
+                {f}
+              </button>
+            ))}
           </div>
+          <button className="btn sm primary" onClick={() => setShowManager((v) => !v)}>
+            <IconPlus size={14} />
+            Add server
+          </button>
         </div>
+      </div>
 
-        {/* Server Manager */}
-        <div className="bg-pilos-card border border-pilos-border rounded-xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-bold text-white">Configured Servers</h2>
-            <span className="text-[10px] text-zinc-500">
-              Project: <span className="text-zinc-300">{activeProject?.projectName}</span>
-            </span>
-          </div>
-          <McpServerManager
-            servers={mcpServers}
-            onAdd={(server: McpServer) => addProjectMcpServer(server)}
-            onRemove={(id: string) => removeProjectMcpServer(id)}
-            onUpdate={(id: string, updates: Partial<McpServer>) => updateProjectMcpServer(id, updates)}
-            onToggle={(id: string) => toggleProjectMcpServer(id)}
-          />
-        </div>
+      <div className="main-body scroll">
+        <div className="pad">
+          {showManager && (
+            <div className="tile" style={{ marginBottom: 16 }}>
+              <McpServerManager
+                servers={mcpServers}
+                onAdd={(server: McpServer) => addProjectMcpServer(server)}
+                onRemove={(id: string) => removeProjectMcpServer(id)}
+                onUpdate={(id: string, updates: Partial<McpServer>) => updateProjectMcpServer(id, updates)}
+                onToggle={(id: string) => toggleProjectMcpServer(id)}
+              />
+            </div>
+          )}
 
-        {/* How it works */}
-        <div className="mt-6 p-4 bg-pilos-card border border-pilos-border rounded-xl">
-          <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">How MCP Works</h3>
-          <div className="space-y-3">
-            <div className="flex items-start gap-3">
-              <div className="w-6 h-6 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span className="text-[10px] font-bold text-blue-400">1</span>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-zinc-300">Add a server</p>
-                <p className="text-[10px] text-zinc-500">Pick from templates (GitHub, Supabase, Filesystem) or add a custom stdio/http server</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-6 h-6 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span className="text-[10px] font-bold text-blue-400">2</span>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-zinc-300">Configure credentials</p>
-                <p className="text-[10px] text-zinc-500">Set API keys, tokens, or connection details. These are stored per-project.</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-6 h-6 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span className="text-[10px] font-bold text-blue-400">3</span>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-zinc-300">Tools become available</p>
-                <p className="text-[10px] text-zinc-500">Claude discovers tools from enabled servers automatically. Use them in conversations and workflows.</p>
-              </div>
-            </div>
+          <div className="grid-cards gc-3">
+            {visible.map((c) => {
+              const on = !!c.configured?.enabled
+              return (
+                <div key={c.id} className="tile hover">
+                  <div className="tile-head">
+                    <div className="tile-logo">
+                      <McpIcon icon={c.icon} className="w-6 h-6" />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="tile-nm">{c.name}</div>
+                      <div className="tile-desc">{c.description}</div>
+                    </div>
+                    <Switch on={on} onClick={() => handleToggle(c)} />
+                  </div>
+                  <div className="tile-foot">
+                    <span className={'tag ' + (on ? 'ok' : '')}>
+                      {on ? (
+                        <>
+                          <span className="li-dot dot-ok" style={{ width: 6, height: 6 }} />
+                          connected
+                        </>
+                      ) : c.configured ? (
+                        'disabled'
+                      ) : (
+                        'not connected'
+                      )}
+                    </span>
+                    <button
+                      className="btn sm ghost"
+                      onClick={() => setShowManager(true)}
+                    >
+                      Configure
+                      <IconChevR size={13} />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
+
+          {visible.length === 0 && (
+            <div className="tile" style={{ textAlign: 'center', padding: 32 }}>
+              <p className="muted" style={{ fontSize: 12.5 }}>No matching servers</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
