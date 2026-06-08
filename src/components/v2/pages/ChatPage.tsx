@@ -386,23 +386,36 @@ function ChatComposer({ mode }: { mode: 'solo' | 'team' }) {
       .slice(0, 8)
   }, [mentionOpen, mentionQuery, projectAgents])
 
+  // Track the last query so we only reset the selection index when the query
+  // actually changes — otherwise arrow-key navigation gets clobbered on every
+  // keystroke (onKeyUp fires `refreshMentionState` after onKeyDown bumped the
+  // index, and an unconditional reset would snap it back to 0).
+  const prevMentionQueryRef = useRef<string | null>(null)
+
   // Detect whether the caret is inside an @-mention token, capture the query.
   const refreshMentionState = useCallback((nextVal: string, caret: number) => {
     // Scan backwards from caret looking for `@` not preceded by a word char.
     const before = nextVal.slice(0, caret)
     const at = before.lastIndexOf('@')
-    if (at < 0) { setMentionOpen(false); return }
+    const closePicker = () => {
+      setMentionOpen(false)
+      prevMentionQueryRef.current = null
+    }
+    if (at < 0) { closePicker(); return }
     const charBeforeAt = at > 0 ? before[at - 1] : ''
     if (charBeforeAt && /\S/.test(charBeforeAt) && !/[\s]/.test(charBeforeAt)) {
       // `@` is glued to text → not a mention trigger (e.g. email)
-      setMentionOpen(false)
+      closePicker()
       return
     }
     const query = before.slice(at + 1)
-    if (/\s/.test(query)) { setMentionOpen(false); return }
+    if (/\s/.test(query)) { closePicker(); return }
     setMentionOpen(true)
     setMentionQuery(query)
-    setMentionIndex(0)
+    if (prevMentionQueryRef.current !== query) {
+      prevMentionQueryRef.current = query
+      setMentionIndex(0)
+    }
   }, [])
 
   // Replace the active @-query token with `@AgentName ` and close the picker.
