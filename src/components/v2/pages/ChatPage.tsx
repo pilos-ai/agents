@@ -354,6 +354,11 @@ function ChatComposer({ mode }: { mode: 'solo' | 'team' }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  // @-mention autocomplete state
+  const [mentionOpen, setMentionOpen] = useState(false)
+  const [mentionQuery, setMentionQuery] = useState('')
+  const [mentionIndex, setMentionIndex] = useState(0)
+
   const sendMessage = useConversationStore((s) => s.sendMessage)
   const queueMessage = useConversationStore((s) => s.queueMessage)
   const isWaitingForResponse = useConversationStore((s) => s.isWaitingForResponse)
@@ -365,6 +370,60 @@ function ChatComposer({ mode }: { mode: 'solo' | 'team' }) {
   const replyToMessage = useConversationStore((s) => s.replyToMessage)
   const setReplyTo = useConversationStore((s) => s.setReplyTo)
   const isLoading = isWaitingForResponse || isStreaming
+
+  // Project agents — used for @-mention autocomplete
+  const projectAgents = useProjectStore((s) => {
+    const tab = s.openProjects.find((p) => p.projectPath === s.activeProjectPath)
+    return tab?.agents || []
+  })
+
+  // Filter agents by current mention query (case-insensitive prefix on name OR role)
+  const mentionMatches = useMemo(() => {
+    if (!mentionOpen) return [] as typeof projectAgents
+    const q = mentionQuery.toLowerCase()
+    return projectAgents
+      .filter((a) => a.name.toLowerCase().includes(q) || a.role.toLowerCase().includes(q))
+      .slice(0, 8)
+  }, [mentionOpen, mentionQuery, projectAgents])
+
+  // Detect whether the caret is inside an @-mention token, capture the query.
+  const refreshMentionState = useCallback((nextVal: string, caret: number) => {
+    // Scan backwards from caret looking for `@` not preceded by a word char.
+    const before = nextVal.slice(0, caret)
+    const at = before.lastIndexOf('@')
+    if (at < 0) { setMentionOpen(false); return }
+    const charBeforeAt = at > 0 ? before[at - 1] : ''
+    if (charBeforeAt && /\S/.test(charBeforeAt) && !/[\s]/.test(charBeforeAt)) {
+      // `@` is glued to text → not a mention trigger (e.g. email)
+      setMentionOpen(false)
+      return
+    }
+    const query = before.slice(at + 1)
+    if (/\s/.test(query)) { setMentionOpen(false); return }
+    setMentionOpen(true)
+    setMentionQuery(query)
+    setMentionIndex(0)
+  }, [])
+
+  // Replace the active @-query token with `@AgentName ` and close the picker.
+  const insertMention = useCallback((agentName: string) => {
+    const el = textareaRef.current
+    if (!el) return
+    const caret = el.selectionStart ?? val.length
+    const before = val.slice(0, caret)
+    const at = before.lastIndexOf('@')
+    if (at < 0) return
+    const replacement = `@${agentName} `
+    const next = val.slice(0, at) + replacement + val.slice(caret)
+    setVal(next)
+    setMentionOpen(false)
+    // Restore caret after the inserted mention
+    queueMicrotask(() => {
+      const pos = at + replacement.length
+      el.focus()
+      el.setSelectionRange(pos, pos)
+    })
+  }, [val])
 
   // Auto-grow textarea
   useEffect(() => {
@@ -436,8 +495,62 @@ function ChatComposer({ mode }: { mode: 'solo' | 'team' }) {
                   : 'Message Claude…'
             }
             value={val}
-            onChange={(e) => setVal(e.target.value)}
+            onChange={(e) => {
+              setVal(e.target.value)
+              refreshMentionState(e.target.value, e.target.selectionStart ?? e.target.value.length)
+            }}
+            onKeyUp={(e) => {
+              // Catch caret moves (arrow keys, click) that don't fire onChange
+              const t = e.currentTarget
+              refreshMentionState(t.value, t.selectionStart ?? t.value.length)
+            }}
+            onClick={(e) => {
+              const t = e.currentTarget
+              refreshMentionState(t.value, t.selectionStart ?? t.value.length)
+            }}
+            onBlur={() => {
+              // Delay so a mouse click on a menu item can fire first
+              setTimeout(() => setMentionOpen(false), 120)
+            }}
+            onPaste={(e) => {
+              // Pull image/PDF files out of the clipboard. The global
+              // `paste:text` IPC handler (App.tsx) only handles plain text;
+              // images need to be picked up here from the native paste event.
+              const files: File[] = []
+              for (const item of Array.from(e.clipboardData.items)) {
+                if (item.kind !== 'file') continue
+                const f = item.getAsFile()
+                if (f && ACCEPTED_TYPES.includes(f.type)) files.push(f)
+              }
+              if (files.length > 0) {
+                e.preventDefault()
+                void addFiles(files)
+              }
+            }}
             onKeyDown={(e) => {
+              // Mention picker keyboard nav takes precedence
+              if (mentionOpen && mentionMatches.length > 0) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault()
+                  setMentionIndex((i) => (i + 1) % mentionMatches.length)
+                  return
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault()
+                  setMentionIndex((i) => (i - 1 + mentionMatches.length) % mentionMatches.length)
+                  return
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  e.preventDefault()
+                  insertMention(mentionMatches[mentionIndex].name)
+                  return
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  setMentionOpen(false)
+                  return
+                }
+              }
               if (e.key === 'Escape' && replyToMessage && !val) {
                 e.preventDefault()
                 setReplyTo(null)
@@ -451,6 +564,62 @@ function ChatComposer({ mode }: { mode: 'solo' | 'team' }) {
             }}
             disabled={!activeConversationId}
           />
+          {mentionOpen && mentionMatches.length > 0 && (
+            <div
+              role="listbox"
+              aria-label="Mention an agent"
+              style={{
+                position: 'absolute',
+                left: 12,
+                bottom: 'calc(100% + 6px)',
+                minWidth: 220,
+                maxWidth: 320,
+                background: 'var(--surface)',
+                border: '1px solid var(--line-2)',
+                borderRadius: 10,
+                boxShadow: '0 12px 32px -8px rgba(0,0,0,0.45)',
+                padding: 4,
+                zIndex: 50,
+              }}
+            >
+              {mentionMatches.map((a, i) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  role="option"
+                  aria-selected={i === mentionIndex}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => insertMention(a.name)}
+                  onMouseEnter={() => setMentionIndex(i)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: 7,
+                    border: 'none',
+                    background: i === mentionIndex ? 'var(--accent-soft)' : 'transparent',
+                    color: 'var(--ink)',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    fontSize: 12.5,
+                  }}
+                >
+                  <span
+                    className={'cav ' + (AGENT_GRAD[a.color] || 'cav-grad-claude')}
+                    style={{ width: 22, height: 22, borderRadius: 6, fontSize: 10, flex: 'none' }}
+                  >
+                    {a.name.slice(0, 2).toUpperCase()}
+                  </span>
+                  <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                    <span style={{ fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                    <span style={{ fontSize: 11, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.role}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="composer-row">
             <div className="left">
               <button type="button" className="mini-ico" title="Attach" onClick={() => fileInputRef.current?.click()}>
@@ -461,8 +630,22 @@ function ChatComposer({ mode }: { mode: 'solo' | 'team' }) {
                 className="mini-ico"
                 title="Mention agent"
                 onClick={() => {
-                  setVal((v) => (v.endsWith(' ') || v.length === 0 ? v + '@' : v + ' @'))
-                  textareaRef.current?.focus()
+                  const el = textareaRef.current
+                  if (!el) return
+                  const caret = el.selectionStart ?? val.length
+                  const before = val.slice(0, caret)
+                  const after = val.slice(caret)
+                  const needsSpace = before.length > 0 && !/\s$/.test(before)
+                  const insert = needsSpace ? ' @' : '@'
+                  const next = before + insert + after
+                  setVal(next)
+                  queueMicrotask(() => {
+                    el.focus()
+                    const pos = before.length + insert.length
+                    el.setSelectionRange(pos, pos)
+                    // Trigger mention picker for the newly inserted @
+                    refreshMentionState(next, pos)
+                  })
                 }}
               >
                 <IconAt size={16} />

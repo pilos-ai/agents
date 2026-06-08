@@ -901,6 +901,7 @@ html.embed body {
   border-radius: var(--r-lg);
   padding: 12px 14px;
   transition: border-color 0.15s, box-shadow 0.15s;
+  position: relative; /* anchor for @-mention dropdown */
 }
 .composer-box:focus-within { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); }
 .composer-box textarea {
