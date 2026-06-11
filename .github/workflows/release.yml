@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - 'v*'
+  # Manual trigger for testing CI changes without pushing a release tag.
+  # When run via dispatch there is no tag, so `-p always` will skip publishing.
+  workflow_dispatch:
 
 permissions:
   contents: write
