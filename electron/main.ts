@@ -98,14 +98,20 @@ app.on('open-url', (event, url) => {
   handleDeepLink(url)
 })
 
-// Windows/Linux: second launch with the URL in argv — focus the running window and route the URL.
+// Second launch (Windows/Linux URL routing, or user re-clicking the dock/icon
+// when the prior instance is hidden/zombied). Always make a window visible —
+// if the existing one is gone (closed-to-tray crash, destroyed) we recreate.
+// Without this, a stale prior instance silently swallows the launch and the
+// user sees the new icon "do nothing" / "crash on open".
 app.on('second-instance', (_event, argv) => {
   const url = findProtocolUrlInArgv(argv)
   if (url) handleDeepLink(url)
-  if (mainWindow) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.show()
     mainWindow.focus()
+  } else {
+    createWindow()
   }
 })
 
