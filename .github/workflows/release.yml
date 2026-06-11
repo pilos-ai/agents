@@ -44,6 +44,13 @@ jobs:
           node-version: 22
           cache: npm
 
+      # Set up MSVC dev environment so node-gyp can rebuild node-pty against
+      # Electron's Node ABI. The GitHub runner has VS Build Tools installed but
+      # node-gyp's legacy `find-visualstudio.js` fails to locate them; this
+      # action exports the same env vars `vcvarsall.bat` would set.
+      - if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - run: npm ci
 
       - name: Build and publish
