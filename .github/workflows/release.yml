@@ -19,7 +19,7 @@ jobs:
         include:
           - os: macos-latest
             platform: --mac
-          - os: windows-latest
+          - os: windows-2022
             platform: --win
           - os: ubuntu-latest
             platform: --linux
@@ -48,13 +48,16 @@ jobs:
           cache: npm
 
       # Set up MSVC dev environment so node-gyp can rebuild node-pty against
-      # Electron's Node ABI. The GitHub runner has VS Build Tools installed but
-      # node-gyp's legacy `find-visualstudio.js` fails to locate them; this
-      # action exports the same env vars `vcvarsall.bat` would set.
-      - if: matrix.os == 'windows-latest'
+      # Electron's Node ABI. windows-2022 has VS 2022 Build Tools preinstalled
+      # but node-gyp's legacy `find-visualstudio.js` PowerShell scan can fail
+      # to enumerate them; this action exports vcvarsall.bat's env vars.
+      - if: startsWith(matrix.os, 'windows')
         uses: ilammy/msvc-dev-cmd@v1
 
       - run: npm ci
+        env:
+          # Force node-gyp to skip its VS auto-detect and use VS 2022 directly.
+          npm_config_msvs_version: '2022'
 
       - name: Build and publish
         run: npm run build && npx electron-builder ${{ matrix.platform }} -p always
