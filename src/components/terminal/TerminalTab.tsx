@@ -78,10 +78,25 @@ export function TerminalTab({ id, cwd }: Props) {
     })
     resizeObserver.observe(containerRef.current)
 
+    // Right-click → custom context menu (spell-check + copy/paste). Mirrors the
+    // listener the v4.1.x TerminalPage had before the v2 rewrite stripped it.
+    const host = containerRef.current
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault()
+      const selection = term.getSelection() || ''
+      window.api.shell?.showContextMenu?.(selection, false)
+    }
+    host.addEventListener('contextmenu', onContextMenu)
+
     return () => {
+      host.removeEventListener('contextmenu', onContextMenu)
       unsubData()
       resizeObserver.disconnect()
       term.dispose()
+      // Reap the PTY on the electron side — otherwise closing a tab (or
+      // remounting on project switch) leaks the shell process. v2 rewrite
+      // dropped this call.
+      api.terminal.destroy(id).catch(() => {})
     }
   }, [id, fontSize])
 

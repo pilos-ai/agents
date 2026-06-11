@@ -27,6 +27,13 @@ export class TerminalManager {
     this.mainWindow = mainWindow
   }
 
+  // Re-target events to a freshly-created window when macOS `activate` rebuilds
+  // it. Without this, after the user closes and re-opens the app from the dock,
+  // every onData/onExit `webContents.send` would target the destroyed window.
+  setMainWindow(mainWindow: BrowserWindow): void {
+    this.mainWindow = mainWindow
+  }
+
   async create(id: string, options: PtyOptions = {}): Promise<void> {
     // Dynamic import for native module
     const pty = require('node-pty')

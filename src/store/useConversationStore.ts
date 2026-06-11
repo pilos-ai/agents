@@ -266,11 +266,18 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     set((s) => {
       const updated = { ...s.bgSessions }
       if (id) delete updated[id] // it's now the active conversation
+      // Restore the partial streaming text we stashed on the prior switch so the
+      // user doesn't see the dots without the text they were reading. The
+      // remaining streaming fields (contentBlocks, thinking, _turnTokens, etc.)
+      // stay empty — only the visible body of the current turn is preserved.
+      const restoredStreaming = bg
+        ? { ...emptyStreaming, isStreaming: true, text: bg.streamingText }
+        : { ...emptyStreaming }
       return {
         bgSessions: updated,
         activeConversationId: id,
         messages: [],
-        streaming: { ...emptyStreaming },
+        streaming: restoredStreaming,
         hasActiveSession: inProgress,
         isWaitingForResponse: inProgress,
         isLoadingMessages: !!id,

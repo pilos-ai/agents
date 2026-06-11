@@ -29,6 +29,16 @@ import type { JiraOAuthLike } from './types/pm'
 
 type SpellParams = { misspelledWord: string; suggestions: string[] } | null
 
+// Cache of refs created on first registration. macOS `activate` can call
+// `createWindow()` (and therefore `registerIpcHandlers`) a second time after the
+// last window is closed; without this guard, every `ipcMain.handle(...)` in the
+// child register* calls throws "Attempted to register a second handler".
+let registeredRefs: {
+  claudeProcess: ClaudeProcess
+  database: Database
+  terminalManager: TerminalManager
+} | null = null
+
 export async function registerIpcHandlers(
   mainWindow: BrowserWindow,
   settingsStore: SettingsStore,
@@ -36,6 +46,15 @@ export async function registerIpcHandlers(
   metrics?: MetricsCollector,
   getSpellParams?: () => SpellParams
 ): Promise<{ claudeProcess: ClaudeProcess; database: Database }> {
+  if (registeredRefs) {
+    // Already wired on a previous createWindow() — IPC handlers stay registered
+    // for the lifetime of the process. Re-point the cached refs at the fresh
+    // BrowserWindow so events flow to the visible window, not the destroyed one.
+    registeredRefs.claudeProcess.setMainWindow(mainWindow)
+    registeredRefs.terminalManager.setMainWindow(mainWindow)
+    return registeredRefs
+  }
+
   const database = db || new Database()
   const claudeProcess = new ClaudeProcess(mainWindow, settingsStore)
   const terminalManager = new TerminalManager(mainWindow)
@@ -77,5 +96,6 @@ export async function registerIpcHandlers(
     // PM package not available — Jira/Stories handlers won't be registered
   }
 
-  return { claudeProcess, database }
+  registeredRefs = { claudeProcess, database, terminalManager }
+  return registeredRefs
 }

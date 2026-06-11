@@ -15,9 +15,129 @@ import {
   IconClock,
   IconWorkflow,
 } from '../PilosIcons'
+import type { WorkflowStepResult } from '../../../types/workflow'
 
 interface FlattenedRun extends TaskRun {
   taskTitle: string
+}
+
+function stepStatusClass(s: WorkflowStepResult['status']): string {
+  if (s === 'completed') return 'ok'
+  if (s === 'failed') return 'err'
+  return 'warn'
+}
+
+function previewOutput(out: unknown): string {
+  if (out == null) return ''
+  if (typeof out === 'string') return out
+  try { return JSON.stringify(out, null, 2) } catch { return String(out) }
+}
+
+function RunDetailPanel({ run, onClose }: { run: FlattenedRun; onClose: () => void }) {
+  const steps = run.stepResults || []
+  return (
+    <div
+      className="run-detail"
+      style={{
+        position: 'fixed',
+        top: 0,
+        right: 0,
+        bottom: 0,
+        width: 460,
+        background: 'var(--rail)',
+        borderLeft: '1px solid var(--line-2)',
+        zIndex: 30,
+        display: 'flex',
+        flexDirection: 'column',
+        boxShadow: '-12px 0 24px rgba(0,0,0,0.32)',
+      }}
+    >
+      <div
+        style={{
+          padding: '14px 16px',
+          borderBottom: '1px solid var(--line-2)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1 }}>Run</div>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>{run.taskTitle}</div>
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+            {new Date(run.startedAt).toLocaleString()}
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          aria-label="Close run details"
+          style={{ background: 'transparent', border: 0, color: 'var(--muted)', fontSize: 18, cursor: 'pointer' }}
+        >
+          ×
+        </button>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+        {run.summary && (
+          <div style={{ marginBottom: 16, fontSize: 13, color: 'var(--ink-2)' }}>{run.summary}</div>
+        )}
+
+        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
+          Steps ({steps.length})
+        </div>
+        {steps.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>No per-step results captured for this run.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {steps.map((s, i) => (
+              <div
+                key={`${s.nodeId}-${i}`}
+                style={{
+                  background: 'var(--tile)',
+                  border: '1px solid var(--line-2)',
+                  borderRadius: 6,
+                  padding: 10,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11.5 }}>{s.nodeId}</span>
+                  <span className={'tag ' + stepStatusClass(s.status)} style={{ fontSize: 10 }}>{s.status}</span>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted)' }}>{s.duration}ms</div>
+                {s.error && (
+                  <pre style={{
+                    marginTop: 6, fontSize: 11, color: 'var(--err)', whiteSpace: 'pre-wrap',
+                    fontFamily: 'var(--mono)',
+                  }}>{s.error}</pre>
+                )}
+                {!s.error && s.output != null && (
+                  <pre style={{
+                    marginTop: 6, fontSize: 11, color: 'var(--ink-2)', whiteSpace: 'pre-wrap',
+                    fontFamily: 'var(--mono)', maxHeight: 140, overflow: 'auto',
+                  }}>{previewOutput(s.output).slice(0, 600)}</pre>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {run.logs?.length > 0 && (
+          <>
+            <div style={{
+              fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1,
+              marginTop: 18, marginBottom: 6,
+            }}>
+              Logs
+            </div>
+            <pre style={{
+              background: 'var(--tile)', border: '1px solid var(--line-2)', borderRadius: 6,
+              padding: 10, fontSize: 11, fontFamily: 'var(--mono)', whiteSpace: 'pre-wrap',
+              maxHeight: 240, overflow: 'auto',
+            }}>{run.logs.join('\n')}</pre>
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
 
 type StatusKey = RunStatus | 'running'
@@ -72,6 +192,11 @@ export default function RunsPage() {
 
   const allRuns = useMemo(() => flatten(tasks), [tasks])
   const [tab, setTab] = useState<FilterTab>('All')
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
+  const selectedRun = useMemo(
+    () => allRuns.find((r) => r.id === selectedRunId) || null,
+    [allRuns, selectedRunId],
+  )
 
   const visible = useMemo(() => {
     return allRuns.filter((r) => {
@@ -171,7 +296,11 @@ export default function RunsPage() {
                   const stepCount = r.stepResults?.length || 0
                   const completedSteps = (r.stepResults || []).filter((s) => s.status === 'completed').length
                   return (
-                    <tr key={r.id}>
+                    <tr
+                      key={r.id}
+                      onClick={() => setSelectedRunId(r.id)}
+                      style={{ cursor: 'pointer', background: selectedRunId === r.id ? 'var(--tile)' : undefined }}
+                    >
                       <td>
                         <div className="run-name">
                           <IconWorkflow size={15} style={{ color: 'var(--ink-3)' }} />
@@ -199,6 +328,8 @@ export default function RunsPage() {
           </div>
         </div>
       </div>
+
+      {selectedRun && <RunDetailPanel run={selectedRun} onClose={() => setSelectedRunId(null)} />}
     </div>
   )
 }

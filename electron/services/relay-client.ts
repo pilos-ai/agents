@@ -21,6 +21,13 @@ const RELAY_SAFE_SETTINGS = new Set([
   'backgroundMode',
   'notifications',
   'telemetry',
+  // Security toggles surfaced in SettingsPage. Non-sensitive UI booleans —
+  // they describe the desktop's confirmation policy, not credentials.
+  'security_autoApproveReads',
+  'security_requireConfirmDestructive',
+  'security_sandboxMode',
+  'security_sessionTimeout',
+  'security_telemetry',
 ])
 
 interface JsonRpcRequest {

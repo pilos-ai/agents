@@ -58,6 +58,12 @@ export class ClaudeProcess {
     this.settings = settings
   }
 
+  // Re-target after macOS activate re-creates the BrowserWindow; without this
+  // every webContents.send goes to the destroyed window and silently drops.
+  setMainWindow(mainWindow: BrowserWindow): void {
+    this.mainWindow = mainWindow
+  }
+
   /** Register a callback to receive all Claude events (used by RelayClient) */
   onEvent(cb: (data: Record<string, unknown>) => void): void {
     this.eventCallback = cb
