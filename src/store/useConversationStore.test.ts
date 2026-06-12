@@ -173,7 +173,7 @@ describe('respondPermission', () => {
   it('calls api.claude.respondPermission and clears permissionRequest', async () => {
     const api = await getApi()
     const perm = { sessionId: 'sess-1', toolName: 'bash', toolInput: { command: 'ls' } }
-    useConversationStore.setState({ permissionRequest: perm, permissionQueue: [] })
+    useConversationStore.setState({ activeConversationId: 'sess-1', permissionRequest: perm, permissionQueue: [] })
 
     useConversationStore.getState().respondPermission(true)
     expect(api.claude.respondPermission).toHaveBeenCalledWith('sess-1', true, undefined)
@@ -183,7 +183,7 @@ describe('respondPermission', () => {
   it('pops next from queue after responding', async () => {
     const perm1 = { sessionId: 's1', toolName: 'bash', toolInput: {} }
     const perm2 = { sessionId: 's2', toolName: 'write_file', toolInput: {} }
-    useConversationStore.setState({ permissionRequest: perm1, permissionQueue: [perm2] })
+    useConversationStore.setState({ activeConversationId: 's1', permissionRequest: perm1, permissionQueue: [perm2] })
 
     useConversationStore.getState().respondPermission(false)
     expect(useConversationStore.getState().permissionRequest).toEqual(perm2)
@@ -301,9 +301,9 @@ describe('handleClaudeEvent — system subtype', () => {
 
 // ── Background session routing ────────────────────────────────────────────────
 
-describe('handleClaudeEvent — background session routing', () => {
-  it('routes events from non-active sessions to bgSessions', async () => {
-    useConversationStore.setState({ activeConversationId: 'active-sess', bgSessions: {} })
+describe('handleClaudeEvent — background session routing (terminal model)', () => {
+  it('routes a non-active session’s events into its own LiveSession, not the active view', async () => {
+    useConversationStore.setState({ activeConversationId: 'active-sess', sessions: {} })
 
     useConversationStore.getState().handleClaudeEvent({
       type: 'assistant',
@@ -311,24 +311,32 @@ describe('handleClaudeEvent — background session routing', () => {
       message: { content: [{ type: 'text', text: 'Background response' }] },
     } as ClaudeEvent)
 
-    const { bgSessions } = useConversationStore.getState()
-    expect(bgSessions['bg-sess']?.streamingText).toBe('Background response')
+    const state = useConversationStore.getState()
+    // The background conversation accumulates its own streaming state…
+    expect(state.sessions['bg-sess']?.streaming.text).toBe('Background response')
+    // …without bleeding into the active conversation's mirror.
+    expect(state.streaming.text).toBe('')
   })
 
-  it('removes bg session entry on result event', async () => {
+  it('finalizes a background session on result (persists text, clears streaming)', async () => {
     const api = await getApi()
     api.conversations.saveMessage.mockResolvedValue({ id: 1 })
-    useConversationStore.setState({
-      activeConversationId: 'active-sess',
-      bgSessions: { 'bg-sess': { streamingText: 'done text', isWaiting: true } },
-    })
+    useConversationStore.setState({ activeConversationId: 'active-sess', sessions: {} })
 
-    useConversationStore.getState().handleClaudeEvent({
-      type: 'result',
-      sessionId: 'bg-sess',
+    const store = useConversationStore.getState()
+    store.handleClaudeEvent({
+      type: 'assistant', sessionId: 'bg-sess',
+      message: { content: [{ type: 'text', text: 'done text' }] },
     } as ClaudeEvent)
+    store.handleClaudeEvent({ type: 'result', sessionId: 'bg-sess', result: 'done text' } as ClaudeEvent)
 
-    expect(useConversationStore.getState().bgSessions['bg-sess']).toBeUndefined()
+    const sess = useConversationStore.getState().sessions['bg-sess']
+    expect(sess?.isWaitingForResponse).toBe(false)
+    expect(sess?.streaming.isStreaming).toBe(false)
+    expect(api.conversations.saveMessage).toHaveBeenCalledWith(
+      'bg-sess',
+      expect.objectContaining({ role: 'assistant', type: 'text', content: 'done text' }),
+    )
   })
 })
 
@@ -352,12 +360,14 @@ describe('abortSession', () => {
 
 describe('message queue', () => {
   it('queues messages', async () => {
+    useConversationStore.setState({ activeConversationId: 'q-conv' })
     useConversationStore.getState().queueMessage('first')
     useConversationStore.getState().queueMessage('second')
     expect(useConversationStore.getState().messageQueue).toHaveLength(2)
   })
 
   it('clears message queue', async () => {
+    useConversationStore.setState({ activeConversationId: 'q-conv' })
     useConversationStore.getState().queueMessage('msg')
     useConversationStore.getState().clearMessageQueue()
     expect(useConversationStore.getState().messageQueue).toHaveLength(0)
@@ -702,7 +712,7 @@ describe('respondToPlanExit', () => {
 
 describe('addMessage', () => {
   it('appends message to messages array', () => {
-    useConversationStore.setState({ messages: [] })
+    useConversationStore.setState({ activeConversationId: 'add-conv', messages: [], sessions: {} })
     useConversationStore.getState().addMessage({ role: 'assistant', type: 'text', content: 'hi', timestamp: 1 })
     expect(useConversationStore.getState().messages).toHaveLength(1)
     expect(useConversationStore.getState().messages[0].content).toBe('hi')
@@ -1098,47 +1108,42 @@ describe('respondToQuestion', () => {
 
 // ── background session — team mode segment parsing ────────────────────────────
 
-describe('handleClaudeEvent — background session team mode result', () => {
-  it('saves messages when background session has streaming text', async () => {
+describe('handleClaudeEvent — background session lifecycle (terminal model)', () => {
+  it('persists a background session’s final text to DB on result', async () => {
     const api = await getApi()
     api.conversations.saveMessage.mockResolvedValue({ id: 1 })
 
-    useConversationStore.setState({
-      activeConversationId: 'main-sess',
-      bgSessions: { 'bg-sess-2': { streamingText: 'background result text', isWaiting: true } },
-    })
+    useConversationStore.setState({ activeConversationId: 'main-sess', sessions: {} })
 
-    useConversationStore.getState().handleClaudeEvent({
-      type: 'result',
-      sessionId: 'bg-sess-2',
+    const store = useConversationStore.getState()
+    store.handleClaudeEvent({
+      type: 'assistant', sessionId: 'bg-sess-2',
+      message: { content: [{ type: 'text', text: 'background result text' }] },
     } as ClaudeEvent)
+    store.handleClaudeEvent({ type: 'result', sessionId: 'bg-sess-2', result: 'background result text' } as ClaudeEvent)
 
     expect(api.conversations.saveMessage).toHaveBeenCalledWith(
       'bg-sess-2',
       expect.objectContaining({ role: 'assistant', type: 'text', content: 'background result text' })
     )
-    expect(useConversationStore.getState().bgSessions['bg-sess-2']).toBeUndefined()
   })
 
-  it('removes bg session on session:ended event', () => {
-    useConversationStore.setState({
-      activeConversationId: 'main-sess',
-      bgSessions: { 'bg-ended': { streamingText: '', isWaiting: true } },
-    })
+  it('clears the background session’s active/waiting state on session:ended', () => {
+    useConversationStore.setState({ activeConversationId: 'main-sess', sessions: {} })
 
-    useConversationStore.getState().handleClaudeEvent({
-      type: 'session:ended',
-      sessionId: 'bg-ended',
-    } as ClaudeEvent)
+    const store = useConversationStore.getState()
+    store.handleClaudeEvent({ type: 'session:started', sessionId: 'bg-ended' } as ClaudeEvent)
+    store.handleClaudeEvent({ type: 'session:ended', sessionId: 'bg-ended' } as ClaudeEvent)
 
-    expect(useConversationStore.getState().bgSessions['bg-ended']).toBeUndefined()
+    const sess = useConversationStore.getState().sessions['bg-ended']
+    expect(sess?.hasActiveSession).toBe(false)
+    expect(sess?.isWaitingForResponse).toBe(false)
   })
 
-  it('removes bg session on session:error event', () => {
-    useConversationStore.setState({
-      activeConversationId: 'main-sess',
-      bgSessions: { 'bg-err': { streamingText: '', isWaiting: true } },
-    })
+  it('surfaces a background session:error as a message and clears state', async () => {
+    const api = await getApi()
+    api.conversations.saveMessage.mockResolvedValue({ id: 1 })
+    useConversationStore.setState({ activeConversationId: 'main-sess', sessions: {} })
 
     useConversationStore.getState().handleClaudeEvent({
       type: 'session:error',
@@ -1146,7 +1151,9 @@ describe('handleClaudeEvent — background session team mode result', () => {
       error: 'crashed',
     } as ClaudeEvent)
 
-    expect(useConversationStore.getState().bgSessions['bg-err']).toBeUndefined()
+    const sess = useConversationStore.getState().sessions['bg-err']
+    expect(sess?.messages.some((m) => m.content.includes('crashed'))).toBe(true)
+    expect(sess?.isWaitingForResponse).toBe(false)
   })
 })
 
@@ -1334,39 +1341,41 @@ describe('setActiveConversation', () => {
     expect(useConversationStore.getState().messages.some((m) => m.content === 'hello')).toBe(true)
   })
 
-  it('moves current active session to bgSessions when switching', async () => {
+  it('preserves the previous conversation’s live session when switching (no teardown)', async () => {
     const api = await getApi()
     api.conversations.getMessagesPage.mockResolvedValue({ messages: [], hasMore: false })
 
-    useConversationStore.setState({
-      activeConversationId: 'c-1',
-      hasActiveSession: true,
-      isWaitingForResponse: false,
-    })
-    useConversationStore.setState((s) => ({ streaming: { ...s.streaming, text: 'active text' } }))
+    useConversationStore.setState({ activeConversationId: 'c-1', sessions: {} })
+    // c-1 accumulates live streaming state via a real event.
+    useConversationStore.getState().handleClaudeEvent({
+      type: 'assistant', sessionId: 'c-1',
+      message: { content: [{ type: 'text', text: 'active text' }] },
+    } as ClaudeEvent)
 
     await useConversationStore.getState().setActiveConversation('c-2')
 
-    // c-1 should now be in bgSessions
-    expect(useConversationStore.getState().bgSessions['c-1']).toBeDefined()
-    expect(useConversationStore.getState().bgSessions['c-1'].streamingText).toBe('active text')
+    // c-1's session is untouched — it keeps streaming in the background.
+    expect(useConversationStore.getState().activeConversationId).toBe('c-2')
+    expect(useConversationStore.getState().sessions['c-1']?.streaming.text).toBe('active text')
   })
 
-  it('restores bg session state when switching to a bg conversation', async () => {
+  it('mirrors a background conversation’s live state when switching to it', async () => {
     const api = await getApi()
     api.conversations.getMessagesPage.mockResolvedValue({ messages: [], hasMore: false })
 
-    useConversationStore.setState({
-      activeConversationId: 'c-1',
-      bgSessions: { 'c-2': { streamingText: 'background work', isWaiting: true } },
-    })
+    useConversationStore.setState({ activeConversationId: 'c-1', sessions: {} })
+    // c-2 runs in the background and accumulates streaming state.
+    useConversationStore.getState().handleClaudeEvent({
+      type: 'assistant', sessionId: 'c-2',
+      message: { content: [{ type: 'text', text: 'background work' }] },
+    } as ClaudeEvent)
 
     await useConversationStore.getState().setActiveConversation('c-2')
 
-    // c-2 should no longer be in bgSessions
-    expect(useConversationStore.getState().bgSessions['c-2']).toBeUndefined()
-    // isWaitingForResponse should be true because it was waiting
-    expect(useConversationStore.getState().isWaitingForResponse).toBe(true)
+    // Switching mirrors c-2's live session into the active view.
+    expect(useConversationStore.getState().activeConversationId).toBe('c-2')
+    expect(useConversationStore.getState().streaming.text).toBe('background work')
+    expect(useConversationStore.getState().streaming.isStreaming).toBe(true)
   })
 
   it('sets null activeConversationId when called with null', async () => {

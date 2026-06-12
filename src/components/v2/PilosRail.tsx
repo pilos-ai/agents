@@ -16,6 +16,7 @@ import {
   IconAgents,
   IconMcp,
   IconRuns,
+  IconReport,
   IconSettings,
   IconSpark,
 } from './PilosIcons'
@@ -35,6 +36,7 @@ const RAIL_ITEMS: RailItem[] = [
   { view: 'agents', label: 'Agents', Icon: IconAgents },
   { view: 'mcp', label: 'MCP Servers', Icon: IconMcp },
   { view: 'runs', label: 'Run history', Icon: IconRuns },
+  { view: 'reporter', label: 'Reporter', Icon: IconReport },
 ]
 
 export function PilosRail() {

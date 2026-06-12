@@ -6,7 +6,7 @@ import { AGENT_TEMPLATE_CATEGORIES, AGENT_COLORS, DEFAULT_CAPABILITIES } from '.
 import { api } from '../../api'
 import { extractJson } from '../../utils/workflow-ai'
 import { useLicenseStore } from '../../store/useLicenseStore'
-import type { AgentDefinition, ClaudeEvent } from '../../types'
+import type { AgentDefinition, AgentCapabilities, PermissionLevel, ClaudeEvent } from '../../types'
 
 interface AddAgentDialogProps {
   open: boolean
@@ -24,6 +24,21 @@ interface AddAgentDialogProps {
 type Tab = 'templates' | 'custom'
 
 const COLOR_OPTIONS = Object.keys(AGENT_COLORS)
+
+// Per-agent capability editor options (restored from the pre-v2 ConfigPage AgentForm).
+const TOOL_OPTIONS: { id: string; label: string }[] = [
+  { id: 'fs_access', label: 'File system' },
+  { id: 'git_ops', label: 'Git operations' },
+  { id: 'web_search', label: 'Web search' },
+  { id: 'code_exec', label: 'Code execution' },
+  { id: 'mcp_servers', label: 'MCP servers' },
+  { id: 'browser', label: 'Browser' },
+]
+const PERMISSION_OPTIONS: { value: PermissionLevel; label: string; desc: string }[] = [
+  { value: 'restricted', label: 'Restricted', desc: 'read-only, asks before changes' },
+  { value: 'standard', label: 'Standard', desc: 'asks before risky actions' },
+  { value: 'elevated', label: 'Elevated', desc: 'runs most actions without asking' },
+]
 
 const AI_SUGGESTIONS = [
   'A security auditor that reviews code for vulnerabilities',
@@ -70,6 +85,13 @@ export function AddAgentDialog({ open, onClose, onAdd, existingIds, agent, onUpd
   const [customPersonality, setCustomPersonality] = useState('')
   const [customExpertise, setCustomExpertise] = useState('')
 
+  // Per-agent capabilities (tool access, permissions, limits, memory…). Restored editor.
+  const [customCaps, setCustomCaps] = useState<AgentCapabilities>({ ...DEFAULT_CAPABILITIES })
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const patchCaps = (p: Partial<AgentCapabilities>) => setCustomCaps((c) => ({ ...c, ...p }))
+  const toggleTool = (id: string) =>
+    setCustomCaps((c) => ({ ...c, tools: c.tools.includes(id) ? c.tools.filter((t) => t !== id) : [...c.tools, id] }))
+
   // License check
   const tier = useLicenseStore((s) => s.tier)
   const isPro = tier === 'pro' || tier === 'teams'
@@ -96,8 +118,12 @@ export function AddAgentDialog({ open, onClose, onAdd, existingIds, agent, onUpd
         setCustomColor(agent.color || 'blue')
         setCustomPersonality(agent.personality || '')
         setCustomExpertise((agent.expertise || []).join(', '))
+        setCustomCaps({ ...DEFAULT_CAPABILITIES, ...(agent.capabilities || {}) })
+        setShowAdvanced(false)
       } else {
         setTab('templates')
+        setCustomCaps({ ...DEFAULT_CAPABILITIES })
+        setShowAdvanced(false)
         setTimeout(() => searchRef.current?.focus(), 100)
       }
     }
@@ -227,8 +253,8 @@ export function AddAgentDialog({ open, onClose, onAdd, existingIds, agent, onUpd
     const expertise = customExpertise.split(',').map((s) => s.trim()).filter(Boolean)
 
     if (isEdit && agent && onUpdate) {
-      // Edit mode: patch the existing agent in place, preserving its id,
-      // capabilities and model override.
+      // Edit mode: patch the existing agent in place, preserving its id and
+      // model override. Capabilities are now editable and persisted.
       onUpdate(agent.id, {
         name: customName.trim(),
         role: customRole.trim(),
@@ -236,6 +262,7 @@ export function AddAgentDialog({ open, onClose, onAdd, existingIds, agent, onUpd
         color: customColor,
         personality: customPersonality.trim(),
         expertise,
+        capabilities: customCaps,
       })
       onClose()
       return
@@ -249,7 +276,7 @@ export function AddAgentDialog({ open, onClose, onAdd, existingIds, agent, onUpd
       color: customColor,
       personality: customPersonality.trim(),
       expertise,
-      capabilities: { ...DEFAULT_CAPABILITIES },
+      capabilities: customCaps,
     }
     onAdd(newAgent)
     onClose()
@@ -260,6 +287,8 @@ export function AddAgentDialog({ open, onClose, onAdd, existingIds, agent, onUpd
     setCustomColor('blue')
     setCustomPersonality('')
     setCustomExpertise('')
+    setCustomCaps({ ...DEFAULT_CAPABILITIES })
+    setShowAdvanced(false)
   }
 
   const lowerSearch = search.toLowerCase()
@@ -510,6 +539,134 @@ export function AddAgentDialog({ open, onClose, onAdd, existingIds, agent, onUpd
                   className="control"
                 />
               </div>
+
+              {/* Advanced capabilities — restored per-agent permission/capability editor */}
+              <div className="field">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced((v) => !v)}
+                  className="btn sm ghost"
+                  style={{ width: '100%', justifyContent: 'space-between' }}
+                >
+                  <span>Advanced capabilities</span>
+                  <Icon icon={showAdvanced ? 'lucide:chevron-up' : 'lucide:chevron-down'} style={{ fontSize: 13 }} />
+                </button>
+              </div>
+
+              {showAdvanced && (
+                <>
+                  <div className="field">
+                    <label>Tool access</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {TOOL_OPTIONS.map((t) => {
+                        const on = customCaps.tools.includes(t.id)
+                        return (
+                          <button
+                            type="button"
+                            key={t.id}
+                            onClick={() => toggleTool(t.id)}
+                            className={'tag' + (on ? ' accent' : '')}
+                            style={{ cursor: 'pointer', opacity: on ? 1 : 0.5 }}
+                          >
+                            {t.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="field">
+                    <label>Permission level</label>
+                    <select
+                      className="control"
+                      value={customCaps.permissionLevel}
+                      onChange={(e) => patchCaps({ permissionLevel: e.target.value as PermissionLevel })}
+                    >
+                      {PERMISSION_OPTIONS.map((p) => (
+                        <option key={p.value} value={p.value}>{p.label} — {p.desc}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="field">
+                    <label>Max tokens per request</label>
+                    <input
+                      type="number" className="control" min={256} max={200000} value={customCaps.maxTokensPerRequest}
+                      onChange={(e) => patchCaps({ maxTokensPerRequest: Number(e.target.value) || 0 })}
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label>Context window size</label>
+                    <input
+                      type="number" className="control" min={1000} max={1000000} value={customCaps.contextWindowSize}
+                      onChange={(e) => patchCaps({ contextWindowSize: Number(e.target.value) || 0 })}
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label>Conversation history limit (0 = unlimited)</label>
+                    <input
+                      type="number" className="control" min={0} max={1000} value={customCaps.conversationHistoryLimit}
+                      onChange={(e) => patchCaps({ conversationHistoryLimit: Number(e.target.value) || 0 })}
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label>Temperature · {customCaps.temperature.toFixed(2)}</label>
+                    <input
+                      type="range" min={0} max={1} step={0.05} value={customCaps.temperature} style={{ width: '100%' }}
+                      onChange={(e) => patchCaps({ temperature: Number(e.target.value) })}
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label>File access paths (comma-separated, empty = unrestricted)</label>
+                    <input
+                      type="text" className="control" placeholder="e.g. ./src, ./docs"
+                      value={customCaps.allowedPaths.join(', ')}
+                      onChange={(e) => patchCaps({ allowedPaths: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label>Allowed MCP servers (comma-separated, empty = all)</label>
+                    <input
+                      type="text" className="control" placeholder="e.g. jira, github"
+                      value={customCaps.allowedMcpServers.join(', ')}
+                      onChange={(e) => patchCaps({ allowedMcpServers: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label>Custom instructions (per-agent, like CLAUDE.md)</label>
+                    <textarea
+                      className="control" rows={2} placeholder="Instructions appended to this agent's system prompt..."
+                      value={customCaps.customInstructions}
+                      onChange={(e) => patchCaps({ customInstructions: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                      Persistent memory
+                      <input type="checkbox" checked={customCaps.memoryEnabled} onChange={(e) => patchCaps({ memoryEnabled: e.target.checked })} />
+                    </label>
+                  </div>
+                  <div className="field">
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                      Auto-summarize long conversations
+                      <input type="checkbox" checked={customCaps.memorySummarizationEnabled} onChange={(e) => patchCaps({ memorySummarizationEnabled: e.target.checked })} />
+                    </label>
+                  </div>
+                  <div className="field">
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                      Auto-approve read-only operations
+                      <input type="checkbox" checked={customCaps.autoApproveReadOnly} onChange={(e) => patchCaps({ autoApproveReadOnly: e.target.checked })} />
+                    </label>
+                  </div>
+                </>
+              )}
 
               {/* Preview */}
               {customName && (

@@ -137,6 +137,36 @@ export interface QueuedMessage {
   images?: ImageAttachment[]
 }
 
+type PermReq = { sessionId: string; toolName: string; toolInput: Record<string, unknown> }
+
+/**
+ * Per-conversation live session state — the terminal model. Every conversation
+ * (foreground OR background, same OR different project) has its own independent
+ * LiveSession that keeps streaming/accumulating regardless of which one is
+ * currently being viewed. The store's top-level fields (messages, streaming,
+ * isWaitingForResponse, …) are a MIRROR of sessions[activeConversationId] so the
+ * existing ChatPage selectors keep working; the conversation list reads
+ * sessions[id] directly to show per-chat running state.
+ */
+export interface LiveSession {
+  messages: ConversationMessage[]
+  streaming: StreamingState
+  isWaitingForResponse: boolean
+  hasActiveSession: boolean
+  permissionRequest: PermReq | null
+  permissionQueue: PermReq[]
+  askUserQuestion: AskUserQuestionData | null
+  exitPlanMode: ExitPlanModeData | null
+  messageQueue: QueuedMessage[]
+  processLogs: ProcessLogEntry[]
+  hasMoreOlder: boolean
+  isLoadingOlder: boolean
+  oldestLoadedMessageId: number | null
+  isLoadingMessages: boolean
+  /** Whether DB history has been loaded into `messages` yet (load-once). */
+  hydrated: boolean
+}
+
 interface ConversationStore {
   // State
   conversations: Conversation[]
@@ -156,10 +186,11 @@ interface ConversationStore {
   hasMoreOlder: boolean
   isLoadingOlder: boolean
   oldestLoadedMessageId: number | null
-  // background sessions: conversations processing while another is active
-  bgSessions: Record<string, { streamingText: string; isWaiting: boolean }>
-  permissionRequest: { sessionId: string; toolName: string; toolInput: Record<string, unknown> } | null
-  permissionQueue: Array<{ sessionId: string; toolName: string; toolInput: Record<string, unknown> }>
+  // Per-conversation live sessions — the source of truth. The top-level fields
+  // above (messages/streaming/isWaitingForResponse/…) mirror sessions[activeConversationId].
+  sessions: Record<string, LiveSession>
+  permissionRequest: PermReq | null
+  permissionQueue: PermReq[]
   askUserQuestion: AskUserQuestionData | null
   answeredQuestionIds: Set<string>
   exitPlanMode: ExitPlanModeData | null
@@ -180,10 +211,10 @@ interface ConversationStore {
   createConversation: (title?: string) => Promise<string>
   deleteConversation: (id: string) => Promise<void>
   renameConversation: (id: string, title: string) => Promise<void>
-  sendMessage: (text: string, images?: ImageAttachment[]) => Promise<void>
+  sendMessage: (text: string, images?: ImageAttachment[], convId?: string) => Promise<void>
   queueMessage: (text: string, images?: ImageAttachment[]) => void
   clearMessageQueue: () => void
-  abortSession: () => void
+  abortSession: (convId?: string) => void
   stopLoop: (conversationId?: string) => void
   respondPermission: (allowed: boolean, always?: boolean) => void
   respondToQuestion: (answers: Record<string, string>) => void
@@ -214,9 +245,105 @@ const emptyStreaming: StreamingState = {
   _lastActivityTime: 0,
 }
 
+function blankSession(): LiveSession {
+  return {
+    messages: [],
+    streaming: { ...emptyStreaming },
+    isWaitingForResponse: false,
+    hasActiveSession: false,
+    permissionRequest: null,
+    permissionQueue: [],
+    askUserQuestion: null,
+    exitPlanMode: null,
+    messageQueue: [],
+    processLogs: [],
+    hasMoreOlder: false,
+    isLoadingOlder: false,
+    oldestLoadedMessageId: null,
+    isLoadingMessages: false,
+    hydrated: false,
+  }
+}
+
+/** Project the session-scoped subset of a LiveSession onto the store's top-level
+ *  mirror fields (the view of the active conversation). */
+function toMirror(s: LiveSession) {
+  return {
+    messages: s.messages,
+    streaming: s.streaming,
+    isWaitingForResponse: s.isWaitingForResponse,
+    hasActiveSession: s.hasActiveSession,
+    permissionRequest: s.permissionRequest,
+    permissionQueue: s.permissionQueue,
+    askUserQuestion: s.askUserQuestion,
+    exitPlanMode: s.exitPlanMode,
+    messageQueue: s.messageQueue,
+    processLogs: s.processLogs,
+    hasMoreOlder: s.hasMoreOlder,
+    isLoadingOlder: s.isLoadingOlder,
+    oldestLoadedMessageId: s.oldestLoadedMessageId,
+    isLoadingMessages: s.isLoadingMessages,
+  }
+}
+
+const EMPTY_MIRROR = toMirror(blankSession())
+
 // ── Inactivity timeout ────────────────────────────────────────────────────────
 
-export const useConversationStore = create<ConversationStore>((set, get) => ({
+export const useConversationStore = create<ConversationStore>((set, get) => {
+  // ── Per-conversation session helpers (terminal model) ──────────────────────
+  // The active session lazily ADOPTS the current top-level mirror on first touch,
+  // so externally-seeded active state (and the real app's pre-session state) is
+  // never lost when the first event for that conversation arrives.
+  const baseSession = (state: ConversationStore, id: string): LiveSession => {
+    const existing = state.sessions[id]
+    if (existing) return existing
+    if (id === state.activeConversationId) {
+      return { ...blankSession(), ...toMirror(state as unknown as LiveSession), hydrated: true }
+    }
+    return blankSession()
+  }
+
+  const getS = (id: string): LiveSession => baseSession(get(), id)
+
+  /** Patch session `id`; mirror to the top-level view fields if it's the active one. */
+  const setS = (
+    id: string,
+    patch: Partial<LiveSession> | ((s: LiveSession) => Partial<LiveSession>),
+  ) => set((state) => {
+    const cur = baseSession(state, id)
+    const p = typeof patch === 'function' ? patch(cur) : patch
+    const next = { ...cur, ...p }
+    const sessions = { ...state.sessions, [id]: next }
+    return id === state.activeConversationId ? { sessions, ...toMirror(next) } : { sessions }
+  })
+
+  /** Append a message to session `id` and persist it to DB (id-tagged on save). */
+  const addMsg = (id: string, message: ConversationMessage) => {
+    setS(id, (s) => ({ messages: [...s.messages, message] }))
+    api.conversations.saveMessage(id, {
+      role: message.role,
+      type: message.type,
+      content: message.content,
+      contentBlocks: message.contentBlocks,
+      agentName: message.agentName,
+      agentIcon: message.agentIcon,
+      agentColor: message.agentColor,
+      replyToId: message.replyToId,
+    }).then((saved) => {
+      if (saved?.id) setS(id, (s) => ({ messages: s.messages.map((m) => (m === message ? { ...m, id: saved.id } : m)) }))
+    }).catch(() => {})
+  }
+
+  /** The project tab that owns conversation `id` (for team-mode agent parsing).
+   *  Falls back to the active project's tab when the conversation isn't mapped yet. */
+  const tabFor = (id: string) => {
+    const pp = useProjectStore.getState().conversationProjectMap.get(id)
+    if (pp) return useProjectStore.getState().openProjects.find((p) => p.projectPath === pp) ?? null
+    return id === get().activeConversationId ? getActiveProjectTab() ?? null : null
+  }
+
+  return {
   conversations: [],
   activeConversationId: null,
   messages: [],
@@ -228,7 +355,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   hasMoreOlder: false,
   isLoadingOlder: false,
   oldestLoadedMessageId: null,
-  bgSessions: {},
+  sessions: {},
   permissionRequest: null,
   permissionQueue: [],
   askUserQuestion: null,
@@ -246,74 +373,45 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   },
 
   setActiveConversation: async (id) => {
-    const prevId = get().activeConversationId
-
-    // Move the previous active session into background tracking (don't abort it).
-    // Check both hasActiveSession AND isWaitingForResponse: the latter is set in sendMessage
-    // BEFORE startSession fires, so we correctly handle the race where the user switches
-    // before session:started arrives.
-    if (prevId && prevId !== id && (get().hasActiveSession || get().isWaitingForResponse)) {
-      const curStreamingText = get().streaming.text
-      set((s) => ({
-        bgSessions: { ...s.bgSessions, [prevId]: { streamingText: curStreamingText, isWaiting: true } },
-      }))
-    }
-
-    // Restore state for the target conversation if it was running in the background
-    const bg = id ? get().bgSessions[id] : undefined
-    const inProgress = !!bg
-
-    set((s) => {
-      const updated = { ...s.bgSessions }
-      if (id) delete updated[id] // it's now the active conversation
-      // Restore the partial streaming text we stashed on the prior switch so the
-      // user doesn't see the dots without the text they were reading. The
-      // remaining streaming fields (contentBlocks, thinking, _turnTokens, etc.)
-      // stay empty — only the visible body of the current turn is preserved.
-      const restoredStreaming = bg
-        ? { ...emptyStreaming, isStreaming: true, text: bg.streamingText }
-        : { ...emptyStreaming }
+    // Pure pointer move (terminal model): switch the view to `id` and mirror its
+    // LiveSession. The conversation we leave is NOT torn down — its session keeps
+    // streaming/accumulating in the background. Any pending permission/question on
+    // the target session surfaces immediately via the mirror.
+    set((state) => {
+      const sessions = { ...state.sessions }
+      if (id && !sessions[id]) sessions[id] = blankSession()
+      const target = id ? sessions[id] : null
       return {
-        bgSessions: updated,
+        sessions,
         activeConversationId: id,
-        messages: [],
-        streaming: restoredStreaming,
-        hasActiveSession: inProgress,
-        isWaitingForResponse: inProgress,
-        isLoadingMessages: !!id,
-        // Reset pagination cursor — next page load resolves these once the
-        // initial batch returns.
-        hasMoreOlder: false,
-        isLoadingOlder: false,
-        oldestLoadedMessageId: null,
-        permissionRequest: null,
-        permissionQueue: [],
-        askUserQuestion: null,
-        exitPlanMode: null,
+        ...(target ? toMirror(target) : EMPTY_MIRROR),
+        // View-only globals reset on every switch.
         replyToMessage: null,
         scrollToMessageId: null,
-        messageQueue: [],
         workflowSuggestion: null,
       }
     })
 
-    // Register the new conversation for event routing
-    if (id) {
-      const projectPath = useProjectStore.getState().activeProjectPath || ''
-      useProjectStore.getState().registerConversation(id, projectPath)
-    }
+    if (!id) return
 
-    if (id) {
-      // Cursor-based load: most-recent page only. `loadOlderMessages` pages backwards
-      // when the user scrolls up; `ensureMessageLoaded` does the same for search jumps.
+    // Register for event routing (project association).
+    const projectPath = useProjectStore.getState().activeProjectPath || ''
+    useProjectStore.getState().registerConversation(id, projectPath)
+
+    // Load DB history ONCE per session. A hydrated session's live in-memory
+    // messages survive switches, so we never reload it — eliminating the DB race.
+    if (getS(id).hydrated) return
+    setS(id, { isLoadingMessages: true })
+
+    // Cursor-based load: most-recent page only. `loadOlderMessages` pages backwards.
+    {
       const { messages: loaded, hasMore } = await api.conversations.getMessagesPage(id, MESSAGES_PAGE_SIZE)
 
-      // If the user already navigated away while we were awaiting, abort so we
-      // don't overwrite the new conversation's messages.
-      if (get().activeConversationId !== id) return
+      // Bail if the session was dropped meanwhile (e.g. deleted).
+      if (!get().sessions[id]) return
 
       // For old messages without agent attribution, re-parse [AgentName] markers
-      const tab = getActiveProjectTab()
+      const tab = tabFor(id)
       let finalMessages: ConversationMessage[]
       if (tab?.mode === 'team' && tab.agents.length > 0) {
         const messages: ConversationMessage[] = []
@@ -346,11 +444,18 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       // The cursor tracks the oldest *raw* DB row we've fetched — not the
       // post-split agent segments — so we read it from `loaded[0]`.
       const oldestId = loaded[0]?.id ?? null
-      set({
-        messages: finalMessages,
-        isLoadingMessages: false,
-        hasMoreOlder: hasMore,
-        oldestLoadedMessageId: oldestId,
+      setS(id, (s) => {
+        // DB history first, then any live messages not yet persisted (dedup by id),
+        // so a background-started session keeps its in-flight messages.
+        const dbIds = new Set(finalMessages.map((m) => m.id).filter((x): x is number => x != null))
+        const liveExtra = s.messages.filter((m) => m.id == null || !dbIds.has(m.id))
+        return {
+          messages: [...finalMessages, ...liveExtra],
+          isLoadingMessages: false,
+          hasMoreOlder: hasMore,
+          oldestLoadedMessageId: oldestId,
+          hydrated: true,
+        }
       })
     }
   },
@@ -368,7 +473,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     if (!state.hasMoreOlder || state.isLoadingOlder) return
     if (state.oldestLoadedMessageId == null) return
 
-    set({ isLoadingOlder: true })
+    setS(convId, { isLoadingOlder: true })
     try {
       const { messages: olderRaw, hasMore } = await api.conversations.getMessagesPage(
         convId,
@@ -378,12 +483,12 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
       // Bail if the user switched conversations mid-fetch.
       if (get().activeConversationId !== convId) {
-        set({ isLoadingOlder: false })
+        setS(convId, { isLoadingOlder: false })
         return
       }
 
       if (olderRaw.length === 0) {
-        set({ isLoadingOlder: false, hasMoreOlder: false })
+        setS(convId, { isLoadingOlder: false, hasMoreOlder: false })
         return
       }
 
@@ -420,7 +525,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       // The DB cursor must move to the oldest *raw* id, not the oldest split
       // segment — they share the same id since segments come from one row.
       const newOldestId = olderRaw[0]?.id ?? state.oldestLoadedMessageId
-      set((s) => ({
+      setS(convId, (s) => ({
         messages: [...prepend, ...s.messages],
         isLoadingOlder: false,
         hasMoreOlder: hasMore,
@@ -428,7 +533,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       }))
     } catch (err) {
       console.error('[loadOlderMessages] Failed:', err)
-      set({ isLoadingOlder: false })
+      setS(convId, { isLoadingOlder: false })
     }
   },
 
@@ -477,18 +582,12 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     set((s) => {
       const stopped = { ...s.stoppedLoops }
       delete stopped[id]
-      // Clear pagination state alongside messages so the next opened conversation
-      // starts from a known-clean cursor.
+      const sessions = { ...s.sessions }
+      delete sessions[id]
+      // If the deleted conversation was active, clear the mirror to a blank view.
       return s.activeConversationId === id
-        ? {
-            activeConversationId: null,
-            messages: [],
-            stoppedLoops: stopped,
-            hasMoreOlder: false,
-            oldestLoadedMessageId: null,
-            isLoadingOlder: false,
-          }
-        : { stoppedLoops: stopped }
+        ? { activeConversationId: null, sessions, stoppedLoops: stopped, ...EMPTY_MIRROR }
+        : { sessions, stoppedLoops: stopped }
     })
     const projectPath = useProjectStore.getState().activeProjectPath || ''
     await get().loadConversations(projectPath)
@@ -500,8 +599,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     await get().loadConversations(projectPath)
   },
 
-  sendMessage: async (text, images) => {
-    let conversationId = get().activeConversationId
+  sendMessage: async (text, images, convId) => {
+    let conversationId = convId ?? get().activeConversationId
     if (!conversationId) {
       conversationId = await get().createConversation(text.slice(0, 50))
     }
@@ -517,10 +616,11 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       })
     }
 
-    // Capture and clear reply-to state
-    const replyTo = get().replyToMessage
+    // Capture and clear reply-to state (reply only applies to the active send).
+    const isActiveSend = conversationId === get().activeConversationId
+    const replyTo = isActiveSend ? get().replyToMessage : null
     const replyToId = replyTo?.id
-    set({ replyToMessage: null })
+    if (isActiveSend) set({ replyToMessage: null })
 
     // Restore any friendly agent names back to hex IDs for Claude CLI
     let cliText = restoreAgentIds(text)
@@ -533,7 +633,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       replyToId: replyToId,
     })
 
-    // Add user message with DB-assigned ID
+    // Add user message with DB-assigned ID — into THIS conversation's session.
     const userMsg: ConversationMessage = {
       id: saved.id,
       role: 'user',
@@ -543,19 +643,25 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       replyToId: replyToId,
       timestamp: Date.now(),
     }
-    set((s) => ({ messages: [...s.messages, userMsg] }))
+    setS(conversationId, (s) => ({ messages: [...s.messages, userMsg] }))
 
     // Broadcast user message to mobile clients (best-effort, non-blocking)
     api.mobile?.broadcastUserMessage(conversationId, text, images)?.catch(() => {})
 
     const turnStartTime = Date.now()
-    set({ isWaitingForResponse: true, streaming: { ...emptyStreaming, isStreaming: true, _turnStartTime: turnStartTime, _lastActivityTime: turnStartTime } })
+    setS(conversationId, { isWaitingForResponse: true, streaming: { ...emptyStreaming, isStreaming: true, _turnStartTime: turnStartTime, _lastActivityTime: turnStartTime } })
+
+    // Resolve the conversation's OWNING project — a queued message can be sent into
+    // a backgrounded conversation in a different project, so we must NOT assume active.
+    const projectPath = useProjectStore.getState().conversationProjectMap.get(conversationId)
+      ?? (useProjectStore.getState().activeProjectPath || '')
+    const tab = projectPath
+      ? useProjectStore.getState().openProjects.find((p) => p.projectPath === projectPath) ?? null
+      : null
 
     // Always start a new session if none is active for this conversation
-    if (!get().hasActiveSession) {
-      const hasHistory = get().messages.length > 1
-      const tab = getActiveProjectTab()
-      const projectPath = useProjectStore.getState().activeProjectPath || ''
+    if (!getS(conversationId).hasActiveSession) {
+      const hasHistory = getS(conversationId).messages.length > 1
 
       // Register this conversation for event routing
       useProjectStore.getState().registerConversation(conversationId, projectPath)
@@ -590,7 +696,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
       // Surface MCP config warnings (e.g. Jira connected on another project)
       for (const warning of mcpResult.warnings) {
-        get().addMessage({
+        addMsg(conversationId, {
           role: 'assistant',
           type: 'text',
           content: `⚠️ ${warning}`,
@@ -608,7 +714,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         appendSystemPrompt,
         mcpConfigPath: mcpResult.configPath,
       })
-      set((s) => ({
+      setS(conversationId, (s) => ({
         processLogs: [...s.processLogs, {
           timestamp: Date.now(),
           direction: 'out' as const,
@@ -619,13 +725,12 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       }))
     } else {
       // Inject per-message context hint for team mode (multi-turn path)
-      const tab = getActiveProjectTab()
       if (tab?.mode === 'team' && tab.agents.length > 0) {
         const hint = buildMessageContextHint(cliText, tab.agents)
         if (hint) cliText = hint + cliText
       }
       await api.claude.sendMessage(conversationId, cliText, images)
-      set((s) => ({
+      setS(conversationId, (s) => ({
         processLogs: [...s.processLogs, {
           timestamp: Date.now(),
           direction: 'out' as const,
@@ -638,47 +743,32 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   },
 
   queueMessage: (text, images) => {
-    set((s) => ({
-      messageQueue: [...s.messageQueue, { text, images }],
-    }))
+    const id = get().activeConversationId
+    if (id) setS(id, (s) => ({ messageQueue: [...s.messageQueue, { text, images }] }))
   },
 
   clearMessageQueue: () => {
-    set({ messageQueue: [] })
+    const id = get().activeConversationId
+    if (id) setS(id, { messageQueue: [] })
   },
 
-  abortSession: () => {
-    const id = get().activeConversationId
+  abortSession: (convId) => {
+    const id = convId ?? get().activeConversationId
     if (id) {
       api.claude.abort(id).catch((err) => console.error('[abortSession] Failed to abort:', err))
-      set((s) => {
-        const bg = { ...s.bgSessions }
-        delete bg[id]
-        return { isWaitingForResponse: false, streaming: { ...emptyStreaming }, messageQueue: [], bgSessions: bg }
-      })
+      setS(id, { isWaitingForResponse: false, streaming: { ...emptyStreaming }, messageQueue: [] })
     }
   },
 
   stopLoop: (conversationId) => {
     const id = conversationId ?? get().activeConversationId
     if (!id) return
-    if (get().activeConversationId === id && get().isWaitingForResponse) {
+    // Abort the CLI session if this conversation is actively working (foreground OR background).
+    if (getS(id).isWaitingForResponse) {
       api.claude.abort(id).catch((err) => console.error('[stopLoop] Failed to abort:', err))
     }
-    set((s) => {
-      const bg = { ...s.bgSessions }
-      delete bg[id]
-      const patch: Partial<ConversationStore> = {
-        stoppedLoops: { ...s.stoppedLoops, [id]: true },
-        bgSessions: bg,
-      }
-      if (get().activeConversationId === id) {
-        patch.isWaitingForResponse = false
-        patch.streaming = { ...emptyStreaming }
-        patch.messageQueue = []
-      }
-      return patch as Partial<ConversationStore>
-    })
+    set((s) => ({ stoppedLoops: { ...s.stoppedLoops, [id]: true } }))
+    setS(id, { isWaitingForResponse: false, streaming: { ...emptyStreaming }, messageQueue: [] })
   },
 
   respondPermission: (allowed, always) => {
@@ -686,10 +776,12 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     if (perm) {
       api.claude.respondPermission(perm.sessionId, allowed, always)
         .catch((err) => console.error('[respondPermission] Failed to respond:', err))
-      // Pop next from queue, or null if empty
-      const queue = [...get().permissionQueue]
-      const next = queue.shift() || null
-      set({ permissionRequest: next, permissionQueue: queue })
+      // Pop next from the owning session's queue, or null if empty.
+      setS(perm.sessionId, (s) => {
+        const queue = [...s.permissionQueue]
+        const next = queue.shift() || null
+        return { permissionRequest: next, permissionQueue: queue }
+      })
     }
   },
 
@@ -701,12 +793,12 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       set((s) => {
         const ids = new Set(s.answeredQuestionIds)
         ids.add(q.toolUseId)
-        return {
-          askUserQuestion: null,
-          answeredQuestionIds: ids,
-          isWaitingForResponse: true,
-          streaming: { ...emptyStreaming, isStreaming: true },
-        }
+        return { answeredQuestionIds: ids }
+      })
+      setS(q.sessionId, {
+        askUserQuestion: null,
+        isWaitingForResponse: true,
+        streaming: { ...emptyStreaming, isStreaming: true },
       })
     }
   },
@@ -716,7 +808,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     if (p) {
       api.claude.respondToPlanExit(p.sessionId, approved, feedback)
         .catch((err) => console.error('[respondToPlanExit] Failed to respond:', err))
-      set({
+      setS(p.sessionId, {
         exitPlanMode: null,
         isWaitingForResponse: true,
         streaming: { ...emptyStreaming, isStreaming: true },
@@ -725,60 +817,25 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   },
 
   handleClaudeEvent: (event) => {
-    const { activeConversationId } = get()
-
-    // Handle background session events (conversations running while another is active)
-    if (event.sessionId !== activeConversationId) {
-      const bgId = event.sessionId
-      if (!bgId) return
-
-      if (event.type === 'assistant') {
-        // Track latest streaming text so we can save it when result fires.
-        // Auto-create the bgSessions entry if missing (handles the race where the user
-        // switched before session:started arrived and hasActiveSession was still false).
-        const msg = event.message as { content?: Array<{ type: string; text?: string }> }
-        const textContent = msg?.content
-          ?.filter((b) => b.type === 'text')
-          .map((b) => b.text ?? '')
-          .join('') ?? ''
-        if (textContent) {
-          set((s) => {
-            const bg = s.bgSessions[bgId] ?? { streamingText: '', isWaiting: true }
-            return { bgSessions: { ...s.bgSessions, [bgId]: { ...bg, streamingText: textContent } } }
-          })
-        }
-      } else if (event.type === 'result') {
-        // Save the final text to DB so it's there when the user switches back.
-        // bg may be undefined if assistant events arrived before bgSessions entry was created.
-        const bg = get().bgSessions[bgId]
-        const finalText = bg?.streamingText ?? ''
-        if (finalText) {
-          // Get project tab for team mode agent parsing
-          const projectPath = useProjectStore.getState().conversationProjectMap.get(bgId)
-          const tab = projectPath
-            ? useProjectStore.getState().openProjects.find((p) => p.projectPath === projectPath)
-            : null
-
-          if (tab?.mode === 'team' && tab.agents.length > 0) {
-            const segments = parseAgentSegments(finalText, tab.agents)
-            for (const seg of segments) {
-              api.conversations.saveMessage(bgId, {
-                role: 'assistant', type: 'text', content: seg.text,
-                agentName: seg.agentName || undefined, agentIcon: seg.agentIcon, agentColor: seg.agentColor,
-              }).catch((err) => console.error('[bgSession] Failed to save message:', err))
-            }
-          } else {
-            api.conversations.saveMessage(bgId, { role: 'assistant', type: 'text', content: finalText })
-              .catch((err) => console.error('[bgSession] Failed to save message:', err))
-          }
-        }
-        // Session work is done — remove from bgSessions
-        set((s) => { const bg = { ...s.bgSessions }; delete bg[bgId]; return { bgSessions: bg } })
-      } else if (event.type === 'session:ended' || event.type === 'session:error') {
-        set((s) => { const bg = { ...s.bgSessions }; delete bg[bgId]; return { bgSessions: bg } })
-      }
-      return
-    }
+    const sid = event.sessionId
+    if (!sid) return
+    // Terminal model: every event is processed against its OWN conversation's
+    // LiveSession (sessions[sid]) — foreground or background, same or different
+    // project. We shadow set/get/getActiveProjectTab/activeConversationId so the
+    // (verbatim) reducer below reads & writes that session instead of globals.
+    // LiveSession shares field names (streaming/messages/permissionRequest/…) with
+    // the old top-level state, so the body needs no other changes.
+    const sTab = tabFor(sid)
+    const set = (patch: Partial<LiveSession> | ((s: LiveSession) => Partial<LiveSession>)) => setS(sid, patch)
+    const get = () => ({
+      ...getS(sid),
+      activeConversationId: sid,
+      addMessage: (m: ConversationMessage) => addMsg(sid, m),
+      sendMessage: (t: string, i?: ImageAttachment[]) => useConversationStore.getState().sendMessage(t, i, sid),
+      loadConversations: (pp?: string) => useConversationStore.getState().loadConversations(pp),
+    })
+    const getActiveProjectTab = () => sTab
+    const activeConversationId = sid
 
     // Log every incoming event to processLogs
     {
@@ -1342,11 +1399,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   },
 
   handleMobileMessage: (conversationId, message, images) => {
-    // Only inject if this conversation is currently active
-    if (get().activeConversationId !== conversationId) return
-
-    // Add the user message to the UI (already persisted to DB by relay-client)
-    set((s) => ({
+    // Inject into the conversation's own session (works even when it isn't active —
+    // already persisted to DB by relay-client).
+    setS(conversationId, (s) => ({
       messages: [...s.messages, {
         role: 'user' as const,
         type: 'text' as const,
@@ -1360,35 +1415,15 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   },
 
   addMessage: (message) => {
-    // Capture convId BEFORE set() to avoid race condition where user switches
-    // conversations between set() and the DB save, causing messages to be
-    // saved under the wrong conversation ID.
-    const convId = get().activeConversationId
-    set((s) => ({ messages: [...s.messages, message] }))
-
-    // Save to DB in background and update in-memory message with the assigned ID
-    if (convId) {
-      api.conversations.saveMessage(convId, {
-        role: message.role,
-        type: message.type,
-        content: message.content,
-        contentBlocks: message.contentBlocks,
-        agentName: message.agentName,
-        agentIcon: message.agentIcon,
-        agentColor: message.agentColor,
-        replyToId: message.replyToId,
-      }).then((saved) => {
-        if (saved?.id) {
-          set((s) => ({
-            messages: s.messages.map((m) => m === message ? { ...m, id: saved.id } : m),
-          }))
-        }
-      })
-    }
+    // Append to the active conversation's session (id-safe DB persistence inside addMsg).
+    const id = get().activeConversationId
+    if (id) addMsg(id, message)
   },
 
   resetStreaming: () => {
-    set({ streaming: { ...emptyStreaming } })
+    const id = get().activeConversationId
+    if (id) setS(id, { streaming: { ...emptyStreaming } })
+    else set({ streaming: { ...emptyStreaming } })
   },
 
   setReplyTo: (msg) => {
@@ -1418,7 +1453,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         .catch(() => {})
     }
   },
-}))
+  }
+})
 
 // After each turn resolves (streaming: true → false):
 //   1. Run unified workflow-suggestion detection (repeated > candidate).
@@ -1427,6 +1463,10 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 let _indexTimer: ReturnType<typeof setTimeout> | null = null
 useConversationStore.subscribe((state, prev) => {
   if (!(prev.isWaitingForResponse && !state.isWaitingForResponse)) return
+  // The mirror also flips false when switching INTO an idle conversation from a
+  // busy one (toMirror overwrites isWaitingForResponse). That's a view change, not
+  // a turn finishing here — skip it so we don't index/suggest on the wrong chat.
+  if (prev.activeConversationId !== state.activeConversationId) return
 
   const cid = state.activeConversationId
   const msgs = state.messages

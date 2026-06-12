@@ -57,11 +57,12 @@ const mcp = (o: Partial<McpServer> & Pick<McpServer, 'id' | 'name' | 'enabled' |
 // Stable mock functions that persist across getState() calls must be created
 // with vi.hoisted() so they are available when the factory runs.
 
-const { mockHandleClaudeEvent, mockLoadConversations, mockAbortSession, mockConvSetState } = vi.hoisted(() => ({
+const { mockHandleClaudeEvent, mockLoadConversations, mockAbortSession, mockConvSetState, mockSetActiveConversation } = vi.hoisted(() => ({
   mockHandleClaudeEvent: vi.fn(),
   mockLoadConversations: vi.fn().mockResolvedValue(undefined),
   mockAbortSession: vi.fn(),
   mockConvSetState: vi.fn(),
+  mockSetActiveConversation: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../api', () => ({
@@ -111,6 +112,7 @@ vi.mock('./useConversationStore', () => ({
       processLogs: [],
       abortSession: mockAbortSession,
       loadConversations: mockLoadConversations,
+      setActiveConversation: mockSetActiveConversation,
       handleClaudeEvent: mockHandleClaudeEvent,
     })),
     setState: mockConvSetState,
@@ -331,10 +333,13 @@ describe('closeProject', () => {
     })
 
     useProjectStore.getState().closeProject('/proj2')
+    await new Promise((r) => setTimeout(r, 0))
 
     expect(useProjectStore.getState().activeProjectPath).toBe('/proj1')
-    // Restores snapshot when available
-    expect(vi.mocked(convStore.setState)).toHaveBeenCalled()
+    // Terminal model: points the conversation view at the next tab's saved conversation.
+    expect(mockLoadConversations).toHaveBeenCalledWith('/proj1')
+    expect(mockSetActiveConversation).toHaveBeenCalledWith('c1')
+    void convStore
   })
 
   it('clears activeProjectPath when last project is closed', async () => {
@@ -411,7 +416,7 @@ describe('routeClaudeEvent', () => {
     expect(handleEvent).toHaveBeenCalledWith(event)
   })
 
-  it('applies background event to tab snapshot instead of live store', () => {
+  it('forwards background-project events to the conversation store and bumps unread on result', () => {
     const handleEvent = getHandleClaudeEvent()
 
     const map = new Map([['sess-bg', '/proj-bg']])
@@ -421,34 +426,14 @@ describe('routeClaudeEvent', () => {
       conversationProjectMap: map,
     })
 
-    const event = {
-      type: 'session:started',
-      sessionId: 'sess-bg',
-    } as ClaudeEvent
+    const event = { type: 'result', sessionId: 'sess-bg' } as ClaudeEvent
     useProjectStore.getState().routeClaudeEvent(event)
 
-    // Should NOT have called live conversation store handler
-    expect(handleEvent).not.toHaveBeenCalled()
-
-    // Background tab snapshot should be updated
+    // Terminal model: every event is reduced by the per-session conversation store.
+    expect(handleEvent).toHaveBeenCalledWith(event)
+    // A completed turn in a non-active project bumps that tab's unread badge.
     const bgTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-bg')
-    expect(bgTab?.snapshot?.hasActiveSession).toBe(true)
-  })
-
-  it('does nothing when owner project tab is not found', () => {
-    const handleEvent = getHandleClaudeEvent()
-
-    const map = new Map([['sess-orphan', '/deleted-proj']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1')],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    const event = { type: 'assistant', sessionId: 'sess-orphan' } as ClaudeEvent
-    useProjectStore.getState().routeClaudeEvent(event)
-
-    expect(handleEvent).not.toHaveBeenCalled()
+    expect(bgTab?.unreadCount).toBe(1)
   })
 })
 
@@ -772,219 +757,6 @@ describe('getActiveProjectTab', () => {
 
 // ── routeClaudeEvent: background tab message persistence ─────────────────────
 
-describe('routeClaudeEvent background tab message persistence', () => {
-  const bgSnapshot = {
-    conversations: [],
-    activeConversationId: 'conv-bg-1',
-    messages: [],
-    streaming: {
-      text: '',
-      contentBlocks: [],
-      thinking: '',
-      isStreaming: false,
-      currentAgentName: null,
-      retrying: false,
-      _partialJson: '',
-      _turnTokens: 0,
-      _turnStartTime: 0,
-      _lastActivityTime: 0,
-    },
-    isWaitingForResponse: true,
-    hasActiveSession: true,
-    messageQueue: [],
-  }
-
-  it('calls api.conversations.saveMessage for text messages in background tab with convId', async () => {
-    const api = await getApi()
-    const map = new Map([['sess-bg', '/proj-bg']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj-bg', { snapshot: bgSnapshot })],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    // A 'result' event that produces a text message to persist
-    const event = {
-      type: 'result',
-      sessionId: 'sess-bg',
-      result: 'Background response text',
-    } as unknown as import('../types').ClaudeEvent
-
-    useProjectStore.getState().routeClaudeEvent(event)
-
-    expect(api.conversations.saveMessage).toHaveBeenCalledWith(
-      'conv-bg-1',
-      expect.objectContaining({ role: 'assistant', type: 'text' })
-    )
-  })
-
-  it('does not call saveMessage for background tab with no activeConversationId', async () => {
-    const api = await getApi()
-    const snapshotWithoutConvId = { ...bgSnapshot, activeConversationId: null }
-    const map = new Map([['sess-bg2', '/proj-bg2']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj-bg2', { snapshot: snapshotWithoutConvId })],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    const event = {
-      type: 'result',
-      sessionId: 'sess-bg2',
-      result: 'Some text',
-    } as unknown as import('../types').ClaudeEvent
-
-    useProjectStore.getState().routeClaudeEvent(event)
-
-    expect(api.conversations.saveMessage).not.toHaveBeenCalled()
-  })
-})
-
-// ── routeClaudeEvent: queue processing on background result ───────────────────
-
-describe('routeClaudeEvent queue processing', () => {
-  it('dequeues next message on result event and calls api.claude.sendMessage', async () => {
-    const api = await getApi()
-    const snapshotWithQueue = {
-      conversations: [],
-      activeConversationId: 'conv-q-1',
-      messages: [],
-      streaming: {
-        text: '',
-        contentBlocks: [],
-        thinking: '',
-        isStreaming: false,
-        currentAgentName: null,
-        retrying: false,
-        _partialJson: '',
-        _turnTokens: 0,
-        _turnStartTime: 0,
-        _lastActivityTime: 0,
-      },
-      isWaitingForResponse: true,
-      hasActiveSession: true,
-      messageQueue: [{ text: 'queued message', images: [] }],
-    }
-
-    const map = new Map([['sess-q', '/proj-q']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj-q', { snapshot: snapshotWithQueue })],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    const event = {
-      type: 'result',
-      sessionId: 'sess-q',
-      result: 'Turn completed',
-    } as unknown as import('../types').ClaudeEvent
-
-    useProjectStore.getState().routeClaudeEvent(event)
-
-    // saveMessage should be called for the dequeued user message
-    expect(api.conversations.saveMessage).toHaveBeenCalledWith(
-      'conv-q-1',
-      expect.objectContaining({ role: 'user', type: 'text', content: 'queued message' })
-    )
-
-    // snapshot should have the user message appended
-    const bgTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-q')
-    expect(bgTab?.snapshot?.messages.some((m) => m.content === 'queued message')).toBe(true)
-    expect(bgTab?.snapshot?.isWaitingForResponse).toBe(true)
-  })
-
-  it('sends the queued message via api.claude.sendMessage after timeout', async () => {
-    const api = await getApi()
-    vi.useFakeTimers()
-
-    const snapshotWithQueue = {
-      conversations: [],
-      activeConversationId: 'conv-timer-1',
-      messages: [],
-      streaming: {
-        text: '',
-        contentBlocks: [],
-        thinking: '',
-        isStreaming: false,
-        currentAgentName: null,
-        retrying: false,
-        _partialJson: '',
-        _turnTokens: 0,
-        _turnStartTime: 0,
-        _lastActivityTime: 0,
-      },
-      isWaitingForResponse: true,
-      hasActiveSession: true,
-      messageQueue: [{ text: 'timer message' }],
-    }
-
-    const map = new Map([['sess-timer', '/proj-timer']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj-timer', { snapshot: snapshotWithQueue })],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    const event = {
-      type: 'result',
-      sessionId: 'sess-timer',
-      result: 'Done',
-    } as unknown as import('../types').ClaudeEvent
-
-    useProjectStore.getState().routeClaudeEvent(event)
-
-    // sendMessage is called inside setTimeout(..., 100)
-    expect(api.claude.sendMessage).not.toHaveBeenCalled()
-    vi.advanceTimersByTime(100)
-    expect(api.claude.sendMessage).toHaveBeenCalledWith('conv-timer-1', 'timer message', undefined)
-
-    vi.useRealTimers()
-  })
-
-  it('does not process queue when result event has empty queue', async () => {
-    const api = await getApi()
-    const snapshotNoQueue = {
-      conversations: [],
-      activeConversationId: 'conv-nq-1',
-      messages: [],
-      streaming: {
-        text: '',
-        contentBlocks: [],
-        thinking: '',
-        isStreaming: false,
-        currentAgentName: null,
-        retrying: false,
-        _partialJson: '',
-        _turnTokens: 0,
-        _turnStartTime: 0,
-        _lastActivityTime: 0,
-      },
-      isWaitingForResponse: false,
-      hasActiveSession: false,
-      messageQueue: [],
-    }
-
-    const map = new Map([['sess-nq', '/proj-nq']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj-nq', { snapshot: snapshotNoQueue })],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    const event = {
-      type: 'result',
-      sessionId: 'sess-nq',
-      result: 'Done',
-    } as unknown as import('../types').ClaudeEvent
-
-    useProjectStore.getState().routeClaudeEvent(event)
-
-    expect(api.claude.sendMessage).not.toHaveBeenCalled()
-  })
-})
-
-// ── updateProjectMcpServer ────────────────────────────────────────────────────
-
 describe('updateProjectMcpServer', () => {
   it('updates MCP server fields and persists', async () => {
     const api = await getApi()
@@ -1102,6 +874,7 @@ describe('setProjectModel — aborts active session', () => {
       processLogs: [],
       abortSession: mockAbortSession,
       loadConversations: mockLoadConversations,
+      setActiveConversation: mockSetActiveConversation,
       handleClaudeEvent: mockHandleClaudeEvent,
     } as unknown as ReturnType<typeof convStore.getState>)
 
@@ -1136,6 +909,7 @@ describe('setProjectModel — aborts active session', () => {
       processLogs: [],
       abortSession: mockAbortSession,
       loadConversations: mockLoadConversations,
+      setActiveConversation: mockSetActiveConversation,
       handleClaudeEvent: mockHandleClaudeEvent,
     } as unknown as ReturnType<typeof convStore.getState>)
 
@@ -1169,6 +943,7 @@ describe('setProjectModel — aborts active session', () => {
       processLogs: [],
       abortSession: mockAbortSession,
       loadConversations: mockLoadConversations,
+      setActiveConversation: mockSetActiveConversation,
       handleClaudeEvent: mockHandleClaudeEvent,
     } as unknown as ReturnType<typeof convStore.getState>)
 
@@ -1295,122 +1070,6 @@ describe('setActiveProject', () => {
 
 // ── routeClaudeEvent — applyEventToSnapshot (background tab processing) ───────
 
-describe('routeClaudeEvent — background tab snapshot mutations', () => {
-  it('sets hasActiveSession in snapshot on session:started for background tab', () => {
-    const map = new Map([['bg-sess', '/proj-bg']])
-    useProjectStore.setState({
-      openProjects: [
-        makeProjectTab('/proj-main'),
-        makeProjectTab('/proj-bg', {
-          snapshot: {
-            conversations: [],
-            activeConversationId: 'bg-sess',
-            messages: [],
-            streaming: {
-              text: '', contentBlocks: [], thinking: '', isStreaming: false,
-              currentAgentName: null, retrying: false, _partialJson: '',
-              _turnTokens: 0, _turnStartTime: 0, _lastActivityTime: 0,
-            },
-            isWaitingForResponse: false,
-            hasActiveSession: false,
-            messageQueue: [],
-          },
-        }),
-      ],
-      activeProjectPath: '/proj-main',
-      conversationProjectMap: map,
-    })
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'session:started',
-      sessionId: 'bg-sess',
-    } as import('../types').ClaudeEvent)
-
-    const bgTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-bg')
-    expect(bgTab?.snapshot?.hasActiveSession).toBe(true)
-    expect(bgTab?.snapshot?.isWaitingForResponse).toBe(true)
-  })
-
-  it('appends assistant text to background snapshot messages on result event', async () => {
-    const api = await getApi()
-    api.conversations.saveMessage.mockResolvedValue({ id: 1 })
-
-    const map = new Map([['bg-result', '/proj-bg']])
-    useProjectStore.setState({
-      openProjects: [
-        makeProjectTab('/proj-main'),
-        makeProjectTab('/proj-bg', {
-          snapshot: {
-            conversations: [],
-            activeConversationId: 'bg-result',
-            messages: [],
-            streaming: {
-              text: 'bg streamed text', contentBlocks: [], thinking: '', isStreaming: true,
-              currentAgentName: null, retrying: false, _partialJson: '',
-              _turnTokens: 0, _turnStartTime: 0, _lastActivityTime: 0,
-            },
-            isWaitingForResponse: true,
-            hasActiveSession: true,
-            messageQueue: [],
-          },
-        }),
-      ],
-      activeProjectPath: '/proj-main',
-      conversationProjectMap: map,
-    })
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'result',
-      sessionId: 'bg-result',
-      result: 'final answer',
-    } as import('../types').ClaudeEvent)
-
-    const bgTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-bg')
-    const msgs = bgTab?.snapshot?.messages || []
-    expect(msgs.some((m) => m.content === 'final answer')).toBe(true)
-    expect(bgTab?.snapshot?.isWaitingForResponse).toBe(false)
-  })
-
-  it('appends error message to background snapshot on session:error event', () => {
-    const map = new Map([['bg-err', '/proj-bg']])
-    useProjectStore.setState({
-      openProjects: [
-        makeProjectTab('/proj-main'),
-        makeProjectTab('/proj-bg', {
-          snapshot: {
-            conversations: [],
-            activeConversationId: 'bg-err',
-            messages: [],
-            streaming: {
-              text: '', contentBlocks: [], thinking: '', isStreaming: false,
-              currentAgentName: null, retrying: false, _partialJson: '',
-              _turnTokens: 0, _turnStartTime: 0, _lastActivityTime: 0,
-            },
-            isWaitingForResponse: true,
-            hasActiveSession: true,
-            messageQueue: [],
-          },
-        }),
-      ],
-      activeProjectPath: '/proj-main',
-      conversationProjectMap: map,
-    })
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'session:error',
-      sessionId: 'bg-err',
-      error: 'CLI crashed',
-    } as import('../types').ClaudeEvent)
-
-    const bgTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-bg')
-    const msgs = bgTab?.snapshot?.messages || []
-    expect(msgs.some((m) => m.content.includes('CLI crashed'))).toBe(true)
-    expect(bgTab?.snapshot?.hasActiveSession).toBe(false)
-  })
-})
-
-// ── setActiveProject with snapshot (line 683) ────────────────────────────────
-
 describe('setActiveProject — with snapshot', () => {
   it('restores conversation snapshot when tab has a snapshot', async () => {
     const convStore = await getConvStore()
@@ -1438,12 +1097,12 @@ describe('setActiveProject — with snapshot', () => {
 
     await useProjectStore.getState().setActiveProject('/proj2')
 
-    // restoreConversationSnapshot calls useConversationStore.setState
-    expect(vi.mocked(convStore.setState)).toHaveBeenCalledWith(
-      expect.objectContaining({ activeConversationId: 'c-snap' })
-    )
-    // loadConversations should NOT be called when snapshot exists
-    expect(mockLoadConversations).not.toHaveBeenCalled()
+    // Terminal model: refresh the project's conversation list, then point the view
+    // at its saved conversation via setActiveConversation (runtime lives in the
+    // global sessions map, so there is no snapshot setState restore).
+    expect(mockLoadConversations).toHaveBeenCalledWith('/proj2')
+    expect(mockSetActiveConversation).toHaveBeenCalledWith('c-snap')
+    void convStore
   })
 })
 
@@ -1472,86 +1131,6 @@ describe('openProject — snapshot capture when switching from another project',
 })
 
 // ── applyEventToSnapshot — informational events (lines 496-499) ───────────────
-
-describe('routeClaudeEvent — applyEventToSnapshot informational events', () => {
-  function makeBgTab(overrides = {}) {
-    return makeProjectTab('/proj-bg', {
-      snapshot: {
-        conversations: [],
-        activeConversationId: 'bg-info',
-        messages: [],
-        streaming: {
-          text: '', contentBlocks: [], thinking: '', isStreaming: false,
-          currentAgentName: null, retrying: false, _partialJson: '',
-          _turnTokens: 0, _turnStartTime: 0, _lastActivityTime: 0,
-        },
-        isWaitingForResponse: true,
-        hasActiveSession: true,
-        messageQueue: [],
-      },
-      ...overrides,
-    })
-  }
-
-  it('does not mutate snapshot on rate_limit_event', () => {
-    const map = new Map([['bg-info', '/proj-bg']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj-main'), makeBgTab()],
-      activeProjectPath: '/proj-main',
-      conversationProjectMap: map,
-    })
-
-    const snapshotBefore = { ...useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-bg')?.snapshot }
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'rate_limit_event',
-      sessionId: 'bg-info',
-    } as import('../types').ClaudeEvent)
-
-    const bgTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-bg')
-    // Snapshot should not have changed significantly
-    expect(bgTab?.snapshot?.isWaitingForResponse).toBe(snapshotBefore.isWaitingForResponse)
-    expect(bgTab?.snapshot?.messages).toHaveLength(0)
-  })
-
-  it('does not mutate snapshot on system event', () => {
-    const map = new Map([['bg-info', '/proj-bg']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj-main'), makeBgTab()],
-      activeProjectPath: '/proj-main',
-      conversationProjectMap: map,
-    })
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'system',
-      sessionId: 'bg-info',
-      subtype: 'api_retry',
-    } as import('../types').ClaudeEvent)
-
-    const bgTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-bg')
-    expect(bgTab?.snapshot?.messages).toHaveLength(0)
-  })
-
-  it('handles session:ended event in background snapshot', () => {
-    const map = new Map([['bg-info', '/proj-bg']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj-main'), makeBgTab()],
-      activeProjectPath: '/proj-main',
-      conversationProjectMap: map,
-    })
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'session:ended',
-      sessionId: 'bg-info',
-    } as import('../types').ClaudeEvent)
-
-    const bgTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-bg')
-    expect(bgTab?.snapshot?.hasActiveSession).toBe(false)
-    expect(bgTab?.snapshot?.isWaitingForResponse).toBe(false)
-  })
-})
-
-// ── openProject with MCP server migration ────────────────────────────────────
 
 describe('openProject — MCP server migration', () => {
   it('calls setSettings when mcpServers migration is triggered', async () => {
@@ -1647,406 +1226,3 @@ describe('openProject — snapshots current project before switching', () => {
 
 // ── applyEventToSnapshot — background event processing (lines 331-438) ────────
 
-describe('routeClaudeEvent — applyEventToSnapshot branches', () => {
-  function makeSnapshot() {
-    return {
-      conversations: [],
-      activeConversationId: 'conv-snap-1',
-      messages: [] as ConversationMessage[],
-      streaming: {
-        text: '',
-        contentBlocks: [] as import('../types').ContentBlock[],
-        thinking: '',
-        isStreaming: false,
-        currentAgentName: null as string | null,
-        retrying: false,
-        _partialJson: '',
-        _turnTokens: 0,
-        _turnStartTime: 0,
-        _lastActivityTime: 0,
-      },
-      isWaitingForResponse: false,
-      hasActiveSession: false,
-      messageQueue: [],
-    }
-  }
-
-  it('applyEventToSnapshot: content_block_start adds block to streaming.contentBlocks', async () => {
-    const api = await getApi()
-    const map = new Map([['sess-snap-1', '/proj-snap']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj-snap', { snapshot: makeSnapshot() })],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    const event = {
-      type: 'content_block_start',
-      sessionId: 'sess-snap-1',
-      content_block: { type: 'tool_use', id: 'tu-snap', name: 'bash', input: {} },
-    } as unknown as import('../types').ClaudeEvent
-
-    useProjectStore.getState().routeClaudeEvent(event)
-
-    const snapTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-snap')
-    expect(snapTab?.snapshot?.streaming.contentBlocks).toHaveLength(1)
-    expect(snapTab?.snapshot?.streaming.isStreaming).toBe(true)
-    // No DB call expected for content_block_start
-    expect(api.conversations.saveMessage).not.toHaveBeenCalled()
-  })
-
-  it('applyEventToSnapshot: content_block_delta accumulates text', () => {
-    const map = new Map([['sess-snap-2', '/proj-snap2']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj-snap2', { snapshot: makeSnapshot() })],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    const event = {
-      type: 'content_block_delta',
-      sessionId: 'sess-snap-2',
-      delta: { type: 'text_delta', text: 'Hello background' },
-    } as unknown as import('../types').ClaudeEvent
-
-    useProjectStore.getState().routeClaudeEvent(event)
-
-    const snapTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-snap2')
-    expect(snapTab?.snapshot?.streaming.text).toBe('Hello background')
-  })
-
-  it('applyEventToSnapshot: content_block_delta accumulates thinking_delta', () => {
-    const map = new Map([['sess-snap-think', '/proj-snap-think']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj-snap-think', { snapshot: makeSnapshot() })],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'content_block_delta',
-      sessionId: 'sess-snap-think',
-      delta: { type: 'thinking_delta', thinking: 'deep thought' },
-    } as unknown as import('../types').ClaudeEvent)
-
-    const snapTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-snap-think')
-    expect(snapTab?.snapshot?.streaming.thinking).toBe('deep thought')
-  })
-
-  it('applyEventToSnapshot: content_block_delta accumulates input_json_delta', () => {
-    const map = new Map([['sess-snap-json', '/proj-snap-json']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj-snap-json', { snapshot: makeSnapshot() })],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'content_block_delta',
-      sessionId: 'sess-snap-json',
-      delta: { type: 'input_json_delta', partial_json: '{"cmd":' },
-    } as unknown as import('../types').ClaudeEvent)
-
-    const snapTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-snap-json')
-    expect(snapTab?.snapshot?.streaming._partialJson).toBe('{"cmd":')
-  })
-
-  it('applyEventToSnapshot: content_block_stop finalizes partial JSON in last tool_use block', async () => {
-    const api = await getApi()
-    const snap = makeSnapshot()
-    snap.streaming.contentBlocks = [{ type: 'tool_use', id: 'tu-stop', name: 'bash', input: {} } as import('../types').ContentBlock]
-    snap.streaming._partialJson = '{"command":"ls"}'
-
-    const map = new Map([['sess-snap-stop', '/proj-snap-stop']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj-snap-stop', { snapshot: snap })],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'content_block_stop',
-      sessionId: 'sess-snap-stop',
-    } as unknown as import('../types').ClaudeEvent)
-
-    const snapTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-snap-stop')
-    expect(snapTab?.snapshot?.streaming._partialJson).toBe('')
-    const lastBlock = snapTab?.snapshot?.streaming.contentBlocks[0] as { input?: unknown }
-    expect(lastBlock?.input).toEqual({ command: 'ls' })
-
-    // The block is tool_use so it should be added to messages
-    expect(snapTab?.snapshot?.messages.some((m) => m.type === 'tool_use')).toBe(true)
-    expect(api.conversations.saveMessage).toHaveBeenCalledWith(
-      'conv-snap-1',
-      expect.objectContaining({ type: 'tool_use' })
-    )
-  })
-
-  it('applyEventToSnapshot: assistant event with tool_use blocks adds them as messages', async () => {
-    const api = await getApi()
-    const map = new Map([['sess-snap-asst', '/proj-snap-asst']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj-snap-asst', { snapshot: makeSnapshot() })],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'assistant',
-      sessionId: 'sess-snap-asst',
-      message: {
-        content: [
-          { type: 'text', text: 'I will run bash' },
-          { type: 'tool_use', id: 'tu-asst-snap', name: 'bash', input: { command: 'echo hi' } },
-        ],
-      },
-    } as unknown as import('../types').ClaudeEvent)
-
-    const snapTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-snap-asst')
-    expect(snapTab?.snapshot?.messages.some((m) => m.type === 'tool_use')).toBe(true)
-    expect(api.conversations.saveMessage).toHaveBeenCalledWith(
-      'conv-snap-1',
-      expect.objectContaining({ type: 'tool_use' })
-    )
-  })
-
-  it('applyEventToSnapshot: user event adds non-denied tool_result messages', async () => {
-    const api = await getApi()
-    const map = new Map([['sess-snap-user', '/proj-snap-user']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj-snap-user', { snapshot: makeSnapshot() })],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'user',
-      sessionId: 'sess-snap-user',
-      message: {
-        content: [
-          { type: 'tool_result', tool_use_id: 'tu-user-snap', content: 'result text', is_error: false },
-        ],
-      },
-    } as unknown as import('../types').ClaudeEvent)
-
-    const snapTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-snap-user')
-    expect(snapTab?.snapshot?.messages.some((m) => m.type === 'tool_result')).toBe(true)
-    expect(api.conversations.saveMessage).toHaveBeenCalledWith(
-      'conv-snap-1',
-      expect.objectContaining({ type: 'tool_result' })
-    )
-  })
-
-  it('applyEventToSnapshot: user event skips permission-denial tool_result blocks', async () => {
-    const api = await getApi()
-    const map = new Map([['sess-snap-deny', '/proj-snap-deny']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj-snap-deny', { snapshot: makeSnapshot() })],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'user',
-      sessionId: 'sess-snap-deny',
-      message: {
-        content: [
-          { type: 'tool_result', tool_use_id: 'tu-denied', content: 'This requires approval', is_error: true },
-        ],
-      },
-    } as unknown as import('../types').ClaudeEvent)
-
-    const snapTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-snap-deny')
-    expect(snapTab?.snapshot?.messages).toHaveLength(0)
-    expect(api.conversations.saveMessage).not.toHaveBeenCalled()
-  })
-
-  it('applyEventToSnapshot: assistant event deduplicates tool_use blocks by id', () => {
-    const existingToolUse = { type: 'tool_use', id: 'tu-dedup-snap', name: 'bash', input: {} } as import('../types').ContentBlock
-    const snap = makeSnapshot()
-    snap.messages = [{
-      role: 'assistant',
-      type: 'tool_use',
-      content: '',
-      contentBlocks: [existingToolUse],
-      timestamp: 0,
-    }]
-
-    const map = new Map([['sess-snap-dedup', '/proj-snap-dedup']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj-snap-dedup', { snapshot: snap })],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'assistant',
-      sessionId: 'sess-snap-dedup',
-      message: {
-        content: [existingToolUse],
-      },
-    } as unknown as import('../types').ClaudeEvent)
-
-    const snapTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-snap-dedup')
-    const toolUseMsgs = snapTab?.snapshot?.messages.filter((m) => m.type === 'tool_use') ?? []
-    expect(toolUseMsgs).toHaveLength(1)
-  })
-
-  it('applyEventToSnapshot: session:error marks hasActiveSession false and clears streaming', () => {
-    const map = new Map([['sess-snap-err', '/proj-snap-err']])
-    const snap = { ...makeSnapshot(), hasActiveSession: true, isWaitingForResponse: true }
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj-snap-err', { snapshot: snap })],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'session:error',
-      sessionId: 'sess-snap-err',
-      error: 'Connection dropped',
-    } as unknown as import('../types').ClaudeEvent)
-
-    const snapTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-snap-err')
-    expect(snapTab?.snapshot?.hasActiveSession).toBe(false)
-    expect(snapTab?.snapshot?.isWaitingForResponse).toBe(false)
-    const errorMsg = snapTab?.snapshot?.messages.find((m) => m.content.includes('Connection dropped'))
-    expect(errorMsg).toBeDefined()
-  })
-
-  it('applyEventToSnapshot: content_block_stop assigns agent attribution in team mode (line 347)', async () => {
-    const api = await getApi()
-    const snap = makeSnapshot()
-    // Add a tool_use block as last content block
-    snap.streaming.contentBlocks = [{ type: 'tool_use', id: 'tu-team-bg', name: 'bash', input: {} } as import('../types').ContentBlock]
-    snap.streaming._partialJson = ''
-    snap.streaming.currentAgentName = 'Alice'
-
-    const bgTab = makeProjectTab('/proj-snap-team', {
-      snapshot: snap,
-      mode: 'team' as const,
-      agents: [{ id: 'a1', name: 'Alice', prompt: '', icon: '🤖', color: '#f00', capabilities: caps() }],
-    })
-
-    const map = new Map([['sess-snap-team', '/proj-snap-team']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), bgTab],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'content_block_stop',
-      sessionId: 'sess-snap-team',
-    } as unknown as import('../types').ClaudeEvent)
-
-    const snapTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-snap-team')
-    const toolUseMsg = snapTab?.snapshot?.messages.find((m) => m.type === 'tool_use')
-    expect(toolUseMsg).toBeDefined()
-    expect(toolUseMsg?.agentName).toBe('Alice')
-    expect(api.conversations.saveMessage).toHaveBeenCalledWith(
-      'conv-snap-1',
-      expect.objectContaining({ type: 'tool_use', agentName: 'Alice' })
-    )
-  })
-
-  it('applyEventToSnapshot: user event deduplicates tool_result blocks (line 380)', () => {
-    const existingResultBlock = {
-      type: 'tool_result',
-      tool_use_id: 'tu-bg-dup',
-      content: 'existing result',
-      is_error: false,
-    } as import('../types').ContentBlock
-
-    const snap = makeSnapshot()
-    snap.messages = [{
-      role: 'assistant',
-      type: 'tool_result',
-      content: '',
-      contentBlocks: [existingResultBlock],
-      timestamp: 0,
-    }]
-
-    const map = new Map([['sess-snap-dup', '/proj-snap-dup']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj-snap-dup', { snapshot: snap })],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'user',
-      sessionId: 'sess-snap-dup',
-      message: {
-        content: [existingResultBlock],
-      },
-    } as unknown as import('../types').ClaudeEvent)
-
-    const snapTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-snap-dup')
-    const resultMsgs = snapTab?.snapshot?.messages.filter((m) => m.type === 'tool_result') ?? []
-    expect(resultMsgs).toHaveLength(1)
-  })
-
-  it('applyEventToSnapshot: user event assigns agent attribution in team mode (line 386)', async () => {
-    const api = await getApi()
-    const snap = makeSnapshot()
-    snap.streaming.currentAgentName = 'Bob'
-
-    const bgTab = makeProjectTab('/proj-snap-user-team', {
-      snapshot: snap,
-      mode: 'team' as const,
-      agents: [{ id: 'a2', name: 'Bob', prompt: '', icon: '🤖', color: '#00f', capabilities: caps() }],
-    })
-
-    const map = new Map([['sess-snap-user-team', '/proj-snap-user-team']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), bgTab],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'user',
-      sessionId: 'sess-snap-user-team',
-      message: {
-        content: [{ type: 'tool_result', tool_use_id: 'tu-team-user', content: 'result', is_error: false }],
-      },
-    } as unknown as import('../types').ClaudeEvent)
-
-    const snapTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-snap-user-team')
-    const resultMsg = snapTab?.snapshot?.messages.find((m) => m.type === 'tool_result')
-    expect(resultMsg?.agentName).toBe('Bob')
-    expect(api.conversations.saveMessage).toHaveBeenCalledWith(
-      'conv-snap-1',
-      expect.objectContaining({ type: 'tool_result', agentName: 'Bob' })
-    )
-  })
-
-  it('applyEventToSnapshot: result with thinking adds a thinking message before text message', async () => {
-    const api = await getApi()
-    const map = new Map([['sess-snap-think-result', '/proj-snap-think-result']])
-    useProjectStore.setState({
-      openProjects: [makeProjectTab('/proj1'), makeProjectTab('/proj-snap-think-result', { snapshot: makeSnapshot() })],
-      activeProjectPath: '/proj1',
-      conversationProjectMap: map,
-    })
-
-    useProjectStore.getState().routeClaudeEvent({
-      type: 'result',
-      sessionId: 'sess-snap-think-result',
-      result: {
-        content: [
-          { type: 'thinking', thinking: 'Let me think...' },
-          { type: 'text', text: 'Final answer' },
-        ],
-      },
-    } as unknown as import('../types').ClaudeEvent)
-
-    const snapTab = useProjectStore.getState().openProjects.find((p) => p.projectPath === '/proj-snap-think-result')
-    const thinkingMsg = snapTab?.snapshot?.messages.find((m) => m.type === 'thinking')
-    expect(thinkingMsg?.content).toBe('Let me think...')
-    expect(snapTab?.snapshot?.messages.some((m) => m.type === 'text' && m.content === 'Final answer')).toBe(true)
-    expect(api.conversations.saveMessage).toHaveBeenCalledWith('conv-snap-1', expect.objectContaining({ type: 'thinking' }))
-    expect(api.conversations.saveMessage).toHaveBeenCalledWith('conv-snap-1', expect.objectContaining({ type: 'text' }))
-  })
-})

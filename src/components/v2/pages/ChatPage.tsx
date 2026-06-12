@@ -43,7 +43,9 @@ import {
   IconStop,
   IconTerminal,
   IconClock,
+  IconRepeat,
 } from '../PilosIcons'
+import { parseLoopInterval, LOOP_INTERVAL_PRESETS } from '../../../utils/loop-interval'
 import { MessageBubble } from '../../chat/MessageBubble'
 import { PermissionBanner } from '../../chat/PermissionBanner'
 import { ReplyPreview } from '../../chat/ReplyPreview'
@@ -218,6 +220,20 @@ function ChatLeftPanel() {
   const isWaitingForResponse = useConversationStore((s) => s.isWaitingForResponse)
   const isStreaming = useConversationStore((s) => s.streaming.isStreaming)
   const isActiveConvBusy = isWaitingForResponse || isStreaming
+  // Per-conversation live state (terminal model): every running chat shows a run
+  // dot, foreground or background — not just the active one.
+  const sessions = useConversationStore((s) => s.sessions)
+  const busyProjectPaths = useMemo(() => {
+    const map = useProjectStore.getState().conversationProjectMap
+    const set = new Set<string>()
+    for (const [cid, sess] of Object.entries(sessions)) {
+      if (sess.isWaitingForResponse || sess.streaming.isStreaming) {
+        const pp = map.get(cid)
+        if (pp) set.add(pp)
+      }
+    }
+    return set
+  }, [sessions])
 
   return (
     <div className="panel">
@@ -272,9 +288,12 @@ function ChatLeftPanel() {
           const label = count === 1 ? '1 conversation' : `${count} conversations`
           // Dot reflects live activity, not selection (selection = left accent bar).
           // dot-run: streaming/waiting; dot-ok: idle with conversations; dot-idle: empty.
+          // Non-active projects use the live per-session set (terminal model) so a
+          // background project that is streaming lights up — the snapshot is only a
+          // point-in-time mirror captured at switch-away and goes stale otherwise.
           const isBusy = isActive
             ? isActiveConvBusy
-            : !!(p.snapshot?.streaming.isStreaming || p.snapshot?.isWaitingForResponse)
+            : busyProjectPaths.has(p.projectPath)
           const dotClass = isBusy ? 'dot-run' : count > 0 ? 'dot-ok' : 'dot-idle'
           return (
             <button
@@ -358,6 +377,10 @@ function ChatComposer({ mode }: { mode: 'solo' | 'team' }) {
   const [mentionOpen, setMentionOpen] = useState(false)
   const [mentionQuery, setMentionQuery] = useState('')
   const [mentionIndex, setMentionIndex] = useState(0)
+
+  // /loop scheduling state — when on, the next message is sent as `/loop <interval> …`
+  const [loopMode, setLoopMode] = useState(false)
+  const [loopInterval, setLoopInterval] = useState<string | null>(null)
 
   const sendMessage = useConversationStore((s) => s.sendMessage)
   const queueMessage = useConversationStore((s) => s.queueMessage)
@@ -465,12 +488,30 @@ function ChatComposer({ mode }: { mode: 'solo' | 'team' }) {
   const submit = () => {
     const text = val.trim()
     if ((!text && images.length === 0) || !activeConversationId) return
-    const body = text || 'What is in this image?'
+    const baseBody = text || 'What is in this image?'
+
+    // Loop mode: wrap the message in a `/loop <interval>` command. A natural-language
+    // interval in the text ("every 30m") wins over the picker; otherwise use the picker
+    // value (null → dynamic pacing, i.e. bare `/loop`).
+    let body = baseBody
+    if (loopMode && !baseBody.startsWith('/loop ')) {
+      const parsed = parseLoopInterval(baseBody)
+      const interval = parsed?.interval ?? loopInterval
+      // When the whole message IS the interval phrase (e.g. "every 5m"), parsed.cleanText
+      // is '' — use it directly. Only fall back to baseBody when there was no parse at all,
+      // otherwise the stripped interval phrase gets duplicated back into the prompt.
+      const cleaned = parsed ? parsed.cleanText : baseBody
+      body = interval
+        ? (cleaned ? `/loop ${interval} ${cleaned}` : `/loop ${interval}`)
+        : (cleaned ? `/loop ${cleaned}` : '/loop')
+    }
+
     const messageImages = images.length > 0 ? images : undefined
     if (isLoading) queueMessage(body, messageImages)
     else void sendMessage(body, messageImages)
     setVal('')
     setImages([])
+    setLoopMode(false)
   }
 
   return (
@@ -666,6 +707,31 @@ function ChatComposer({ mode }: { mode: 'solo' | 'team' }) {
               <button type="button" className="mini-ico" title="Run as workflow">
                 <IconWorkflow size={16} />
               </button>
+              <Dropdown
+                align="left"
+                width={210}
+                triggerClassName="mini-ico"
+                trigger={
+                  <span
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: loopMode ? 'var(--accent)' : undefined }}
+                    title={loopMode ? 'Loop on — click to change or turn off' : 'Loop this message on a schedule'}
+                  >
+                    <IconRepeat size={16} />
+                    {loopMode && <span style={{ fontSize: 11, fontWeight: 600 }}>{loopInterval || 'dynamic'}</span>}
+                  </span>
+                }
+                items={[
+                  { head: 'Repeat every' },
+                  ...LOOP_INTERVAL_PRESETS.map((p) => ({
+                    label: p.desc ? `${p.label} · ${p.desc}` : p.label,
+                    active: loopMode && loopInterval === p.value,
+                    onClick: () => { setLoopMode(true); setLoopInterval(p.value) },
+                  })),
+                  ...(loopMode
+                    ? [{ label: 'Turn loop off', danger: true, onClick: () => { setLoopMode(false); setLoopInterval(null) } }]
+                    : []),
+                ]}
+              />
               <input
                 ref={fileInputRef}
                 type="file"
@@ -683,7 +749,7 @@ function ChatComposer({ mode }: { mode: 'solo' | 'team' }) {
               <button
                 type="button"
                 className="send"
-                onClick={abortSession}
+                onClick={() => abortSession()}
                 title="Stop"
                 style={{ background: 'var(--err)' }}
               >
@@ -1132,6 +1198,17 @@ export default function ChatPage() {
     return { code: 'CL', name: 'Claude', color: '#6366f1' }
   }, [isStreaming, streaming.currentAgentName, activeTab])
 
+  // Persistent "which agent is working" status for the chat header. Always visible
+  // during a turn (independent of scroll position), unlike the inline typing bubble.
+  // Restores the pre-v2 Agent Status Bar incl. the "Rate limited, retrying…" state.
+  const liveStatus = useMemo(() => {
+    if (!isStreaming) return null
+    if (streaming.retrying) return { dot: 'dot-warn', text: 'Rate limited, retrying…' }
+    const who = streamingAgent?.name || 'Claude'
+    if (streaming.isStreaming && streaming.text) return { dot: 'dot-run', text: `${who} is responding…` }
+    return { dot: 'dot-run', text: `${who} is thinking…` }
+  }, [isStreaming, streaming.retrying, streaming.isStreaming, streaming.text, streamingAgent])
+
   return (
     <div className="chat-wrap">
       <ChatLeftPanel />
@@ -1174,6 +1251,20 @@ export default function ChatPage() {
             )}
             {activeTab?.projectName && <span className="tag accent">{activeTab.projectName}</span>}
           </div>
+          {liveStatus && (
+            <span className="chat-status" title={liveStatus.text}>
+              {streamingAgent && (
+                <span
+                  className="cav"
+                  style={{ width: 17, height: 17, fontSize: 8.5, borderRadius: 5, background: streamingAgent.color }}
+                >
+                  {streamingAgent.code}
+                </span>
+              )}
+              <span className={`status-dot ${liveStatus.dot}`} />
+              <span className="status-text">{liveStatus.text}</span>
+            </span>
+          )}
           <div className="main-actions">
             <div className="seg">
               <button type="button" className={mode === 'solo' ? 'on' : ''} onClick={() => setProjectMode('solo')}>Solo</button>
@@ -1416,13 +1507,14 @@ export default function ChatPage() {
               </div>
             ))}
 
-            {/* Typing / thinking indicator — distinguishes pre-first-token wait from active stream pause */}
+            {/* Typing / thinking indicator — this only renders before the first token,
+                so the agent is genuinely thinking. Surfaces the retry state too. */}
             {streamingAgent && !streaming.text && (
-              <div className="agent-typing">
+              <div className={`agent-typing${streaming.retrying ? ' retrying' : ''}`}>
                 <div className="cav" style={{ background: streamingAgent.color }}>{streamingAgent.code}</div>
                 <div>
                   <div style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 2 }}>
-                    {streamingAgent.name} is {isWaitingForResponse && !streaming.isStreaming ? 'thinking' : 'typing'}…
+                    {streaming.retrying ? 'Rate limited, retrying…' : `${streamingAgent.name} is thinking…`}
                   </div>
                   <div className="tdots"><span /><span /><span /></div>
                 </div>

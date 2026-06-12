@@ -30,6 +30,12 @@ function migrateView(v: unknown): AppView {
   return v as AppView
 }
 
+const REPORTER_ONLY_KEY = 'pilos:reporter-only'
+function loadReporterOnly(): boolean {
+  if (typeof localStorage === 'undefined') return false
+  try { return localStorage.getItem(REPORTER_ONLY_KEY) === '1' } catch { return false }
+}
+
 interface AppStore {
   // Setup / Dependencies
   setupStatus: SetupStatus
@@ -63,8 +69,14 @@ interface AppStore {
   workspaceSetupLoaded: boolean
   workspaceSetupComplete: boolean
 
+  // Reporter-only fallback: when the Claude CLI isn't installed, the user can
+  // still use the Work Day Reporter (it only needs an API key). This flag lets
+  // them bypass the CLI onboarding gate into a minimal reporter-only shell.
+  reporterOnlyMode: boolean
+
   // Actions
   setActiveView: (view: AppView) => void
+  setReporterOnlyMode: (v: boolean) => void
   checkDependencies: () => Promise<void>
   browseForBinary: (tool: DependencyName) => Promise<void>
   checkCli: () => Promise<void>
@@ -99,6 +111,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   workspaceSetupLoaded: false,
   workspaceSetupComplete: false,
 
+  reporterOnlyMode: loadReporterOnly(),
+
   activeView: 'dashboard',
   sidebarWidth: 220,
   rightPanelWidth: 350,
@@ -109,6 +123,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
   terminalFontSize: 13,
 
   setActiveView: (view) => set({ activeView: migrateView(view) }),
+
+  setReporterOnlyMode: (v) => {
+    try { if (typeof localStorage !== 'undefined') localStorage.setItem(REPORTER_ONLY_KEY, v ? '1' : '0') } catch { /* best-effort */ }
+    set({ reporterOnlyMode: v, activeView: v ? 'reporter' : 'dashboard' })
+  },
 
   checkDependencies: async () => {
     set({ setupStatus: 'checking_deps', dependencyResult: null })

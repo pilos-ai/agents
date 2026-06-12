@@ -24,6 +24,7 @@ const CRUMB: Partial<Record<AppView, string>> = {
   agents: 'Agents',
   mcp: 'MCP Servers',
   runs: 'Run history',
+  reporter: 'Reporter',
   settings: 'Settings',
 }
 

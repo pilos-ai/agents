@@ -12,6 +12,7 @@ import { WorkflowSummaryBanner } from './WorkflowSummaryBanner'
 import { WorkflowCodeEditor } from './WorkflowCodeEditor'
 import { useWorkflowStore, stripRuntimeFields, stripEdgeRuntime } from '../../../store/useWorkflowStore'
 import { useTaskStore } from '../../../store/useTaskStore'
+import { prepareTaskForExport, serializeExport, encodeForClipboard, decodeFromClipboard, isPilosClipboardString, canShareTask } from '../../../utils/task-sharing'
 import { api } from '../../../api'
 
 export function WorkflowEditor() {
@@ -34,12 +35,26 @@ export function WorkflowEditor() {
     flashTimer.current = setTimeout(() => setFlash(null), 3000)
   }, [])
 
-  const handleExport = useCallback(async () => {
+  // Build the export payload. With a task in context, emit the rich, marketplace-ready
+  // .pilos format (title/description/priority/schedule/license + workflow); otherwise
+  // fall back to a plain workflow-only export. Always uses the live editor nodes/edges.
+  const buildExportJson = useCallback((): string => {
     const { nodes, edges } = useWorkflowStore.getState()
-    const json = JSON.stringify({
-      nodes: stripRuntimeFields(nodes),
-      edges: stripEdgeRuntime(edges),
-    }, null, 2)
+    const cleanNodes = stripRuntimeFields(nodes)
+    const cleanEdges = stripEdgeRuntime(edges)
+    if (task) {
+      return serializeExport(prepareTaskForExport({ ...task, workflow: { nodes: cleanNodes, edges: cleanEdges } }))
+    }
+    return JSON.stringify({ nodes: cleanNodes, edges: cleanEdges }, null, 2)
+  }, [task])
+
+  const [showExportMenu, setShowExportMenu] = useState(false)
+  const exportBtnRef = useRef<HTMLButtonElement>(null)
+
+  const handleExport = useCallback(async () => {
+    setShowExportMenu(false)
+    if (task && !canShareTask(task)) { showFlash('error', 'Marketplace tasks cannot be shared'); return }
+    const json = buildExportJson()
     const sanitizedTitle = (task?.title || 'workflow').replace(/[^a-zA-Z0-9-_ ]/g, '').trim().replace(/\s+/g, '-')
     const filePath = await api.dialog.saveFile({
       defaultPath: `${sanitizedTitle}.pilos`,
@@ -47,7 +62,24 @@ export function WorkflowEditor() {
     })
     if (!filePath) return
     await api.files.writeFile(filePath, json)
-  }, [task?.title])
+    showFlash('success', 'Exported .pilos file')
+  }, [buildExportJson, task, showFlash])
+
+  const handleExportClipboard = useCallback(async () => {
+    setShowExportMenu(false)
+    if (!task) { showFlash('error', 'Open a task to copy a shareable payload'); return }
+    if (!canShareTask(task)) { showFlash('error', 'Marketplace tasks cannot be shared'); return }
+    try {
+      const { nodes, edges } = useWorkflowStore.getState()
+      const payload = encodeForClipboard(
+        prepareTaskForExport({ ...task, workflow: { nodes: stripRuntimeFields(nodes), edges: stripEdgeRuntime(edges) } }),
+      )
+      await navigator.clipboard.writeText(payload)
+      showFlash('success', 'Copied shareable payload to clipboard')
+    } catch {
+      showFlash('error', 'Could not copy to clipboard')
+    }
+  }, [task, showFlash])
 
   const [showImportMenu, setShowImportMenu] = useState(false)
   const importBtnRef = useRef<HTMLButtonElement>(null)
@@ -95,11 +127,13 @@ export function WorkflowEditor() {
     setShowImportMenu(false)
     try {
       const text = await navigator.clipboard.readText()
-      const err = applyImport(text)
+      // Accept both the encoded `pilos:task:v1:<base64>` clipboard payload and raw JSON.
+      const json = isPilosClipboardString(text) ? serializeExport(decodeFromClipboard(text)) : text
+      const err = applyImport(json)
       if (err) showFlash('error', err)
       else showFlash('success', `Imported ${useWorkflowStore.getState().nodes.length} nodes from clipboard`)
-    } catch {
-      showFlash('error', 'Could not read clipboard')
+    } catch (e) {
+      showFlash('error', e instanceof Error ? e.message : 'Could not read clipboard')
     }
   }, [applyImport, showFlash])
 
@@ -183,14 +217,53 @@ export function WorkflowEditor() {
             <span style={{ fontSize: 10, color: 'var(--muted)' }}>
               {useWorkflowStore.getState().nodes.length} nodes · {useWorkflowStore.getState().edges.length} connections
             </span>
-            <button
-              onClick={handleExport}
-              title="Export workflow as JSON"
-              className="btn sm ghost"
-            >
-              <Icon icon="lucide:download" style={{ fontSize: 12 }} />
-              Export
-            </button>
+            <div className="relative">
+              <button
+                ref={exportBtnRef}
+                onClick={() => setShowExportMenu((v) => !v)}
+                title="Export workflow"
+                className="btn sm ghost"
+              >
+                <Icon icon="lucide:download" style={{ fontSize: 12 }} />
+                Export
+              </button>
+              {showExportMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
+                  <div
+                    className="absolute right-0 top-full mt-1 z-50 overflow-hidden"
+                    style={{
+                      background: 'var(--panel)',
+                      border: '1px solid var(--line)',
+                      borderRadius: 'var(--r-sm)',
+                      boxShadow: '0 12px 32px -8px rgba(0,0,0,0.6)',
+                      minWidth: 180,
+                    }}
+                  >
+                    <button
+                      onClick={handleExport}
+                      className="w-full flex items-center gap-2 text-left"
+                      style={{ padding: '8px 12px', fontSize: 11, color: 'var(--ink-2)', background: 'transparent', border: 'none' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <Icon icon="lucide:file" style={{ fontSize: 11, color: 'var(--muted)' }} />
+                      Export as .pilos file
+                    </button>
+                    <button
+                      onClick={handleExportClipboard}
+                      className="w-full flex items-center gap-2 text-left"
+                      style={{ padding: '8px 12px', fontSize: 11, color: 'var(--ink-2)', background: 'transparent', border: 'none' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <Icon icon="lucide:clipboard" style={{ fontSize: 11, color: 'var(--muted)' }} />
+                      Copy to clipboard
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
             <div className="relative">
               <button
                 ref={importBtnRef}

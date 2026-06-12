@@ -25,6 +25,7 @@ import { registerJiraHandlers } from './handlers/jira'
 import { registerStoriesHandlers } from './handlers/stories'
 import { registerRepetitionHandlers } from './handlers/repetition'
 import { registerPluginHandlers } from './handlers/plugins'
+import { registerReporterHandlers } from './handlers/reporter'
 import type { JiraOAuthLike } from './types/pm'
 
 type SpellParams = { misspelledWord: string; suggestions: string[] } | null
@@ -74,6 +75,7 @@ export async function registerIpcHandlers(
   registerRepetitionHandlers(database)
   registerPluginHandlers(settingsStore)
   registerFileHandlers()
+  registerReporterHandlers()
   registerDialogHandlers(mainWindow)
   registerShellHandlers(getSpellParams)
 

@@ -14,6 +14,9 @@ import type { ClaudeEvent } from './types'
 const OnboardingPage = lazy(() => import('./components/v2/pages/OnboardingPage'))
 const LoginPage = lazy(() => import('./components/v2/pages/LoginPage'))
 const RoleWizardPage = lazy(() => import('./components/v2/pages/RoleWizardPage'))
+const ReporterOnlyShell = lazy(() =>
+  import('./components/v2/ReporterOnlyShell').then((m) => ({ default: m.ReporterOnlyShell })),
+)
 
 export default function App() {
   const loadRecentProjects = useProjectStore((s) => s.loadRecentProjects)
@@ -26,6 +29,7 @@ export default function App() {
   const authLoaded = useLicenseStore((s) => s.authLoaded)
   const workspaceSetupLoaded = useAppStore((s) => s.workspaceSetupLoaded)
   const workspaceSetupComplete = useAppStore((s) => s.workspaceSetupComplete)
+  const reporterOnlyMode = useAppStore((s) => s.reporterOnlyMode)
 
   useEffect(() => {
     checkDependencies()
@@ -197,15 +201,43 @@ export default function App() {
   }, [])
 
   const showV2Shell = setupStatus === 'ready' && authLoaded && isAuthenticated && (!workspaceSetupLoaded || workspaceSetupComplete)
+  // Reporter-only fallback: CLI not ready, but the user opted to use the
+  // standalone reporter (which only needs an API key). Gate on terminal
+  // not-ready states only — not transient 'checking_*'/'installing' — so the
+  // reporter shell never flashes during normal startup probing.
+  const reporterOnlyEligible =
+    setupStatus === 'missing' ||
+    setupStatus === 'deps_missing' ||
+    setupStatus === 'install_failed' ||
+    setupStatus === 'error' ||
+    setupStatus === 'needs_login'
+  const showReporterOnly = reporterOnlyMode && reporterOnlyEligible
+  // A returning reporter-only user starts at 'checking_deps'; show a neutral
+  // blank during the probe rather than flashing the full onboarding wizard
+  // before we resolve to the reporter shell.
+  const reporterOnlyProbing =
+    reporterOnlyMode &&
+    (setupStatus === 'checking_deps' || setupStatus === 'checking_cli' ||
+      setupStatus === 'installing' || setupStatus === 'logging_in')
+  // These shells bring their own .titlebar drag region, so suppress the bare strip.
+  const hasOwnChrome = showV2Shell || showReporterOnly
 
   return (
     <ErrorBoundary>
       <div className="h-screen w-screen text-[var(--ink)] font-sans flex flex-col overflow-hidden" style={{ background: 'var(--desk)' }}>
         {/* macOS drag region — only show for full-screen pages WITHOUT the new titlebar.
-            V2Layout brings its own .titlebar (drag region) so we omit this strip then. */}
-        {!showV2Shell && <div className="titlebar-drag h-8 flex-shrink-0" />}
+            V2Layout / ReporterOnlyShell bring their own .titlebar (drag region) so we omit this strip then. */}
+        {!hasOwnChrome && <div className="titlebar-drag h-8 flex-shrink-0" />}
 
-        {setupStatus !== 'ready' ? (
+        {showReporterOnly ? (
+          <ErrorBoundary>
+            <Suspense fallback={<div className="flex-1" />}>
+              <ReporterOnlyShell />
+            </Suspense>
+          </ErrorBoundary>
+        ) : reporterOnlyProbing ? (
+          <div className="flex-1" />
+        ) : setupStatus !== 'ready' ? (
           <ErrorBoundary>
             <Suspense fallback={<div className="flex-1" />}>
               <OnboardingPage />

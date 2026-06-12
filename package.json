@@ -1,6 +1,6 @@
 {
   "name": "pilos-agents",
-  "version": "4.2.6",
+  "version": "4.3.0",
   "description": "Pilos Agents — turn AI conversations into automated workflows",
   "author": "Vahe Saroyan <vahe.saroyan.web@gmail.com>",
   "license": "MIT",
@@ -24,6 +24,7 @@
     "@xenova/transformers": "^2.17.2"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
     "@dagrejs/dagre": "^2.0.4",
     "@iconify-icon/react": "^3.0.3",
     "@iconify-json/lucide": "^1.2.98",

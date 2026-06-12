@@ -160,6 +160,21 @@ export default function McpPage() {
             </div>
           )}
 
+          {/* Auto-injected tools note — these activate at runtime and aren't in the list below. */}
+          <div
+            className="tile"
+            style={{ marginBottom: 16, display: 'flex', gap: 10, alignItems: 'flex-start', padding: 12, borderColor: 'var(--accent-line)', background: 'var(--accent-soft)' }}
+          >
+            <Icon icon="lucide:zap" style={{ color: 'var(--accent)', fontSize: 15, flex: 'none', marginTop: 1 }} />
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }}>Auto-injected tools</div>
+              <div style={{ fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.5 }}>
+                Jira MCP is automatically available when connected via Integrations. Computer Use MCP activates when enabled in Settings.
+                These don&apos;t appear below — they&apos;re injected at runtime.
+              </div>
+            </div>
+          </div>
+
           <div className="grid-cards gc-3">
             {visible.map((c) => {
               const on = !!c.configured?.enabled

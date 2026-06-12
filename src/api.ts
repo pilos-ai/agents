@@ -103,6 +103,14 @@ const stubAPI: ElectronAPI = {
     saveFile: () => Promise.resolve(null),
     openFile: () => Promise.resolve(null),
   },
+  reporter: {
+    isGitRepo: () => Promise.resolve(false),
+    getCommits: () => Promise.resolve([]),
+    generate: () => Promise.resolve({ summary: '', stats: { totalCommits: 0, filesChanged: 0, additions: 0, deletions: 0 } }),
+    keyHas: () => Promise.resolve(false),
+    keySet: () => Promise.resolve(false),
+    keyClear: () => Promise.resolve(),
+  },
   menu: {
     setActiveProject: noop,
     rebuildMenu: noop,

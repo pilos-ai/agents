@@ -512,6 +512,42 @@ export interface StorageStats {
   dbSizeBytes: number
 }
 
+// ── Reporter (Work Day Reporter) types ──
+
+export type ReportFormat = 'standup' | 'detailed' | 'manager' | 'timesheet'
+
+export interface ReporterCommitFile {
+  filename: string
+  status: string
+  additions: number
+  deletions: number
+  changes: number
+  patch?: string
+}
+
+export interface ReporterCommit {
+  repo: string
+  repoFullName: string
+  sha: string
+  message: string
+  date: string
+  files: ReporterCommitFile[]
+  stats: { additions: number; deletions: number; total: number }
+}
+
+export interface ReportStats {
+  totalCommits: number
+  filesChanged: number
+  additions: number
+  deletions: number
+}
+
+export interface GenerateReportResult {
+  summary: string
+  stats: ReportStats
+  error?: string
+}
+
 // ── API Types (exposed via preload) ──
 
 export interface ElectronAPI {
@@ -609,6 +645,26 @@ export interface ElectronAPI {
     openExternal: (url: string) => Promise<void>
     saveFile: (options?: { defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => Promise<string | null>
     openFile: (options?: { filters?: Array<{ name: string; extensions: string[] }> }) => Promise<string | null>
+  }
+  reporter: {
+    isGitRepo: (repoPath: string) => Promise<boolean>
+    getCommits: (opts: {
+      repoPaths: string[]
+      mode: 'date' | 'range' | 'uncommitted'
+      date?: string
+      startDate?: string
+      endDate?: string
+    }) => Promise<ReporterCommit[]>
+    generate: (opts: {
+      commits: ReporterCommit[]
+      dateStr: string
+      format: ReportFormat
+      model?: string
+      omitTimes?: boolean
+    }) => Promise<GenerateReportResult>
+    keyHas: () => Promise<boolean>
+    keySet: (key: string) => Promise<boolean>
+    keyClear: () => Promise<void>
   }
   menu: {
     setActiveProject: (project: { path: string; name: string } | null) => void

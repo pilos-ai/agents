@@ -10,6 +10,7 @@ const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'))
 const AgentsPage = lazy(() => import('./pages/AgentsPage'))
 const McpPage = lazy(() => import('./pages/McpPage'))
 const RunsPage = lazy(() => import('./pages/RunsPage'))
+const ReporterPage = lazy(() => import('./pages/ReporterPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 
 function ViewLoading() {
@@ -64,6 +65,7 @@ export function ViewRouter({ view }: { view: AppView }) {
       {v === 'agents' && <AgentsPage />}
       {v === 'mcp' && <McpPage />}
       {v === 'runs' && <RunsPage />}
+      {v === 'reporter' && <ReporterPage />}
       {v === 'settings' && <SettingsPage />}
     </Suspense>
   )

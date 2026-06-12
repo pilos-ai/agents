@@ -200,6 +200,24 @@ function StepInstallCli() {
             Install Node.js and Git first, then re-check dependencies.
           </p>
         )}
+
+        {(cliStatus === 'missing' || cliStatus === 'install_failed' || cliStatus === 'error') && (
+          <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4 }}>
+              Don't want the CLI right now?
+            </div>
+            <p className="muted" style={{ fontSize: 11.5, margin: '0 0 10px' }}>
+              You can still generate daily work reports with just a Claude API key — no CLI required.
+            </p>
+            <button
+              className="btn"
+              onClick={() => useAppStore.getState().setReporterOnlyMode(true)}
+            >
+              <Icon icon="lucide:file-text" className="text-[14px]" />
+              Use the Reporter only
+            </button>
+          </div>
+        )}
       </div>
     </>
   )
