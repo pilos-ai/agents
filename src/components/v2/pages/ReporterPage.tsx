@@ -8,11 +8,12 @@
  * (and it still produces a basic summary without one).
  */
 import { useEffect, useState, type ReactNode } from 'react'
-import { useReporterStore, REPORT_FORMATS, REPORTER_MODELS, todayISO } from '../../../store/useReporterStore'
+import { useReporterStore, REPORT_FORMATS, REPORTER_MODELS, REPORTER_MODES, HOSTED_FREE_DAILY, todayISO } from '../../../store/useReporterStore'
 import { useProjectStore } from '../../../store/useProjectStore'
+import { useLicenseStore } from '../../../store/useLicenseStore'
 import {
   IconReport, IconBolt, IconCopy, IconCheckSm, IconCalendar, IconChevR,
-  IconPlus, IconExternal, IconTrash,
+  IconPlus, IconExternal, IconTrash, IconShield,
 } from '../PilosIcons'
 
 // Lightweight markdown: preserve newlines (via CSS pre-wrap) and bold **text**.
@@ -107,10 +108,27 @@ function ConfigColumn() {
   const setModel = useReporterStore((s) => s.setModel)
   const omitTimes = useReporterStore((s) => s.omitTimes)
   const setOmitTimes = useReporterStore((s) => s.setOmitTimes)
+  const metadataOnly = useReporterStore((s) => s.metadataOnly)
+  const setMetadataOnly = useReporterStore((s) => s.setMetadataOnly)
+  const loadPreview = useReporterStore((s) => s.loadPreview)
+  const previewLoading = useReporterStore((s) => s.previewLoading)
+  const hostedUsedToday = useReporterStore((s) => s.hostedUsedToday)
+  const tier = useLicenseStore((s) => s.tier)
+  const mode = useReporterStore((s) => s.mode)
+  const setMode = useReporterStore((s) => s.setMode)
+  const cliAvailable = useReporterStore((s) => s.cliAvailable)
+  const hostedAvailable = useReporterStore((s) => s.hostedAvailable)
+  const keyPresent = useReporterStore((s) => s.keyPresent)
   const generate = useReporterStore((s) => s.generate)
   const generating = useReporterStore((s) => s.generating)
 
   const selCount = repos.filter((r) => r.selected).length
+  const modeAvailable = (m: string) => (m === 'hosted' ? hostedAvailable : m === 'cli' ? cliAvailable : true)
+  const isPro = tier === 'pro' || tier === 'teams'
+  // Only show the daily-quota line when hosted is actually available (not the
+  // "coming soon" state) and the user is on the free tier.
+  const showQuota = mode === 'hosted' && hostedAvailable && !isPro
+  const remaining = Math.max(0, HOSTED_FREE_DAILY - hostedUsedToday)
 
   return (
     <div className="rep-conf">
@@ -165,6 +183,25 @@ function ConfigColumn() {
           </div>
         ))}
 
+        <div className="pal-sec">Generate via</div>
+        {REPORTER_MODES.map((m) => {
+          const available = modeAvailable(m.value)
+          const note = !available
+            ? (m.value === 'hosted' ? ' · coming soon' : ' · CLI not detected')
+            : (m.value === 'byok' && !keyPresent ? ' · add a key below' : '')
+          return (
+            <div
+              key={m.value}
+              className={'optrow' + (mode === m.value ? ' on' : '')}
+              style={available ? undefined : { opacity: 0.5, cursor: 'not-allowed' }}
+              onClick={() => available && setMode(m.value)}
+            >
+              <span className="rdot" />
+              <div><div className="ot">{m.label}<span className="muted">{note}</span></div><div className="od">{m.desc}</div></div>
+            </div>
+          )
+        })}
+
         <div className="pal-sec">Model</div>
         <select className="control" value={model} onChange={(e) => setModel(e.target.value)}>
           {REPORTER_MODELS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
@@ -177,9 +214,43 @@ function ConfigColumn() {
             <div className="ck-path" style={{ fontFamily: 'inherit' }}>No hours, durations, or clock times in the report</div>
           </div>
         </label>
+
+        <label className="ckrow" onClick={(e) => { e.preventDefault(); setMetadataOnly(!metadataOnly) }}>
+          <span className={'ckbox' + (metadataOnly ? ' on' : '')}><IconShield size={11} /></span>
+          <div style={{ flex: 1 }}>
+            <div className="ck-name">Metadata only</div>
+            <div className="ck-path" style={{ fontFamily: 'inherit' }}>Omit code snippets — send only stats, file names &amp; commit messages</div>
+          </div>
+        </label>
       </div>
 
       <div className="rep-conf-foot">
+        {showQuota && (
+          <div className="rep-quota">
+            <span style={{ color: remaining > 0 ? 'var(--ink-2)' : 'var(--warn)' }}>
+              {remaining > 0
+                ? `${remaining} of ${HOSTED_FREE_DAILY} free Pilos Cloud reports left today`
+                : 'Daily free limit reached'}
+            </span>
+            <button
+              type="button"
+              className="btn sm"
+              style={{ marginLeft: 'auto' }}
+              onClick={() => void window.api.dialog.openExternal('https://pilos.net/pricing')}
+            >
+              Upgrade
+            </button>
+          </div>
+        )}
+        <button
+          type="button"
+          className="btn sm ghost"
+          style={{ width: '100%', justifyContent: 'center', marginBottom: 8 }}
+          onClick={() => void loadPreview()}
+          disabled={previewLoading || selCount === 0}
+        >
+          <IconShield size={13} /> {previewLoading ? 'Loading preview…' : 'Preview what gets sent'}
+        </button>
         <button
           type="button"
           className="btn primary"
@@ -345,6 +416,35 @@ function ReportOutput() {
   )
 }
 
+// "See exactly what's sent" — shows the assembled, redacted prompt before generating.
+function PreviewModal() {
+  const previewText = useReporterStore((s) => s.previewText)
+  const previewMeta = useReporterStore((s) => s.previewMeta)
+  const closePreview = useReporterStore((s) => s.closePreview)
+  useEffect(() => {
+    if (previewText === null) return
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') closePreview() }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [previewText, closePreview])
+  if (previewText === null) return null
+  const redacted = previewMeta?.redacted ?? 0
+  return (
+    <div className="rep-preview-overlay" onClick={closePreview}>
+      <div className="rep-preview" onClick={(e) => e.stopPropagation()}>
+        <div className="rep-preview-head">
+          <IconShield size={15} style={{ color: 'var(--accent-2)' }} />
+          <span style={{ fontWeight: 600, fontSize: 13 }}>Exactly what gets sent to Claude</span>
+          <span className="tag">{(previewMeta?.chars ?? 0).toLocaleString()} chars</span>
+          {redacted > 0 && <span className="tag ok">{redacted} secret{redacted === 1 ? '' : 's'} redacted</span>}
+          <button type="button" className="btn sm ghost" style={{ marginLeft: 'auto' }} onClick={closePreview}>Close</button>
+        </div>
+        <pre className="rep-preview-body">{previewText || '(nothing to send — no changes found)'}</pre>
+      </div>
+    </div>
+  )
+}
+
 export default function ReporterPage() {
   const init = useReporterStore((s) => s.init)
 
@@ -361,6 +461,7 @@ export default function ReporterPage() {
     <div className="rep-wrap">
       <ConfigColumn />
       <ReportOutput />
+      <PreviewModal />
     </div>
   )
 }

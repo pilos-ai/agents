@@ -516,6 +516,9 @@ export interface StorageStats {
 
 export type ReportFormat = 'standup' | 'detailed' | 'manager' | 'timesheet'
 
+/** How a report is generated: hosted Pilos proxy, user's own key, or Claude CLI. */
+export type ReporterMode = 'hosted' | 'byok' | 'cli'
+
 export interface ReporterCommitFile {
   filename: string
   status: string
@@ -661,7 +664,19 @@ export interface ElectronAPI {
       format: ReportFormat
       model?: string
       omitTimes?: boolean
+      mode?: ReporterMode
+      metadataOnly?: boolean
+      licenseKey?: string
+      email?: string
     }) => Promise<GenerateReportResult>
+    preview: (opts: {
+      commits: ReporterCommit[]
+      dateStr: string
+      format: ReportFormat
+      omitTimes?: boolean
+      metadataOnly?: boolean
+    }) => Promise<{ prompt: string; redacted: number; chars: number }>
+    hostedAvailable: () => Promise<boolean>
     keyHas: () => Promise<boolean>
     keySet: (key: string) => Promise<boolean>
     keyClear: () => Promise<void>

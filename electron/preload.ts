@@ -181,8 +181,11 @@ contextBridge.exposeInMainWorld('api', {
     isGitRepo: (repoPath: string) => ipcRenderer.invoke('reporter:isGitRepo', repoPath),
     getCommits: (opts: { repoPaths: string[]; mode: 'date' | 'range' | 'uncommitted'; date?: string; startDate?: string; endDate?: string }) =>
       ipcRenderer.invoke('reporter:getCommits', opts),
-    generate: (opts: { commits: unknown[]; dateStr: string; format: 'standup' | 'detailed' | 'manager' | 'timesheet'; model?: string; omitTimes?: boolean }) =>
+    generate: (opts: { commits: unknown[]; dateStr: string; format: 'standup' | 'detailed' | 'manager' | 'timesheet'; model?: string; omitTimes?: boolean; mode?: 'hosted' | 'byok' | 'cli'; metadataOnly?: boolean; licenseKey?: string; email?: string }) =>
       ipcRenderer.invoke('reporter:generate', opts),
+    preview: (opts: { commits: unknown[]; dateStr: string; format: 'standup' | 'detailed' | 'manager' | 'timesheet'; omitTimes?: boolean; metadataOnly?: boolean }) =>
+      ipcRenderer.invoke('reporter:preview', opts),
+    hostedAvailable: () => ipcRenderer.invoke('reporter:hostedAvailable'),
     keyHas: () => ipcRenderer.invoke('reporter:key:has'),
     keySet: (key: string) => ipcRenderer.invoke('reporter:key:set', key),
     keyClear: () => ipcRenderer.invoke('reporter:key:clear'),

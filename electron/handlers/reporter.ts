@@ -14,8 +14,12 @@ import {
   type CommitInfo,
 } from '../services/reporter-git'
 import { getApiKey, setApiKey, clearApiKey, hasApiKey } from '../services/anthropic-key'
+import { redactSecrets } from '../services/secret-redaction'
+import { generateViaCli, generateViaProxy, hostedAvailable, QuotaExceededError } from '../services/reporter-transports'
 
 export type ReportFormat = 'standup' | 'detailed' | 'manager' | 'timesheet'
+/** How a report is generated. hosted = Pilos proxy; byok = user key; cli = Claude CLI. */
+export type ReporterMode = 'hosted' | 'byok' | 'cli'
 
 export interface ReportStats {
   totalCommits: number
@@ -31,6 +35,10 @@ export interface GenerateReportResult {
 }
 
 const DEFAULT_MODEL = 'claude-opus-4-8'
+// Allow-list at the trust boundary — the renderer-supplied model reaches `claude
+// --model <model>` (argv) and the SDK/proxy; reject anything not known.
+const ALLOWED_MODELS = new Set(['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5'])
+const safeModel = (m?: string) => (m && ALLOWED_MODELS.has(m) ? m : DEFAULT_MODEL)
 
 function computeStats(commits: CommitInfo[]): ReportStats {
   return {
@@ -42,7 +50,9 @@ function computeStats(commits: CommitInfo[]): ReportStats {
 }
 
 // Top-20 changed files with a trimmed patch snippet — keeps prompts within budget.
-function prepareFileChanges(commits: CommitInfo[]): string {
+// metadataOnly omits the code snippets entirely (only stats/paths/status leave the device).
+// counter, when passed, accumulates how many secrets were redacted from the snippets.
+function prepareFileChanges(commits: CommitInfo[], metadataOnly = false, counter?: { n: number }): string {
   const fileMap = new Map<string, { status: Set<string>; additions: number; deletions: number; repos: Set<string>; patches: string[] }>()
   for (const commit of commits) {
     for (const file of commit.files) {
@@ -63,17 +73,26 @@ function prepareFileChanges(commits: CommitInfo[]): string {
     result += `   Status: ${[...data.status].join(', ')}\n`
     result += `   Changes: +${data.additions} -${data.deletions}\n`
     result += `   Repository: ${[...data.repos].join(', ')}\n`
-    if (data.patches[0] && data.patches[0].length < 1000) {
-      const lines = data.patches[0].split('\n').slice(0, 20)
-      result += `   Code Changes:\n` + lines.map((l) => `   ${l}`).join('\n') + '\n'
-      if (data.patches[0].split('\n').length > 20) result += `   ... (truncated)\n`
+    if (!metadataOnly && data.patches[0] && data.patches[0].length < 1000) {
+      // Truncate FIRST, then redact — so the secret count reflects only what is
+      // actually sent (lines beyond 20 never leave the device).
+      const allLines = data.patches[0].split('\n')
+      const red = redactSecrets(allLines.slice(0, 20).join('\n'))
+      if (counter) counter.n += red.count
+      result += `   Code Changes:\n` + red.text.split('\n').map((l) => `   ${l}`).join('\n') + '\n'
+      if (allLines.length > 20) result += `   ... (truncated)\n`
     }
   })
   if (sorted.length > 20) result += `\n... and ${sorted.length - 20} more files\n`
   return result
 }
 
-function buildPrompt(format: ReportFormat, dateStr: string, stats: ReportStats, fileChanges: string, commits: CommitInfo[], omitTimes: boolean): string {
+function buildPrompt(format: ReportFormat, dateStr: string, stats: ReportStats, fileChanges: string, commits: CommitInfo[], omitTimes: boolean, counter?: { n: number }): string {
+  const commitLines = commits.map((c) => {
+    const red = redactSecrets(c.message.split('\n')[0])
+    if (counter) counter.n += red.count
+    return `- ${c.repo}: ${red.text}`
+  }).join('\n')
   const baseInfo = `
 WORK STATISTICS:
 - Total Commits: ${stats.totalCommits}
@@ -85,7 +104,7 @@ FILE CHANGES:
 ${fileChanges}
 
 COMMIT MESSAGES:
-${commits.map((c) => `- ${c.repo}: ${c.message.split('\n')[0]}`).join('\n')}
+${commitLines}
 `
   const noTime = omitTimes
     ? '\n\nIMPORTANT: Do NOT include any time estimates, hours, durations, clock times, or a date/time header anywhere in the report. Describe the work without referencing how long it took.'
@@ -213,41 +232,71 @@ function basicReport(commits: CommitInfo[], stats: ReportStats): string {
   return report
 }
 
-async function generateReport(
-  commits: CommitInfo[],
-  dateStr: string,
-  format: ReportFormat,
-  model: string,
-  omitTimes: boolean,
-): Promise<GenerateReportResult> {
-  const stats = computeStats(commits)
-  if (!commits || commits.length === 0) {
+interface GenerateOpts {
+  commits: CommitInfo[]
+  dateStr: string
+  format: ReportFormat
+  model: string
+  omitTimes: boolean
+  mode: ReporterMode
+  metadataOnly?: boolean
+  licenseKey?: string
+  email?: string
+}
+
+// Assemble the prompt that will be sent — exposed so the renderer can preview it.
+function assemblePrompt(o: Pick<GenerateOpts, 'commits' | 'dateStr' | 'format' | 'omitTimes' | 'metadataOnly'>): { prompt: string; stats: ReportStats; redacted: number } {
+  const stats = computeStats(o.commits)
+  const counter = { n: 0 }
+  const fileChanges = prepareFileChanges(o.commits, !!o.metadataOnly, counter)
+  const prompt = buildPrompt(o.format, o.dateStr, stats, fileChanges, o.commits, o.omitTimes, counter)
+  return { prompt, stats, redacted: counter.n }
+}
+
+function mapGenerateError(err: unknown, mode: ReporterMode): string {
+  if (err instanceof QuotaExceededError) return 'Daily report limit reached — upgrade to Pro for unlimited, or use your own API key / Claude CLI.'
+  if (err instanceof Anthropic.AuthenticationError) return 'Invalid Claude API key — showing a basic summary.'
+  if (err instanceof Anthropic.APIError) return `Claude API error (${err.status}) — showing a basic summary.`
+  if (err instanceof Error && err.message === 'HOSTED_NOT_AVAILABLE') return "Hosted reports aren't available yet — switch to your own API key or the Claude CLI."
+  if (mode === 'cli') return 'Claude CLI report failed — is the CLI installed and logged in? Showing a basic summary.'
+  console.error('[reporter] generate failed:', err)
+  return 'Failed to generate report — showing a basic summary.'
+}
+
+async function generateReport(o: GenerateOpts): Promise<GenerateReportResult> {
+  const stats = computeStats(o.commits)
+  if (!o.commits || o.commits.length === 0) {
     return { summary: 'No commits found for this date.', stats }
   }
 
-  const apiKey = getApiKey()
-  if (!apiKey) {
-    return { summary: basicReport(commits, stats), stats, error: 'No Claude API key set — showing a basic summary. Add a key to generate an AI report.' }
-  }
-
-  const prompt = buildPrompt(format, dateStr, stats, prepareFileChanges(commits), commits, omitTimes)
-  const maxTokens = format === 'standup' ? 2000 : 6000
+  const { prompt } = assemblePrompt(o)
+  const model = o.model || DEFAULT_MODEL
+  const maxTokens = o.format === 'standup' ? 2000 : 6000
 
   try {
-    const client = new Anthropic({ apiKey })
-    const message = await client.messages.create({
-      model: model || DEFAULT_MODEL,
-      max_tokens: maxTokens,
-      messages: [{ role: 'user', content: prompt }],
-    })
-    const textBlock = message.content.find((b): b is Anthropic.TextBlock => b.type === 'text')
-    return { summary: textBlock?.text ?? basicReport(commits, stats), stats }
+    let summary: string
+    if (o.mode === 'cli') {
+      summary = await generateViaCli(prompt, model)
+    } else if (o.mode === 'hosted') {
+      summary = await generateViaProxy(prompt, { format: o.format, model, maxTokens, licenseKey: o.licenseKey, email: o.email })
+    } else {
+      // byok — user's own Anthropic key, direct.
+      const apiKey = getApiKey()
+      if (!apiKey) {
+        return { summary: basicReport(o.commits, stats), stats, error: 'No Claude API key set — add a key, or switch to the Claude CLI / hosted mode.' }
+      }
+      const client = new Anthropic({ apiKey })
+      const message = await client.messages.create({
+        model,
+        max_tokens: maxTokens,
+        messages: [{ role: 'user', content: prompt }],
+      })
+      const textBlock = message.content.find((b): b is Anthropic.TextBlock => b.type === 'text')
+      summary = textBlock?.text ?? basicReport(o.commits, stats)
+    }
+    return { summary, stats }
   } catch (err) {
-    let msg = 'Failed to generate AI report — showing a basic summary.'
-    if (err instanceof Anthropic.AuthenticationError) msg = 'Invalid Claude API key — showing a basic summary.'
-    else if (err instanceof Anthropic.APIError) msg = `Claude API error (${err.status}) — showing a basic summary.`
-    console.error('[reporter] generate failed:', err)
-    return { summary: basicReport(commits, stats), stats, error: msg }
+    return { summary: basicReport(o.commits, stats), stats, error: mapGenerateError(err, o.mode) }
   }
 }
 
@@ -279,11 +328,38 @@ export function registerReporterHandlers() {
     },
   )
 
+  // ── Preview (exactly what will be sent, post-redaction) ────────────────────
+  ipcMain.handle(
+    'reporter:preview',
+    (_e, opts: { commits: CommitInfo[]; dateStr: string; format: ReportFormat; omitTimes?: boolean; metadataOnly?: boolean }) => {
+      const { prompt, redacted } = assemblePrompt({
+        commits: opts.commits, dateStr: opts.dateStr, format: opts.format,
+        omitTimes: !!opts.omitTimes, metadataOnly: !!opts.metadataOnly,
+      })
+      return { prompt, redacted, chars: prompt.length }
+    },
+  )
+
   // ── Generation ───────────────────────────────────────────────────────────
+  ipcMain.handle('reporter:hostedAvailable', () => hostedAvailable())
+
   ipcMain.handle(
     'reporter:generate',
-    (_e, opts: { commits: CommitInfo[]; dateStr: string; format: ReportFormat; model?: string; omitTimes?: boolean }) =>
-      generateReport(opts.commits, opts.dateStr, opts.format, opts.model || DEFAULT_MODEL, !!opts.omitTimes),
+    (_e, opts: {
+      commits: CommitInfo[]; dateStr: string; format: ReportFormat; model?: string; omitTimes?: boolean
+      mode?: ReporterMode; metadataOnly?: boolean; licenseKey?: string; email?: string
+    }) =>
+      generateReport({
+        commits: opts.commits,
+        dateStr: opts.dateStr,
+        format: opts.format,
+        model: safeModel(opts.model),
+        omitTimes: !!opts.omitTimes,
+        mode: opts.mode || 'byok',
+        metadataOnly: !!opts.metadataOnly,
+        licenseKey: opts.licenseKey,
+        email: opts.email,
+      }),
   )
 
   // ── API key ──────────────────────────────────────────────────────────────

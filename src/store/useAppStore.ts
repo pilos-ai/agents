@@ -113,7 +113,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   reporterOnlyMode: loadReporterOnly(),
 
-  activeView: 'dashboard',
+  // Reporter-first: the Work Day Reporter is the default landing surface (it
+  // needs no project and no CLI). The full workspace (chat/workflows/…) is a
+  // click away in the rail once the Claude CLI is connected.
+  activeView: 'reporter',
   sidebarWidth: 220,
   rightPanelWidth: 350,
   rightPanelOpen: false,
