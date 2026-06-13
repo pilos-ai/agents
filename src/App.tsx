@@ -11,21 +11,17 @@ import { api } from './api'
 import { loadPmModule } from './lib/pm'
 import type { ClaudeEvent } from './types'
 
+// Setup (CLI/auth) is an optional on-demand overlay — never a launch gate.
 const OnboardingPage = lazy(() => import('./components/v2/pages/OnboardingPage'))
-const LoginPage = lazy(() => import('./components/v2/pages/LoginPage'))
-const RoleWizardPage = lazy(() => import('./components/v2/pages/RoleWizardPage'))
 
 export default function App() {
   const loadRecentProjects = useProjectStore((s) => s.loadRecentProjects)
   const routeClaudeEvent = useProjectStore((s) => s.routeClaudeEvent)
   const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
   const loadSettings = useAppStore((s) => s.loadSettings)
-  const setupStatus = useAppStore((s) => s.setupStatus)
   const checkDependencies = useAppStore((s) => s.checkDependencies)
-  const isAuthenticated = useLicenseStore((s) => s.isAuthenticated)
   const authLoaded = useLicenseStore((s) => s.authLoaded)
-  const workspaceSetupLoaded = useAppStore((s) => s.workspaceSetupLoaded)
-  const workspaceSetupComplete = useAppStore((s) => s.workspaceSetupComplete)
+  const onboardingOpen = useAppStore((s) => s.onboardingOpen)
 
   useEffect(() => {
     checkDependencies()
@@ -196,40 +192,34 @@ export default function App() {
     return () => { unsubTrigger(); unsubNav() }
   }, [])
 
-  const showV2Shell = setupStatus === 'ready' && authLoaded && isAuthenticated && (!workspaceSetupLoaded || workspaceSetupComplete)
-
   return (
     <ErrorBoundary>
       <div className="h-screen w-screen text-[var(--ink)] font-sans flex flex-col overflow-hidden" style={{ background: 'var(--desk)' }}>
-        {/* macOS drag region — only show for full-screen pages WITHOUT the new titlebar.
-            V2Layout brings its own .titlebar (drag region) so we omit this strip then. */}
-        {!showV2Shell && <div className="titlebar-drag h-8 flex-shrink-0" />}
-
-        {setupStatus !== 'ready' ? (
-          <ErrorBoundary>
-            <Suspense fallback={<div className="flex-1" />}>
-              <OnboardingPage />
-            </Suspense>
-          </ErrorBoundary>
-        ) : !authLoaded ? (
-          <div className="flex-1" />
-        ) : !isAuthenticated ? (
-          <ErrorBoundary>
-            <Suspense fallback={<div className="flex-1" />}>
-              <LoginPage />
-            </Suspense>
-          </ErrorBoundary>
-        ) : workspaceSetupLoaded && !workspaceSetupComplete ? (
-          <ErrorBoundary>
-            <Suspense fallback={<div className="flex-1" />}>
-              <RoleWizardPage />
-            </Suspense>
-          </ErrorBoundary>
+        {/* One app, no launch blocker: as soon as auth state loads (local, fast)
+            we render the workspace (Reporter-first). Setup is an optional overlay. */}
+        {!authLoaded ? (
+          <>
+            <div className="titlebar-drag h-8 flex-shrink-0" />
+            <div className="flex-1" />
+          </>
         ) : (
           <ErrorBoundary>
             <V2Layout />
           </ErrorBoundary>
         )}
+
+        {/* Optional setup overlay (Claude CLI + auth) — opened on demand from the
+            rail's "Setup guide" / banner. Never blocks getting into the app. */}
+        {onboardingOpen && (
+          <ErrorBoundary>
+            <Suspense fallback={null}>
+              <div className="fixed inset-0 z-[300]">
+                <OnboardingPage />
+              </div>
+            </Suspense>
+          </ErrorBoundary>
+        )}
+
         <UpdateNotification />
       </div>
     </ErrorBoundary>

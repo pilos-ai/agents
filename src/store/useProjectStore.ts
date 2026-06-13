@@ -633,26 +633,15 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         const nextTab = openProjects[openProjects.length - 1]
         activeProjectPath = nextTab.projectPath
 
-        // Restore that tab's snapshot
-        if (nextTab.snapshot) {
-          restoreConversationSnapshot(nextTab.snapshot)
-        } else {
-          // Clear stale state, then load fresh
-          useConversationStore.setState({
-            conversations: [],
-            activeConversationId: null,
-            messages: [],
-            streaming: { ...emptyStreaming },
-            isWaitingForResponse: false,
-            hasActiveSession: false,
-            processLogs: [],
-            permissionRequest: null,
-            hasMoreOlder: false,
-            oldestLoadedMessageId: null,
-            isLoadingOlder: false,
-          })
-          useConversationStore.getState().loadConversations(nextTab.projectPath)
-        }
+        // Make the switch visible to the conversation store immediately so
+        // registerConversation uses the right project, then point at the saved
+        // conversation. Per-conversation runtime lives in the global sessions map
+        // (terminal model), so a chat left running keeps running.
+        set({ openProjects, activeProjectPath })
+        void (async () => {
+          await useConversationStore.getState().loadConversations(nextTab.projectPath)
+          await useConversationStore.getState().setActiveConversation(nextTab.snapshot?.activeConversationId ?? null)
+        })()
 
         // Phase 3: Restore the tab's active view
         useAppStore.getState().setActiveView(nextTab.activeView || 'chat')
@@ -713,40 +702,22 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       p.projectPath === dirPath ? { ...p, unreadCount: 0 } : p
     )
 
-    // Restore new tab's conversation state BEFORE switching activeProjectPath
-    // to prevent the UI from rendering stale data from the outgoing tab
+    // Switch the active project FIRST so registerConversation/createConversation
+    // (called inside setActiveConversation) use the correct project path.
     const tab = openProjects.find((p) => p.projectPath === dirPath)
-    if (tab?.snapshot) {
-      restoreConversationSnapshot(tab.snapshot)
-    } else {
-      // First time or no snapshot — clear stale state immediately
-      useConversationStore.setState({
-        conversations: [],
-        activeConversationId: null,
-        messages: [],
-        streaming: { ...emptyStreaming },
-        isWaitingForResponse: false,
-        hasActiveSession: false,
-        processLogs: [],
-        permissionRequest: null,
-        hasMoreOlder: false,
-        oldestLoadedMessageId: null,
-        isLoadingOlder: false,
-      })
-    }
-
     set({ openProjects, activeProjectPath: dirPath })
 
-    // If no snapshot, load conversations from DB (after setting activeProjectPath
-    // so that createConversation etc. use the correct project)
-    if (!tab?.snapshot) {
-      await useConversationStore.getState().loadConversations(dirPath)
-    }
+    // Refresh this project's conversation list, then point the view at its
+    // last-active conversation. Per-conversation runtime lives in the global
+    // sessions map and survives project switches (terminal model) — there is no
+    // snapshot runtime to restore, so a chat left streaming keeps streaming.
+    await useConversationStore.getState().loadConversations(dirPath)
+    await useConversationStore.getState().setActiveConversation(tab?.snapshot?.activeConversationId ?? null)
 
     // Phase 3: Restore the tab's active view.
     // Migrations: legacy 'terminal' → 'chat'; old default 'dashboard' → 'chat'
     // (dashboard is the no-project landing only; once a project is open we go to chat).
-    const VALID_VIEWS = new Set(['chat', 'workflows', 'terminal', 'analytics', 'agents', 'mcp', 'runs', 'settings', 'tasks', 'results', 'config'])
+    const VALID_VIEWS = new Set(['chat', 'workflows', 'terminal', 'analytics', 'agents', 'mcp', 'runs', 'reporter', 'settings', 'tasks', 'results', 'config'])
     const raw = tab?.activeView
     const rawView = raw === 'terminal' ? 'chat' : raw === 'dashboard' ? 'chat' : raw
     const restoredView = rawView && VALID_VIEWS.has(rawView) ? rawView : 'chat'
@@ -967,86 +938,22 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     get().conversationProjectMap.set(conversationId, projectPath)
   },
 
-  // Phase 1: Route events to active or background tabs
+  // Terminal model: every Claude event is reduced into its OWN conversation's
+  // LiveSession by useConversationStore.handleClaudeEvent (foreground or background,
+  // same or different project). No per-tab snapshot processing — the global sessions
+  // map keeps each chat fully live and isolated.
   routeClaudeEvent: (event: ClaudeEvent) => {
-    const state = get()
-    const sessionId = event.sessionId
-    const ownerProject = state.conversationProjectMap.get(sessionId)
+    useConversationStore.getState().handleClaudeEvent(event)
 
-    if (!ownerProject) {
-      // Unknown session — route to active tab
-      useConversationStore.getState().handleClaudeEvent(event)
-      return
-    }
-
-    if (ownerProject === state.activeProjectPath) {
-      // Active tab — route directly
-      useConversationStore.getState().handleClaudeEvent(event)
-    } else {
-      // Background tab — process event into its snapshot
-      const tabIndex = state.openProjects.findIndex((p) => p.projectPath === ownerProject)
-      if (tabIndex === -1) return
-
-      const tab = state.openProjects[tabIndex]
-      const snapshot = tab.snapshot || { ...emptySnapshot }
-
-      const { snapshot: updatedSnapshot, messagesToPersist } =
-        applyEventToSnapshot(snapshot, event, tab)
-
-      // Update the tab's snapshot and increment unread count (Phase 4)
-      const openProjects = [...state.openProjects]
-      openProjects[tabIndex] = {
-        ...tab,
-        snapshot: updatedSnapshot,
-        unreadCount: tab.unreadCount + messagesToPersist.filter((m) => m.type === 'text').length,
-      }
-      set({ openProjects })
-
-      // Persist messages to DB in background
-      const convId = updatedSnapshot.activeConversationId
-      if (convId) {
-        for (const msg of messagesToPersist) {
-          api.conversations.saveMessage(convId, {
-            role: msg.role,
-            type: msg.type,
-            content: msg.content,
-            contentBlocks: msg.contentBlocks,
-            agentName: msg.agentName,
-            agentIcon: msg.agentIcon,
-            agentColor: msg.agentColor,
-          })
-        }
-      }
-
-      // Process queue for background tabs on turn completion
-      if (event.type === 'result' && updatedSnapshot.messageQueue.length > 0 && convId) {
-        const next = updatedSnapshot.messageQueue[0]
-        updatedSnapshot.messageQueue = updatedSnapshot.messageQueue.slice(1)
-        // Add the queued user message to the snapshot so it's visible when switching tabs
-        const userMsg: ConversationMessage = {
-          role: 'user',
-          type: 'text',
-          content: next.text,
-          images: next.images,
-          timestamp: Date.now(),
-        }
-        updatedSnapshot.messages = [...updatedSnapshot.messages, userMsg]
-        // Keep isWaitingForResponse true to prevent UI flicker
-        updatedSnapshot.isWaitingForResponse = true
-        // Update the snapshot with dequeued message and user message
-        openProjects[tabIndex] = { ...openProjects[tabIndex], snapshot: updatedSnapshot }
-        set({ openProjects })
-        // Persist user message to DB
-        api.conversations.saveMessage(convId, {
-          role: 'user',
-          type: 'text',
-          content: next.text,
-        })
-        // Send the queued message to the existing session
-        setTimeout(() => {
-          api.claude.sendMessage(convId, next.text, next.images)
-        }, 100)
-      }
+    // Unread badge: bump the owning project tab when a turn completes in a project
+    // that isn't currently active.
+    const ownerProject = get().conversationProjectMap.get(event.sessionId)
+    if (ownerProject && ownerProject !== get().activeProjectPath && event.type === 'result') {
+      set((s) => ({
+        openProjects: s.openProjects.map((p) =>
+          p.projectPath === ownerProject ? { ...p, unreadCount: p.unreadCount + 1 } : p,
+        ),
+      }))
     }
   },
 }))

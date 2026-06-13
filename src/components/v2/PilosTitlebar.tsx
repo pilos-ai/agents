@@ -8,12 +8,61 @@
  * native traffic lights on top of the renderer — so we suppress our simulated
  * lights on macOS to avoid double-up. Windows / Linux still get the simulated set.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { api } from '../../api'
 import { useAppStore, type AppView } from '../../store/useAppStore'
 import { useProjectStore } from '../../store/useProjectStore'
 import { useUsageStore } from '../../store/useUsageStore'
-import { IconBell, IconSettings, IconSpark } from './PilosIcons'
+import { IconBell, IconSettings, IconSpark, IconReport, IconAgents, IconChevD } from './PilosIcons'
+import type { Workspace } from '../../store/useAppStore'
+
+const WORKSPACES: { id: Workspace; name: string; Icon: (p: { size?: number }) => ReactElement; desc: string }[] = [
+  { id: 'reporter', name: 'Reporter', Icon: IconReport, desc: 'Offline work reports from your git history' },
+  { id: 'agents', name: 'Agents', Icon: IconAgents, desc: 'AI team, workflows, terminal & MCP · needs Claude CLI' },
+]
+
+// Two-workspace switcher (pilos-handoff design) — Reporter ⇆ Agents.
+function WorkspaceSwitcher() {
+  const workspace = useAppStore((s) => s.workspace)
+  const setWorkspace = useAppStore((s) => s.setWorkspace)
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+  const cur = WORKSPACES.find((w) => w.id === workspace) ?? WORKSPACES[0]
+  return (
+    <div className="menu-wrap titlebar-no-drag" ref={ref}>
+      <button className="ws-btn" onClick={() => setOpen((o) => !o)}>
+        <span className="ws-btn-ic"><cur.Icon size={13} /></span>
+        <span className="ws-btn-nm">{cur.name}</span>
+        <IconChevD size={13} style={{ color: 'var(--muted)' }} />
+      </button>
+      {open && (
+        <div className="menu" style={{ width: 308 }}>
+          <div className="menu-head">Workspace</div>
+          {WORKSPACES.map((w) => (
+            <button
+              key={w.id}
+              className={'menu-item' + (w.id === workspace ? ' active' : '')}
+              style={{ alignItems: 'flex-start', gap: 10 }}
+              onClick={() => { setWorkspace(w.id); setOpen(false) }}
+            >
+              <span className="ws-btn-ic" style={{ flex: 'none', marginTop: 1 }}><w.Icon size={14} /></span>
+              <span className="mi-l" style={{ textAlign: 'left' }}>
+                <span style={{ fontWeight: 600, display: 'block' }}>{w.name}</span>
+                <span style={{ fontSize: 11, color: 'var(--muted)' }}>{w.desc}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 const CRUMB: Partial<Record<AppView, string>> = {
   dashboard: 'Dashboard',
@@ -24,6 +73,7 @@ const CRUMB: Partial<Record<AppView, string>> = {
   agents: 'Agents',
   mcp: 'MCP Servers',
   runs: 'Run history',
+  reporter: 'Reporter',
   settings: 'Settings',
 }
 
@@ -44,6 +94,7 @@ function fmtTokens(n: number | undefined): string {
 export function PilosTitlebar() {
   const activeView = useAppStore((s) => s.activeView)
   const setActiveView = useAppStore((s) => s.setActiveView)
+  const workspace = useAppStore((s) => s.workspace)
   const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
   const openProjects = useProjectStore((s) => s.openProjects)
   const limits = useUsageStore((s) => s.limits)
@@ -93,24 +144,33 @@ export function PilosTitlebar() {
       {/* On macOS, leave room for the native traffic lights (positioned at x:15) */}
       {isMac && <div style={{ width: 64, flex: 'none' }} aria-hidden />}
 
+      <WorkspaceSwitcher />
+
       <div className="tb-title">
-        <span>Pilos</span>
-        <span className="sep">/</span>
-        <span>{projectName}</span>
-        <span className="sep">/</span>
+        {workspace === 'agents' && (
+          <>
+            <span>{projectName}</span>
+            <span className="sep">/</span>
+          </>
+        )}
         <span className="crumb">{crumb}</span>
       </div>
 
       <div className="tb-right">
-        <button className="tb-pill" onClick={() => setActiveView('mcp')}>
-          <span className="dot" />
-          {mcpCount} MCP server{mcpCount === 1 ? '' : 's'}
-        </button>
+        {/* MCP + token pills are Agents-workspace concepts — hidden in Reporter. */}
+        {workspace === 'agents' && (
+          <>
+            <button className="tb-pill" onClick={() => setActiveView('mcp')}>
+              <span className="dot" />
+              {mcpCount} MCP server{mcpCount === 1 ? '' : 's'}
+            </button>
 
-        <button className="tb-pill mono" onClick={() => setActiveView('analytics')}>
-          <IconSpark size={13} style={{ color: 'var(--accent-2)' }} />
-          {tokenLabel}
-        </button>
+            <button className="tb-pill mono" onClick={() => setActiveView('analytics')}>
+              <IconSpark size={13} style={{ color: 'var(--accent-2)' }} />
+              {tokenLabel}
+            </button>
+          </>
+        )}
 
         {/* Notification dropdown */}
         <div className="menu-wrap" ref={notifRef}>

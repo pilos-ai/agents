@@ -67,6 +67,7 @@ const electronEntries: Parameters<typeof electron>[0] = [
             'electron',
             'better-sqlite3',
             'node-pty',
+            '@anthropic-ai/sdk',
             'path',
             'fs',
             'os',

@@ -38,3 +38,7 @@ npm-debug.log*
 
 # Playwright MCP
 .playwright-mcp/
+
+# Playwright / test artifacts
+/playwright-report/
+/test-results/

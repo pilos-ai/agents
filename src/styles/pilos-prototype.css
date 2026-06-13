@@ -807,6 +807,16 @@ html.embed body {
 .main-sub { font-size: 12px; color: var(--muted); }
 .main-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
+/* Persistent "which agent is working" status pill in the chat header. */
+.chat-status {
+  display: flex; align-items: center; gap: 7px;
+  padding: 3px 11px 3px 4px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--line-2);
+  font-size: 11.5px; color: var(--ink-2); white-space: nowrap;
+}
+.chat-status .status-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.agent-typing.retrying .tdots span { background: var(--warn); }
+
 /* ============================================================
    Chat wrap / column / scroll / messages
    ============================================================ */
@@ -1864,3 +1874,103 @@ html.embed body {
 }
 .list-item:hover .wf-row-del { opacity: 1; }
 .list-item .wf-row-del:hover { color: var(--err); }
+
+/* ============================================================
+   REPORTER — Work Day Reporter (ported from pilos-handoff .rep-*)
+   ============================================================ */
+.rep-wrap { position: relative; display: flex; flex: 1; min-width: 0; min-height: 0; }
+.rep-conf { width: 280px; flex: none; border-right: 1px solid var(--line-2); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+.rep-conf-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 14px; }
+.rep-conf-foot { flex: none; padding: 12px 14px; border-top: 1px solid var(--line-2); background: var(--panel); }
+.rep-quota { display: flex; align-items: center; gap: 8px; font-size: 11px; margin-bottom: 8px; }
+
+/* Send-preview modal — "exactly what gets sent to Claude" */
+.rep-preview-overlay { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 48px; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px); }
+.rep-preview { width: min(820px, 100%); max-height: 100%; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r-md); box-shadow: 0 18px 60px rgba(0,0,0,0.5); overflow: hidden; }
+.rep-preview-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line-2); }
+.rep-preview-body { margin: 0; padding: 14px 16px; overflow: auto; font-family: var(--mono); font-size: 11.5px; line-height: 1.55; color: var(--ink-2); white-space: pre-wrap; word-break: break-word; }
+.rep-note { display: flex; gap: 8px; align-items: flex-start; font-size: 11px; line-height: 1.45; color: var(--ink-3); background: rgba(62,207,142,0.08); border: 1px solid rgba(62,207,142,0.22); border-radius: var(--r-sm); padding: 8px 10px; margin: 8px 0 2px; }
+.rep-note svg { color: var(--ok); flex: none; margin-top: 1px; }
+.rep-note b { color: var(--ink-2); font-weight: 600; }
+.ckrow { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: var(--r-sm); cursor: pointer; transition: background 0.12s; }
+.ckrow:hover { background: var(--hover); }
+.ckbox { width: 16px; height: 16px; border-radius: 5px; border: 1px solid var(--line-3); background: var(--surface); display: grid; place-items: center; color: transparent; flex: none; transition: background 0.14s, border-color 0.14s, color 0.14s; }
+.ckbox.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ckrow .ck-name { font-size: 12.5px; font-weight: 550; }
+.ckrow .ck-path { font-family: var(--mono); font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ckrow .ck-del { margin-left: auto; flex: none; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; color: var(--muted); background: none; border: none; cursor: pointer; opacity: 0; transition: opacity 0.12s, background 0.12s, color 0.12s; }
+.ckrow:hover .ck-del, .ckrow:focus-within .ck-del { opacity: 1; }
+.ckrow .ck-del:hover { background: rgba(251,111,111,0.12); color: var(--err); }
+.optrow { display: flex; gap: 10px; padding: 9px 11px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); cursor: pointer; margin-bottom: 7px; transition: border-color 0.15s, background 0.15s; }
+.optrow:hover { border-color: var(--line-3); }
+.optrow.on { border-color: var(--accent-line); background: var(--accent-soft); }
+.optrow .rdot { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--line-3); flex: none; margin-top: 2px; transition: border 0.15s; background: var(--win); }
+.optrow.on .rdot { border: 4.5px solid var(--accent); }
+.optrow .ot { font-size: 12.5px; font-weight: 600; }
+.optrow .od { font-size: 11px; color: var(--muted); line-height: 1.4; margin-top: 1px; }
+.rep-gen { display: flex; align-items: center; gap: 12px; padding: 40px 0; color: var(--muted); font-size: 13px; justify-content: center; }
+.rep-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 64px 24px; text-align: center; color: var(--muted); }
+.rep-body { padding: 18px 20px; white-space: pre-wrap; font-size: 13.5px; line-height: 1.62; color: var(--ink-2); }
+.rep-body strong { color: var(--ink); font-weight: 600; }
+.ts-row { display: grid; grid-template-columns: 140px 1fr 50px; gap: 12px; font-size: 12.5px; color: var(--ink-2); padding: 7px 4px; border-bottom: 1px solid var(--line-2); align-items: baseline; }
+.ts-row:last-child { border-bottom: none; }
+.ts-time { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.ts-dur { font-family: var(--mono); font-size: 11.5px; color: var(--ink); text-align: right; }
+.file-pill { font-family: var(--mono); font-size: 11px; padding: 4px 9px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2); display: inline-flex; align-items: center; gap: 7px; }
+.fs-added { color: var(--ok); } .fs-modified { color: var(--warn); } .fs-deleted, .fs-removed { color: var(--err); }
+.rep-acc { width: 100%; display: flex; align-items: center; gap: 9px; padding: 13px 16px; background: none; border: none; color: var(--ink); font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.rep-acc-body { border-top: 1px solid var(--line-2); padding: 10px 16px 14px; }
+.rep-file-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 11px; }
+.rep-file-row .fs-added, .rep-file-row .fs-modified, .rep-file-row .fs-removed { font-family: var(--mono); font-size: 10px; }
+.rep-diff { font-family: var(--mono); font-size: 10.5px; color: var(--muted); flex: none; }
+/* API key bar shown when no key is set */
+.rep-keybar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--accent-line); background: var(--accent-soft); border-radius: var(--r-md); margin-bottom: 14px; }
+.rep-keybar .control { flex: 1; min-width: 200px; }
+
+/* Reporter inputs/selects — the .field-scoped .control rule doesn't reach the
+   config column or key bar, so give them their own dark-theme base styling. */
+.rep-conf input.control,
+.rep-conf select.control,
+.rep-keybar input.control {
+  min-height: 36px; border-radius: var(--r-sm);
+  border: 1px solid var(--line-2); background: var(--surface); color: var(--ink);
+  font-size: 12.5px; padding: 0 11px; outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.rep-conf input.control,
+.rep-conf select.control { width: 100%; }
+.rep-conf input.control:focus,
+.rep-conf select.control:focus,
+.rep-keybar input.control:focus {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.12);
+}
+.rep-conf select.control {
+  cursor: pointer; padding-right: 30px;
+  -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b8b99' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat: no-repeat; background-position: right 9px center; background-size: 14px;
+}
+.rep-conf select.control option { background: var(--panel); color: var(--ink); }
+
+/* ============================================================
+   WORKSPACE SHELL — two-workspace model (ported from pilos-handoff)
+   ============================================================ */
+/* Workspace switcher (titlebar) */
+.ws-btn { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 9px 0 7px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 12.5px; font-weight: 600; transition: background 0.15s, border-color 0.15s; }
+.ws-btn:hover { background: var(--surface-2); border-color: var(--line-3); }
+.ws-btn-ic { width: 18px; height: 18px; border-radius: 5px; background: var(--accent-soft); color: var(--accent-2); display: grid; place-items: center; }
+.ws-btn-nm { letter-spacing: -0.01em; }
+
+/* CLI gate — shown inside the Agents workspace when the CLI isn't connected */
+.cli-gate { position: relative; width: 460px; max-width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-xl); padding: 30px; text-align: center; box-shadow: var(--shadow-pop); }
+.gate-ic { width: 60px; height: 60px; border-radius: 16px; background: var(--accent-soft); color: var(--accent-2); display: grid; place-items: center; margin: 0 auto; position: relative; }
+.gate-lock { position: absolute; top: 26px; left: 50%; margin-left: 12px; width: 24px; height: 24px; border-radius: 50%; background: var(--warn); color: #3a2a05; display: grid; place-items: center; border: 3px solid var(--surface); }
+.cli-gate .h2 { text-align: center; }
+.cli-gate .cli-box { text-align: left; }
+.cli-gate .row { justify-content: center; }
+.gate-foot { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 18px; font-size: 11px; color: var(--muted); }
+.gate-foot svg { color: var(--ok); }
+
+/* Onboarding overlay wrapper */
+.onb-overlay { position: absolute; inset: 0; z-index: 100; display: flex; background: rgba(5,5,7,0.72); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }

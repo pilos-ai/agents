@@ -294,3 +294,10 @@ export const IconLock = makeStrokedChildren(
 )
 
 export const IconArrow = makeStroked(['M5 12h14M13 6l6 6-6 6'])
+export const IconReport = makeStroked([
+  'M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z',
+  'M14 3v4h4',
+  'M9 12.5h6',
+  'M9 15.5h6',
+  'M9 18.5h4',
+])
