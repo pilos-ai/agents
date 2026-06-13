@@ -1,6 +1,7 @@
 import { lazy, Suspense, useRef } from 'react'
-import type { AppView } from '../../store/useAppStore'
+import { useAppStore, type AppView } from '../../store/useAppStore'
 import { useProjectStore } from '../../store/useProjectStore'
+import { CliGate } from './CliGate'
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const ChatPage = lazy(() => import('./pages/ChatPage'))
@@ -36,6 +37,14 @@ export function ViewRouter({ view }: { view: AppView }) {
   // routes to chat (guards against stale per-project view memory and any
   // openProject path that didn't go through the store-layer migration).
   const v = hasProject && migrate(view) === 'dashboard' ? 'chat' : migrate(view)
+
+  // Agents workspace requires the Claude CLI. If it isn't connected, show the
+  // CLI gate in place of the (CLI-dependent) view — never blocks the Reporter.
+  const workspace = useAppStore((s) => s.workspace)
+  const cliReady = useAppStore((s) => s.cliStatus === 'ready')
+  if (workspace === 'agents' && !cliReady && v !== 'settings') {
+    return <CliGate />
+  }
 
   // Terminal must persist its xterm.js instance across tab switches — otherwise
   // tearing it down kills the renderer-side display state (scrollback, prompt,

@@ -14,12 +14,25 @@ import { spawn } from 'child_process'
 import { findClaudeBinary, getExpandedEnv } from './cli-checker'
 
 const LICENSE_SERVER = process.env.PILOS_LICENSE_SERVER || 'https://license.pilos.net'
-// Set this (env or build config) once the P2 reporter proxy is live.
-const REPORTER_BASE = process.env.PILOS_REPORTER_URL || ''
+// Pilos Cloud reporter endpoint. Defaults to the license server; override with
+// PILOS_REPORTER_URL for local dev (e.g. http://localhost:3456).
+const REPORTER_BASE = process.env.PILOS_REPORTER_URL || LICENSE_SERVER
 
-/** Whether the hosted proxy is configured/available in this build. */
+/** Pilos Cloud is the default path — available whenever a base URL is set. */
 export function hostedAvailable(): boolean {
   return REPORTER_BASE.length > 0
+}
+
+export interface HostedReportPayload {
+  commits: unknown[]
+  format: string
+  dateStr: string
+  omitTimes?: boolean
+  metadataOnly?: boolean
+  model?: string
+  licenseKey?: string
+  email?: string
+  machineId?: string
 }
 
 /** Error thrown when the hosted free quota is exhausted (→ upgrade CTA). */
@@ -54,39 +67,39 @@ export function generateViaCli(prompt: string, model: string): Promise<string> {
   })
 }
 
-/** Generate a report via the Pilos hosted proxy (our key, server-side quota). */
-export async function generateViaProxy(
-  prompt: string,
-  opts: { format: string; model: string; maxTokens: number; licenseKey?: string; email?: string },
-): Promise<string> {
-  if (!hostedAvailable()) {
-    throw new Error('HOSTED_NOT_AVAILABLE')
-  }
+/**
+ * Generate a report via Pilos Cloud. The backend builds the prompt + calls Claude
+ * (our key, server-side quota); we send only the already-redacted git data.
+ */
+export async function generateViaProxy(payload: HostedReportPayload): Promise<string> {
+  if (!hostedAvailable()) throw new Error('HOSTED_NOT_AVAILABLE')
   const res = await fetch(`${REPORTER_BASE}/v1/reporter/generate`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(opts.licenseKey ? { Authorization: `Bearer ${opts.licenseKey}` } : {}),
-    },
-    body: JSON.stringify({
-      prompt,
-      format: opts.format,
-      model: opts.model,
-      maxTokens: opts.maxTokens,
-      email: opts.email,
-    }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   })
   if (res.status === 402 || res.status === 429) {
     let remaining = 0
     try { remaining = (await res.json())?.remaining ?? 0 } catch { /* ignore */ }
     throw new QuotaExceededError(remaining)
   }
-  if (!res.ok) {
-    throw new Error(`Pilos reporter proxy error (${res.status})`)
-  }
-  const data = (await res.json()) as { summary?: string }
-  if (!data.summary) throw new Error('Pilos reporter proxy returned no summary')
+  if (!res.ok) throw new Error(`Pilos Cloud error (${res.status})`)
+  const data = (await res.json()) as { summary?: string; error?: string }
+  if (!data.summary) throw new Error(data.error || 'Pilos Cloud returned no summary')
   return data.summary
+}
+
+/** Ask Pilos Cloud for the exact prompt it would build (server-side templates). */
+export async function previewViaProxy(payload: HostedReportPayload): Promise<{ prompt: string; chars: number }> {
+  if (!hostedAvailable()) throw new Error('HOSTED_NOT_AVAILABLE')
+  const res = await fetch(`${REPORTER_BASE}/v1/reporter/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(`Pilos Cloud preview error (${res.status})`)
+  const data = (await res.json()) as { prompt?: string; chars?: number }
+  return { prompt: data.prompt ?? '', chars: data.chars ?? (data.prompt?.length ?? 0) }
 }
 
 export { LICENSE_SERVER }

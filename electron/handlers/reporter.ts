@@ -15,7 +15,7 @@ import {
 } from '../services/reporter-git'
 import { getApiKey, setApiKey, clearApiKey, hasApiKey } from '../services/anthropic-key'
 import { redactSecrets } from '../services/secret-redaction'
-import { generateViaCli, generateViaProxy, hostedAvailable, QuotaExceededError } from '../services/reporter-transports'
+import { generateViaCli, generateViaProxy, previewViaProxy, hostedAvailable, QuotaExceededError } from '../services/reporter-transports'
 
 export type ReportFormat = 'standup' | 'detailed' | 'manager' | 'timesheet'
 /** How a report is generated. hosted = Pilos proxy; byok = user key; cli = Claude CLI. */
@@ -242,6 +242,23 @@ interface GenerateOpts {
   metadataOnly?: boolean
   licenseKey?: string
   email?: string
+  machineId?: string
+}
+
+// Redact secrets from commit messages + patches before they leave the device
+// (the privacy boundary for the hosted Pilos Cloud path). Returns the count too.
+function redactCommits(commits: CommitInfo[]): { commits: CommitInfo[]; redacted: number } {
+  let redacted = 0
+  const out = commits.map((c) => {
+    const m = redactSecrets(c.message); redacted += m.count
+    const files = c.files.map((f) => {
+      if (!f.patch) return f
+      const r = redactSecrets(f.patch); redacted += r.count
+      return { ...f, patch: r.text }
+    })
+    return { ...c, message: m.text, files }
+  })
+  return { commits: out, redacted }
 }
 
 // Assemble the prompt that will be sent — exposed so the renderer can preview it.
@@ -278,7 +295,13 @@ async function generateReport(o: GenerateOpts): Promise<GenerateReportResult> {
     if (o.mode === 'cli') {
       summary = await generateViaCli(prompt, model)
     } else if (o.mode === 'hosted') {
-      summary = await generateViaProxy(prompt, { format: o.format, model, maxTokens, licenseKey: o.licenseKey, email: o.email })
+      // Pilos Cloud builds the prompt + calls Claude; we send only redacted git data.
+      summary = await generateViaProxy({
+        commits: redactCommits(o.commits).commits,
+        format: o.format, dateStr: o.dateStr,
+        omitTimes: o.omitTimes, metadataOnly: o.metadataOnly, model,
+        licenseKey: o.licenseKey, email: o.email, machineId: o.machineId,
+      })
     } else {
       // byok — user's own Anthropic key, direct.
       const apiKey = getApiKey()
@@ -329,10 +352,22 @@ export function registerReporterHandlers() {
   )
 
   // ── Preview (exactly what will be sent, post-redaction) ────────────────────
+  // Mirrors generation: the prompt comes from Pilos Cloud (server-side templates).
+  // Falls back to the local builder if the backend is unreachable (offline).
   ipcMain.handle(
     'reporter:preview',
-    (_e, opts: { commits: CommitInfo[]; dateStr: string; format: ReportFormat; omitTimes?: boolean; metadataOnly?: boolean }) => {
-      const { prompt, redacted } = assemblePrompt({
+    async (_e, opts: { commits: CommitInfo[]; dateStr: string; format: ReportFormat; omitTimes?: boolean; metadataOnly?: boolean }) => {
+      const { commits, redacted } = redactCommits(opts.commits)
+      if (hostedAvailable()) {
+        try {
+          const r = await previewViaProxy({
+            commits, format: opts.format, dateStr: opts.dateStr,
+            omitTimes: opts.omitTimes, metadataOnly: opts.metadataOnly,
+          })
+          return { prompt: r.prompt, redacted, chars: r.chars }
+        } catch { /* fall back to local builder */ }
+      }
+      const { prompt } = assemblePrompt({
         commits: opts.commits, dateStr: opts.dateStr, format: opts.format,
         omitTimes: !!opts.omitTimes, metadataOnly: !!opts.metadataOnly,
       })
@@ -347,7 +382,7 @@ export function registerReporterHandlers() {
     'reporter:generate',
     (_e, opts: {
       commits: CommitInfo[]; dateStr: string; format: ReportFormat; model?: string; omitTimes?: boolean
-      mode?: ReporterMode; metadataOnly?: boolean; licenseKey?: string; email?: string
+      mode?: ReporterMode; metadataOnly?: boolean; licenseKey?: string; email?: string; machineId?: string
     }) =>
       generateReport({
         commits: opts.commits,
@@ -355,10 +390,11 @@ export function registerReporterHandlers() {
         format: opts.format,
         model: safeModel(opts.model),
         omitTimes: !!opts.omitTimes,
-        mode: opts.mode || 'byok',
+        mode: opts.mode || 'hosted',
         metadataOnly: !!opts.metadataOnly,
         licenseKey: opts.licenseKey,
         email: opts.email,
+        machineId: opts.machineId,
       }),
   )
 

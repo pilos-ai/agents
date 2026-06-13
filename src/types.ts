@@ -668,6 +668,7 @@ export interface ElectronAPI {
       metadataOnly?: boolean
       licenseKey?: string
       email?: string
+      machineId?: string
     }) => Promise<GenerateReportResult>
     preview: (opts: {
       commits: ReporterCommit[]

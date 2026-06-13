@@ -394,11 +394,13 @@ function ChatComposer({ mode }: { mode: 'solo' | 'team' }) {
   const setReplyTo = useConversationStore((s) => s.setReplyTo)
   const isLoading = isWaitingForResponse || isStreaming
 
-  // Project agents — used for @-mention autocomplete
-  const projectAgents = useProjectStore((s) => {
-    const tab = s.openProjects.find((p) => p.projectPath === s.activeProjectPath)
-    return tab?.agents || []
-  })
+  // Project agents — used for @-mention autocomplete. The selector must return a
+  // STABLE reference (the agents array, or undefined) — never a fresh `[]`, or
+  // useSyncExternalStore loops ("getSnapshot should be cached" → max update depth).
+  const projectAgentsRaw = useProjectStore((s) =>
+    s.openProjects.find((p) => p.projectPath === s.activeProjectPath)?.agents,
+  )
+  const projectAgents = useMemo(() => projectAgentsRaw ?? [], [projectAgentsRaw])
 
   // Filter agents by current mention query (case-insensitive prefix on name OR role)
   const mentionMatches = useMemo(() => {

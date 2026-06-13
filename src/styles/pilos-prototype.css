@@ -1880,7 +1880,7 @@ html.embed body {
    ============================================================ */
 .rep-wrap { position: relative; display: flex; flex: 1; min-width: 0; min-height: 0; }
 .rep-conf { width: 280px; flex: none; border-right: 1px solid var(--line-2); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
-.rep-conf-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; }
+.rep-conf-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 14px; }
 .rep-conf-foot { flex: none; padding: 12px 14px; border-top: 1px solid var(--line-2); background: var(--panel); }
 .rep-quota { display: flex; align-items: center; gap: 8px; font-size: 11px; margin-bottom: 8px; }
 
@@ -1952,3 +1952,25 @@ html.embed body {
   background-repeat: no-repeat; background-position: right 9px center; background-size: 14px;
 }
 .rep-conf select.control option { background: var(--panel); color: var(--ink); }
+
+/* ============================================================
+   WORKSPACE SHELL — two-workspace model (ported from pilos-handoff)
+   ============================================================ */
+/* Workspace switcher (titlebar) */
+.ws-btn { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 9px 0 7px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 12.5px; font-weight: 600; transition: background 0.15s, border-color 0.15s; }
+.ws-btn:hover { background: var(--surface-2); border-color: var(--line-3); }
+.ws-btn-ic { width: 18px; height: 18px; border-radius: 5px; background: var(--accent-soft); color: var(--accent-2); display: grid; place-items: center; }
+.ws-btn-nm { letter-spacing: -0.01em; }
+
+/* CLI gate — shown inside the Agents workspace when the CLI isn't connected */
+.cli-gate { position: relative; width: 460px; max-width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-xl); padding: 30px; text-align: center; box-shadow: var(--shadow-pop); }
+.gate-ic { width: 60px; height: 60px; border-radius: 16px; background: var(--accent-soft); color: var(--accent-2); display: grid; place-items: center; margin: 0 auto; position: relative; }
+.gate-lock { position: absolute; top: 26px; left: 50%; margin-left: 12px; width: 24px; height: 24px; border-radius: 50%; background: var(--warn); color: #3a2a05; display: grid; place-items: center; border: 3px solid var(--surface); }
+.cli-gate .h2 { text-align: center; }
+.cli-gate .cli-box { text-align: left; }
+.cli-gate .row { justify-content: center; }
+.gate-foot { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 18px; font-size: 11px; color: var(--muted); }
+.gate-foot svg { color: var(--ok); }
+
+/* Onboarding overlay wrapper */
+.onb-overlay { position: absolute; inset: 0; z-index: 100; display: flex; background: rgba(5,5,7,0.72); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }

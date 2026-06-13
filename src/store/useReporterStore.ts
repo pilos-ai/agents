@@ -83,7 +83,7 @@ function saveDismissed(paths: string[]) {
 
 // Hosted free-tier daily quota. The client counter is OPTIMISTIC/informational;
 // the server is authoritative (P2). BYOK/CLI are always unlimited.
-export const HOSTED_FREE_DAILY = 5
+export const HOSTED_FREE_DAILY = 2
 const HOSTED_USAGE_KEY = 'pilos:reporter-usage'
 function utcDay(): string { return new Date().toISOString().slice(0, 10) }
 
@@ -146,6 +146,7 @@ interface ReporterStore {
   previewMeta: { redacted: number; chars: number } | null
   previewLoading: boolean
   hostedUsedToday: number
+  machineId: string
 
   init: () => Promise<void>
   refreshKeyPresent: () => Promise<void>
@@ -209,9 +210,11 @@ export const useReporterStore = create<ReporterStore>((set, get) => ({
   previewMeta: null,
   previewLoading: false,
   hostedUsedToday: loadHostedUsedToday(),
+  machineId: '',
 
   init: async () => {
     get().syncReposFromProjects()
+    try { set({ machineId: await api.metrics.getMachineId() }) } catch { /* optional */ }
     await Promise.all([get().refreshKeyPresent(), get().refreshAvailability()])
   },
 
@@ -361,6 +364,7 @@ export const useReporterStore = create<ReporterStore>((set, get) => ({
         mode: effectiveMode,
         licenseKey: lic.licenseKey || undefined,
         email: lic.email || undefined,
+        machineId: get().machineId || undefined,
       })
       // Count a successful hosted free generation against the daily quota.
       const usedToday = hostedLimited && !report.error ? bumpHostedUsed() : get().hostedUsedToday

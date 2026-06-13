@@ -17,6 +17,14 @@ export type AppView =
   | 'settings'
   | (string & {})
 
+// Two workspaces in one app (pilos-handoff design): Reporter works fully offline;
+// Agents needs the Claude CLI. The rail shows only the active workspace's nav.
+export type Workspace = 'reporter' | 'agents'
+export const WORKSPACE_NAV: Record<Workspace, AppView[]> = {
+  reporter: ['reporter'],
+  agents: ['chat', 'workflows', 'terminal', 'analytics', 'agents', 'mcp', 'runs'],
+}
+
 // Migration: map legacy persisted view keys to their new equivalents.
 //   'tasks'    → 'workflows'   (Tasks page → Workflows page)
 //   'results'  → 'runs'        (Results page → Runs page)
@@ -30,10 +38,23 @@ function migrateView(v: unknown): AppView {
   return v as AppView
 }
 
+const WORKSPACE_KEY = 'pilos:workspace'
+function loadWorkspace(): Workspace {
+  if (typeof localStorage === 'undefined') return 'reporter'
+  try { return localStorage.getItem(WORKSPACE_KEY) === 'agents' ? 'agents' : 'reporter' } catch { return 'reporter' }
+}
+
 const REPORTER_ONLY_KEY = 'pilos:reporter-only'
 function loadReporterOnly(): boolean {
-  if (typeof localStorage === 'undefined') return false
-  try { return localStorage.getItem(REPORTER_ONLY_KEY) === '1' } catch { return false }
+  // Reporter-first: when no explicit choice is stored, default to the Reporter
+  // (which needs no CLI). Only a stored '0' (user went to full CLI setup) opts out.
+  if (typeof localStorage === 'undefined') return true
+  try {
+    const v = localStorage.getItem(REPORTER_ONLY_KEY)
+    return v === null ? true : v === '1'
+  } catch {
+    return true
+  }
 }
 
 interface AppStore {
@@ -74,9 +95,18 @@ interface AppStore {
   // them bypass the CLI onboarding gate into a minimal reporter-only shell.
   reporterOnlyMode: boolean
 
+  // The app launches straight into the workspace (Reporter-first, no blocker).
+  // CLI/auth setup is an OPTIONAL overlay opened on demand, never a launch gate.
+  onboardingOpen: boolean
+
+  // Active workspace (Reporter | Agents) — drives which nav items the rail shows.
+  workspace: Workspace
+
   // Actions
   setActiveView: (view: AppView) => void
   setReporterOnlyMode: (v: boolean) => void
+  setOnboardingOpen: (v: boolean) => void
+  setWorkspace: (w: Workspace) => void
   checkDependencies: () => Promise<void>
   browseForBinary: (tool: DependencyName) => Promise<void>
   checkCli: () => Promise<void>
@@ -112,6 +142,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   workspaceSetupComplete: false,
 
   reporterOnlyMode: loadReporterOnly(),
+  onboardingOpen: false,
+  workspace: loadWorkspace(),
 
   // Reporter-first: the Work Day Reporter is the default landing surface (it
   // needs no project and no CLI). The full workspace (chat/workflows/…) is a
@@ -126,6 +158,19 @@ export const useAppStore = create<AppStore>((set, get) => ({
   terminalFontSize: 13,
 
   setActiveView: (view) => set({ activeView: migrateView(view) }),
+
+  setOnboardingOpen: (v) => set({ onboardingOpen: v }),
+
+  setWorkspace: (w) => {
+    try { if (typeof localStorage !== 'undefined') localStorage.setItem(WORKSPACE_KEY, w) } catch { /* best-effort */ }
+    set((s) => {
+      const nav = WORKSPACE_NAV[w]
+      // Keep the current view if it belongs to the new workspace (or is settings);
+      // otherwise jump to that workspace's first nav item.
+      const keep = s.activeView === 'settings' || nav.includes(s.activeView as AppView)
+      return { workspace: w, activeView: keep ? s.activeView : nav[0] }
+    })
+  },
 
   setReporterOnlyMode: (v) => {
     try { if (typeof localStorage !== 'undefined') localStorage.setItem(REPORTER_ONLY_KEY, v ? '1' : '0') } catch { /* best-effort */ }

@@ -8,12 +8,12 @@
  * (and it still produces a basic summary without one).
  */
 import { useEffect, useState, type ReactNode } from 'react'
-import { useReporterStore, REPORT_FORMATS, REPORTER_MODELS, REPORTER_MODES, HOSTED_FREE_DAILY, todayISO } from '../../../store/useReporterStore'
+import { useReporterStore, REPORT_FORMATS, HOSTED_FREE_DAILY, todayISO } from '../../../store/useReporterStore'
 import { useProjectStore } from '../../../store/useProjectStore'
 import { useLicenseStore } from '../../../store/useLicenseStore'
 import {
   IconReport, IconBolt, IconCopy, IconCheckSm, IconCalendar, IconChevR,
-  IconPlus, IconExternal, IconTrash, IconShield,
+  IconPlus, IconTrash, IconShield,
 } from '../PilosIcons'
 
 // Lightweight markdown: preserve newlines (via CSS pre-wrap) and bold **text**.
@@ -45,54 +45,6 @@ function stripTimes(text: string): string {
     .replace(/^[ \t]*[–·-]\s*$/gm, '')
 }
 
-function ApiKeyBar() {
-  const keyPresent = useReporterStore((s) => s.keyPresent)
-  const setApiKey = useReporterStore((s) => s.setApiKey)
-  const clearApiKey = useReporterStore((s) => s.clearApiKey)
-  const [val, setVal] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  if (keyPresent) {
-    return (
-      <div className="rep-keybar" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
-        <IconCheckSm size={15} style={{ color: 'var(--ok)' }} />
-        <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>Claude API key set — reports use AI generation.</span>
-        <button type="button" className="btn sm ghost" style={{ marginLeft: 'auto' }} onClick={() => void clearApiKey()}>
-          Remove
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <div className="rep-keybar">
-      <input
-        type="password"
-        className="control"
-        placeholder="Paste your Claude API key (sk-ant-…)"
-        value={val}
-        onChange={(e) => setVal(e.target.value)}
-      />
-      <button
-        type="button"
-        className="btn sm primary"
-        disabled={!val.trim() || saving}
-        onClick={async () => { setSaving(true); await setApiKey(val.trim()); setVal(''); setSaving(false) }}
-      >
-        {saving ? 'Saving…' : 'Save key'}
-      </button>
-      <button
-        type="button"
-        className="btn sm ghost"
-        title="Get a key at console.anthropic.com"
-        onClick={() => void window.api.dialog.openExternal('https://console.anthropic.com/settings/keys')}
-      >
-        <IconExternal size={13} /> Get a key
-      </button>
-    </div>
-  )
-}
-
 function ConfigColumn() {
   const repos = useReporterStore((s) => s.repos)
   const toggleRepo = useReporterStore((s) => s.toggleRepo)
@@ -104,8 +56,6 @@ function ConfigColumn() {
   const setDate = useReporterStore((s) => s.setDate)
   const format = useReporterStore((s) => s.format)
   const setFormat = useReporterStore((s) => s.setFormat)
-  const model = useReporterStore((s) => s.model)
-  const setModel = useReporterStore((s) => s.setModel)
   const omitTimes = useReporterStore((s) => s.omitTimes)
   const setOmitTimes = useReporterStore((s) => s.setOmitTimes)
   const metadataOnly = useReporterStore((s) => s.metadataOnly)
@@ -114,20 +64,12 @@ function ConfigColumn() {
   const previewLoading = useReporterStore((s) => s.previewLoading)
   const hostedUsedToday = useReporterStore((s) => s.hostedUsedToday)
   const tier = useLicenseStore((s) => s.tier)
-  const mode = useReporterStore((s) => s.mode)
-  const setMode = useReporterStore((s) => s.setMode)
-  const cliAvailable = useReporterStore((s) => s.cliAvailable)
-  const hostedAvailable = useReporterStore((s) => s.hostedAvailable)
-  const keyPresent = useReporterStore((s) => s.keyPresent)
   const generate = useReporterStore((s) => s.generate)
   const generating = useReporterStore((s) => s.generating)
 
   const selCount = repos.filter((r) => r.selected).length
-  const modeAvailable = (m: string) => (m === 'hosted' ? hostedAvailable : m === 'cli' ? cliAvailable : true)
+  // Reports always generate via Pilos Cloud (the backend). Free = N/day, Pro = unlimited.
   const isPro = tier === 'pro' || tier === 'teams'
-  // Only show the daily-quota line when hosted is actually available (not the
-  // "coming soon" state) and the user is on the free tier.
-  const showQuota = mode === 'hosted' && hostedAvailable && !isPro
   const remaining = Math.max(0, HOSTED_FREE_DAILY - hostedUsedToday)
 
   return (
@@ -183,49 +125,26 @@ function ConfigColumn() {
           </div>
         ))}
 
-        <div className="pal-sec">Generate via</div>
-        {REPORTER_MODES.map((m) => {
-          const available = modeAvailable(m.value)
-          const note = !available
-            ? (m.value === 'hosted' ? ' · coming soon' : ' · CLI not detected')
-            : (m.value === 'byok' && !keyPresent ? ' · add a key below' : '')
-          return (
-            <div
-              key={m.value}
-              className={'optrow' + (mode === m.value ? ' on' : '')}
-              style={available ? undefined : { opacity: 0.5, cursor: 'not-allowed' }}
-              onClick={() => available && setMode(m.value)}
-            >
-              <span className="rdot" />
-              <div><div className="ot">{m.label}<span className="muted">{note}</span></div><div className="od">{m.desc}</div></div>
-            </div>
-          )
-        })}
-
-        <div className="pal-sec">Model</div>
-        <select className="control" value={model} onChange={(e) => setModel(e.target.value)}>
-          {REPORTER_MODELS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-        </select>
-
-        <label className="ckrow" style={{ marginTop: 10 }} onClick={(e) => { e.preventDefault(); setOmitTimes(!omitTimes) }}>
-          <span className={'ckbox' + (omitTimes ? ' on' : '')}><IconCheckSm size={11} /></span>
-          <div style={{ flex: 1 }}>
-            <div className="ck-name">Omit time estimates</div>
-            <div className="ck-path" style={{ fontFamily: 'inherit' }}>No hours, durations, or clock times in the report</div>
+        <div className="pal-sec">Options</div>
+        <div className={'optrow' + (omitTimes ? ' on' : '')} style={{ alignItems: 'flex-start' }} onClick={() => setOmitTimes(!omitTimes)}>
+          <span className={'ckbox' + (omitTimes ? ' on' : '')} style={{ flex: 'none', marginTop: 1 }}><IconCheckSm size={11} /></span>
+          <div style={{ minWidth: 0 }}>
+            <div className="ot">Omit time estimates</div>
+            <div className="od">No hours, durations, or clock times in the report</div>
           </div>
-        </label>
+        </div>
 
-        <label className="ckrow" onClick={(e) => { e.preventDefault(); setMetadataOnly(!metadataOnly) }}>
-          <span className={'ckbox' + (metadataOnly ? ' on' : '')}><IconShield size={11} /></span>
-          <div style={{ flex: 1 }}>
-            <div className="ck-name">Metadata only</div>
-            <div className="ck-path" style={{ fontFamily: 'inherit' }}>Omit code snippets — send only stats, file names &amp; commit messages</div>
+        <div className={'optrow' + (metadataOnly ? ' on' : '')} style={{ alignItems: 'flex-start' }} onClick={() => setMetadataOnly(!metadataOnly)}>
+          <span className={'ckbox' + (metadataOnly ? ' on' : '')} style={{ flex: 'none', marginTop: 1 }}><IconCheckSm size={11} /></span>
+          <div style={{ minWidth: 0 }}>
+            <div className="ot">Metadata only</div>
+            <div className="od">Omit code snippets — send only stats, file names &amp; commit messages</div>
           </div>
-        </label>
+        </div>
       </div>
 
       <div className="rep-conf-foot">
-        {showQuota && (
+        {!isPro && (
           <div className="rep-quota">
             <span style={{ color: remaining > 0 ? 'var(--ink-2)' : 'var(--warn)' }}>
               {remaining > 0
@@ -368,8 +287,6 @@ function ReportOutput() {
 
       <div className="main-body scroll">
         <div className="pad" style={{ maxWidth: 880 }}>
-          <ApiKeyBar />
-
           {/* Errors (bad repo folder, failed generate) must show even when no
               report exists yet — render above the empty/generating states. */}
           {error && (
@@ -434,10 +351,13 @@ function PreviewModal() {
       <div className="rep-preview" onClick={(e) => e.stopPropagation()}>
         <div className="rep-preview-head">
           <IconShield size={15} style={{ color: 'var(--accent-2)' }} />
-          <span style={{ fontWeight: 600, fontSize: 13 }}>Exactly what gets sent to Claude</span>
+          <span style={{ fontWeight: 600, fontSize: 13 }}>Your data sent to Claude</span>
           <span className="tag">{(previewMeta?.chars ?? 0).toLocaleString()} chars</span>
           {redacted > 0 && <span className="tag ok">{redacted} secret{redacted === 1 ? '' : 's'} redacted</span>}
           <button type="button" className="btn sm ghost" style={{ marginLeft: 'auto' }} onClick={closePreview}>Close</button>
+        </div>
+        <div style={{ padding: '8px 16px 0', fontSize: 11.5, color: 'var(--muted)' }}>
+          Only this — your git stats, file names &amp; commit messages (secrets removed). Pilos adds the report formatting on the server; no other data leaves your machine.
         </div>
         <pre className="rep-preview-body">{previewText || '(nothing to send — no changes found)'}</pre>
       </div>

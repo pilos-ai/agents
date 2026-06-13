@@ -6,7 +6,7 @@
  * existing ViewRouter.
  */
 import { useMemo, type ReactElement } from 'react'
-import { useAppStore, type AppView } from '../../store/useAppStore'
+import { useAppStore, WORKSPACE_NAV, type AppView } from '../../store/useAppStore'
 import { useLicenseStore } from '../../store/useLicenseStore'
 import {
   IconChat,
@@ -42,7 +42,12 @@ const RAIL_ITEMS: RailItem[] = [
 export function PilosRail() {
   const activeView = useAppStore((s) => s.activeView)
   const setActiveView = useAppStore((s) => s.setActiveView)
+  const setOnboardingOpen = useAppStore((s) => s.setOnboardingOpen)
+  const workspace = useAppStore((s) => s.workspace)
   const email = useLicenseStore((s) => s.email)
+
+  // Only the active workspace's nav items appear in the rail (Reporter vs Agents).
+  const items = RAIL_ITEMS.filter((it) => WORKSPACE_NAV[workspace].includes(it.view))
 
   const initials = useMemo(() => {
     if (!email) return '??'
@@ -53,7 +58,7 @@ export function PilosRail() {
   return (
     <div className="rail titlebar-no-drag">
       <div className="rail-logo" />
-      {RAIL_ITEMS.map((it) => {
+      {items.map((it) => {
         const active = activeView === it.view
         return (
           <button
@@ -70,11 +75,7 @@ export function PilosRail() {
       <div className="rail-spacer" />
       <button
         className="rail-btn"
-        onClick={() => {
-          // Placeholder: matches prototype's "Setup guide" button.
-          // Hook up the onboarding overlay later if needed.
-          setActiveView('settings')
-        }}
+        onClick={() => setOnboardingOpen(true)}
         aria-label="Setup guide"
       >
         <IconSpark size={19} />

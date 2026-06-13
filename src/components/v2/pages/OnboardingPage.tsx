@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Icon } from '../../common/Icon'
 import { useAppStore } from '../../../store/useAppStore'
 import type { DependencyName } from '../../../types'
@@ -207,14 +207,14 @@ function StepInstallCli() {
               Don't want the CLI right now?
             </div>
             <p className="muted" style={{ fontSize: 11.5, margin: '0 0 10px' }}>
-              You can still generate daily work reports with just a Claude API key — no CLI required.
+              The Work Day Reporter works without it — just a Claude API key (or Pilos Cloud). The CLI only unlocks chat, workflows &amp; agents.
             </p>
             <button
               className="btn"
-              onClick={() => useAppStore.getState().setReporterOnlyMode(true)}
+              onClick={() => useAppStore.getState().setOnboardingOpen(false)}
             >
               <Icon icon="lucide:file-text" className="text-[14px]" />
-              Use the Reporter only
+              Back to the Reporter
             </button>
           </div>
         )}
@@ -353,6 +353,12 @@ export default function OnboardingPage() {
   const setupStatus = useAppStore((s) => s.setupStatus)
   const cliStatus = useAppStore((s) => s.cliStatus)
   const dependencyResult = useAppStore((s) => s.dependencyResult)
+  const closeSetup = () => useAppStore.getState().setOnboardingOpen(false)
+
+  // This is an optional overlay now — auto-dismiss once setup is fully ready.
+  useEffect(() => {
+    if (setupStatus === 'ready') closeSetup()
+  }, [setupStatus])
 
   // Map app state -> wizard step (1/2/3)
   const step = useMemo(() => {
@@ -438,20 +444,20 @@ export default function OnboardingPage() {
               Back
             </button>
           )}
+          {/* Optional overlay — closing returns to the app (Reporter works without setup). */}
+          <button className="btn ghost" onClick={closeSetup}>
+            Close
+          </button>
           <span style={{ marginLeft: 'auto' }} />
           <button
             className="btn primary"
             disabled={!canContinue && !isLast}
             onClick={() => {
-              if (isLast) {
-                // Setup is auto-handled by the store reaching 'ready'.
-                // This button is a no-op in last step.
-                return
-              }
+              if (isLast) { closeSetup(); return }
               if (canContinue) setManualStep(effectiveStep + 1)
             }}
           >
-            {isLast ? 'Enter Pilos' : 'Continue'}
+            {isLast ? 'Done' : 'Continue'}
             <Icon icon="lucide:arrow-right" className="text-[15px]" />
           </button>
         </div>

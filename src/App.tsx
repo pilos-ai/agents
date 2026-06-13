@@ -11,25 +11,17 @@ import { api } from './api'
 import { loadPmModule } from './lib/pm'
 import type { ClaudeEvent } from './types'
 
+// Setup (CLI/auth) is an optional on-demand overlay — never a launch gate.
 const OnboardingPage = lazy(() => import('./components/v2/pages/OnboardingPage'))
-const LoginPage = lazy(() => import('./components/v2/pages/LoginPage'))
-const RoleWizardPage = lazy(() => import('./components/v2/pages/RoleWizardPage'))
-const ReporterOnlyShell = lazy(() =>
-  import('./components/v2/ReporterOnlyShell').then((m) => ({ default: m.ReporterOnlyShell })),
-)
 
 export default function App() {
   const loadRecentProjects = useProjectStore((s) => s.loadRecentProjects)
   const routeClaudeEvent = useProjectStore((s) => s.routeClaudeEvent)
   const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
   const loadSettings = useAppStore((s) => s.loadSettings)
-  const setupStatus = useAppStore((s) => s.setupStatus)
   const checkDependencies = useAppStore((s) => s.checkDependencies)
-  const isAuthenticated = useLicenseStore((s) => s.isAuthenticated)
   const authLoaded = useLicenseStore((s) => s.authLoaded)
-  const workspaceSetupLoaded = useAppStore((s) => s.workspaceSetupLoaded)
-  const workspaceSetupComplete = useAppStore((s) => s.workspaceSetupComplete)
-  const reporterOnlyMode = useAppStore((s) => s.reporterOnlyMode)
+  const onboardingOpen = useAppStore((s) => s.onboardingOpen)
 
   useEffect(() => {
     checkDependencies()
@@ -200,68 +192,34 @@ export default function App() {
     return () => { unsubTrigger(); unsubNav() }
   }, [])
 
-  const showV2Shell = setupStatus === 'ready' && authLoaded && isAuthenticated && (!workspaceSetupLoaded || workspaceSetupComplete)
-  // Reporter-only fallback: CLI not ready, but the user opted to use the
-  // standalone reporter (which only needs an API key). Gate on terminal
-  // not-ready states only — not transient 'checking_*'/'installing' — so the
-  // reporter shell never flashes during normal startup probing.
-  const reporterOnlyEligible =
-    setupStatus === 'missing' ||
-    setupStatus === 'deps_missing' ||
-    setupStatus === 'install_failed' ||
-    setupStatus === 'error' ||
-    setupStatus === 'needs_login'
-  const showReporterOnly = reporterOnlyMode && reporterOnlyEligible
-  // A returning reporter-only user starts at 'checking_deps'; show a neutral
-  // blank during the probe rather than flashing the full onboarding wizard
-  // before we resolve to the reporter shell.
-  const reporterOnlyProbing =
-    reporterOnlyMode &&
-    (setupStatus === 'checking_deps' || setupStatus === 'checking_cli' ||
-      setupStatus === 'installing' || setupStatus === 'logging_in')
-  // These shells bring their own .titlebar drag region, so suppress the bare strip.
-  const hasOwnChrome = showV2Shell || showReporterOnly
-
   return (
     <ErrorBoundary>
       <div className="h-screen w-screen text-[var(--ink)] font-sans flex flex-col overflow-hidden" style={{ background: 'var(--desk)' }}>
-        {/* macOS drag region — only show for full-screen pages WITHOUT the new titlebar.
-            V2Layout / ReporterOnlyShell bring their own .titlebar (drag region) so we omit this strip then. */}
-        {!hasOwnChrome && <div className="titlebar-drag h-8 flex-shrink-0" />}
-
-        {showReporterOnly ? (
-          <ErrorBoundary>
-            <Suspense fallback={<div className="flex-1" />}>
-              <ReporterOnlyShell />
-            </Suspense>
-          </ErrorBoundary>
-        ) : reporterOnlyProbing ? (
-          <div className="flex-1" />
-        ) : setupStatus !== 'ready' ? (
-          <ErrorBoundary>
-            <Suspense fallback={<div className="flex-1" />}>
-              <OnboardingPage />
-            </Suspense>
-          </ErrorBoundary>
-        ) : !authLoaded ? (
-          <div className="flex-1" />
-        ) : !isAuthenticated ? (
-          <ErrorBoundary>
-            <Suspense fallback={<div className="flex-1" />}>
-              <LoginPage />
-            </Suspense>
-          </ErrorBoundary>
-        ) : workspaceSetupLoaded && !workspaceSetupComplete ? (
-          <ErrorBoundary>
-            <Suspense fallback={<div className="flex-1" />}>
-              <RoleWizardPage />
-            </Suspense>
-          </ErrorBoundary>
+        {/* One app, no launch blocker: as soon as auth state loads (local, fast)
+            we render the workspace (Reporter-first). Setup is an optional overlay. */}
+        {!authLoaded ? (
+          <>
+            <div className="titlebar-drag h-8 flex-shrink-0" />
+            <div className="flex-1" />
+          </>
         ) : (
           <ErrorBoundary>
             <V2Layout />
           </ErrorBoundary>
         )}
+
+        {/* Optional setup overlay (Claude CLI + auth) — opened on demand from the
+            rail's "Setup guide" / banner. Never blocks getting into the app. */}
+        {onboardingOpen && (
+          <ErrorBoundary>
+            <Suspense fallback={null}>
+              <div className="fixed inset-0 z-[300]">
+                <OnboardingPage />
+              </div>
+            </Suspense>
+          </ErrorBoundary>
+        )}
+
         <UpdateNotification />
       </div>
     </ErrorBoundary>
