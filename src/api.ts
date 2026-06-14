@@ -109,6 +109,7 @@ const stubAPI: ElectronAPI = {
     generate: () => Promise.resolve({ summary: '', stats: { totalCommits: 0, filesChanged: 0, additions: 0, deletions: 0 } }),
     preview: () => Promise.resolve({ prompt: '', redacted: 0, chars: 0 }),
     hostedAvailable: () => Promise.resolve(false),
+    usage: () => Promise.resolve(null),
     keyHas: () => Promise.resolve(false),
     keySet: () => Promise.resolve(false),
     keyClear: () => Promise.resolve(),

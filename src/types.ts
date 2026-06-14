@@ -551,6 +551,36 @@ export interface GenerateReportResult {
   error?: string
 }
 
+/** Reporter usage analytics, synced from Pilos Cloud (BE). Metadata only. */
+export interface ReporterRecentReport {
+  ts: string
+  format: ReportFormat
+  commits: number
+  files: number
+  additions: number
+  deletions: number
+  tokensOut: number
+}
+export interface ReporterUsage {
+  tier: 'free' | 'pro' | 'teams'
+  isPro: boolean
+  limit: number | null
+  today: { count: number; remaining: number }
+  week: number
+  totals: {
+    reports: number
+    commits: number
+    files: number
+    additions: number
+    deletions: number
+    tokensIn: number
+    tokensOut: number
+  }
+  byFormat: Record<ReportFormat, number>
+  daily: { date: string; count: number }[]
+  recent: ReporterRecentReport[]
+}
+
 // ── API Types (exposed via preload) ──
 
 export interface ElectronAPI {
@@ -678,6 +708,7 @@ export interface ElectronAPI {
       metadataOnly?: boolean
     }) => Promise<{ prompt: string; redacted: number; chars: number }>
     hostedAvailable: () => Promise<boolean>
+    usage: (opts: { licenseKey?: string; email?: string; machineId?: string }) => Promise<ReporterUsage | null>
     keyHas: () => Promise<boolean>
     keySet: (key: string) => Promise<boolean>
     keyClear: () => Promise<void>

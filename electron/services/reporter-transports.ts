@@ -89,6 +89,30 @@ export async function generateViaProxy(payload: HostedReportPayload): Promise<st
   return data.summary
 }
 
+export interface ReporterUsageData {
+  tier: string
+  isPro: boolean
+  limit: number | null
+  today: { count: number; remaining: number }
+  week: number
+  totals: { reports: number; commits: number; files: number; additions: number; deletions: number; tokensIn: number; tokensOut: number }
+  byFormat: Record<string, number>
+  daily: { date: string; count: number }[]
+  recent: { ts: string; format: string; commits: number; files: number; additions: number; deletions: number; tokensOut: number }[]
+}
+
+/** Fetch usage analytics for this subject from Pilos Cloud (synced across devices). */
+export async function fetchUsageViaProxy(payload: { licenseKey?: string; email?: string; machineId?: string }): Promise<ReporterUsageData | null> {
+  if (!hostedAvailable()) return null
+  const res = await fetch(`${REPORTER_BASE}/v1/reporter/usage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(`Pilos Cloud usage error (${res.status})`)
+  return (await res.json()) as ReporterUsageData
+}
+
 /** Ask Pilos Cloud for the exact prompt it would build (server-side templates). */
 export async function previewViaProxy(payload: HostedReportPayload): Promise<{ prompt: string; chars: number }> {
   if (!hostedAvailable()) throw new Error('HOSTED_NOT_AVAILABLE')
