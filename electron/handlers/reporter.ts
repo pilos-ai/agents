@@ -15,7 +15,7 @@ import {
 } from '../services/reporter-git'
 import { getApiKey, setApiKey, clearApiKey, hasApiKey } from '../services/anthropic-key'
 import { redactSecrets } from '../services/secret-redaction'
-import { generateViaCli, generateViaProxy, previewViaProxy, hostedAvailable, QuotaExceededError } from '../services/reporter-transports'
+import { generateViaCli, generateViaProxy, previewViaProxy, fetchUsageViaProxy, hostedAvailable, QuotaExceededError } from '../services/reporter-transports'
 
 export type ReportFormat = 'standup' | 'detailed' | 'manager' | 'timesheet'
 /** How a report is generated. hosted = Pilos proxy; byok = user key; cli = Claude CLI. */
@@ -377,6 +377,19 @@ export function registerReporterHandlers() {
 
   // ── Generation ───────────────────────────────────────────────────────────
   ipcMain.handle('reporter:hostedAvailable', () => hostedAvailable())
+
+  // ── Usage analytics (synced from Pilos Cloud) ──────────────────────────────
+  ipcMain.handle(
+    'reporter:usage',
+    async (_e, opts: { licenseKey?: string; email?: string; machineId?: string }) => {
+      try {
+        return await fetchUsageViaProxy(opts || {})
+      } catch (err) {
+        console.error('[reporter] usage fetch failed:', err)
+        return null
+      }
+    },
+  )
 
   ipcMain.handle(
     'reporter:generate',

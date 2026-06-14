@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { api } from '../api'
 import { useProjectStore } from './useProjectStore'
 import { useLicenseStore } from './useLicenseStore'
-import type { ReportFormat, ReporterCommit, ReporterMode, GenerateReportResult } from '../types'
+import type { ReportFormat, ReporterCommit, ReporterMode, GenerateReportResult, ReporterUsage } from '../types'
 
 export type ReporterSource = 'uncommitted' | 'date'
 
@@ -147,8 +147,11 @@ interface ReporterStore {
   previewLoading: boolean
   hostedUsedToday: number
   machineId: string
+  usage: ReporterUsage | null
+  usageLoading: boolean
 
   init: () => Promise<void>
+  loadUsage: () => Promise<void>
   refreshKeyPresent: () => Promise<void>
   refreshAvailability: () => Promise<void>
   setApiKey: (key: string) => Promise<boolean>
@@ -211,11 +214,33 @@ export const useReporterStore = create<ReporterStore>((set, get) => ({
   previewLoading: false,
   hostedUsedToday: loadHostedUsedToday(),
   machineId: '',
+  usage: null,
+  usageLoading: false,
 
   init: async () => {
     get().syncReposFromProjects()
     try { set({ machineId: await api.metrics.getMachineId() }) } catch { /* optional */ }
     await Promise.all([get().refreshKeyPresent(), get().refreshAvailability()])
+    void get().loadUsage()
+  },
+
+  // Pull usage analytics from Pilos Cloud (synced across the user's devices).
+  // The server is authoritative for the free-tier daily count.
+  loadUsage: async () => {
+    const lic = useLicenseStore.getState()
+    set({ usageLoading: true })
+    try {
+      const usage = await api.reporter.usage({
+        licenseKey: lic.licenseKey || undefined,
+        email: lic.email || undefined,
+        machineId: get().machineId || undefined,
+      })
+      const patch: Partial<ReporterStore> = { usage, usageLoading: false }
+      if (usage && !usage.isPro) patch.hostedUsedToday = usage.today.count
+      set(patch)
+    } catch {
+      set({ usageLoading: false })
+    }
   },
 
   refreshKeyPresent: async () => {
@@ -369,6 +394,8 @@ export const useReporterStore = create<ReporterStore>((set, get) => ({
       // Count a successful hosted free generation against the daily quota.
       const usedToday = hostedLimited && !report.error ? bumpHostedUsed() : get().hostedUsedToday
       set({ commits, report, generating: false, error: report.error ?? null, hostedUsedToday: usedToday })
+      // Refresh server-synced analytics (authoritative count + new event).
+      if (!report.error) void get().loadUsage()
     } catch (err) {
       set({ generating: false, error: err instanceof Error ? err.message : 'Failed to generate report.' })
     }

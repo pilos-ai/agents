@@ -13,7 +13,7 @@ import { useProjectStore } from '../../../store/useProjectStore'
 import { useLicenseStore } from '../../../store/useLicenseStore'
 import {
   IconReport, IconBolt, IconCopy, IconCheckSm, IconCalendar, IconChevR,
-  IconPlus, IconTrash, IconShield,
+  IconPlus, IconTrash, IconShield, IconAnalytics, IconRefresh,
 } from '../PilosIcons'
 
 // Lightweight markdown: preserve newlines (via CSS pre-wrap) and bold **text**.
@@ -223,6 +223,131 @@ function CommitDetails() {
   )
 }
 
+// Fill a contiguous day-by-day series (UTC) so the bar chart has no gaps.
+function buildDailySeries(daily: { date: string; count: number }[], days = 30): { date: string; count: number }[] {
+  const map = new Map(daily.map((d) => [d.date, d.count]))
+  const out: { date: string; count: number }[] = []
+  const now = Date.now()
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now - i * 86400000).toISOString().slice(0, 10)
+    out.push({ date: d, count: map.get(d) ?? 0 })
+  }
+  return out
+}
+
+// SQLite `datetime('now')` strings are UTC ("YYYY-MM-DD HH:MM:SS").
+function timeAgo(ts: string): string {
+  const t = Date.parse(ts.replace(' ', 'T') + 'Z')
+  if (Number.isNaN(t)) return ''
+  const s = Math.max(0, (Date.now() - t) / 1000)
+  if (s < 60) return 'just now'
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
+  return `${Math.floor(s / 86400)}d ago`
+}
+
+// Reporter usage analytics, synced from Pilos Cloud (BE). Metadata only.
+function UsageInsights() {
+  const usage = useReporterStore((s) => s.usage)
+  const loading = useReporterStore((s) => s.usageLoading)
+
+  if (!usage) {
+    return (
+      <div className="pad" style={{ maxWidth: 880 }}>
+        <div className="rep-empty">
+          <IconAnalytics size={34} style={{ color: 'var(--faint)' }} />
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-2)' }}>{loading ? 'Loading usage…' : 'No usage data yet'}</div>
+            <div style={{ fontSize: 11.5, marginTop: 4 }}>Generate your first report to start tracking usage — it syncs across your devices.</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const utcToday = new Date().toISOString().slice(0, 10)
+  const todayCount = usage.daily.find((d) => d.date === utcToday)?.count ?? 0
+  const linesDoc = usage.totals.additions + usage.totals.deletions
+
+  const days = buildDailySeries(usage.daily, 30)
+  const maxDay = Math.max(1, ...days.map((d) => d.count))
+  const maxFmt = Math.max(1, ...REPORT_FORMATS.map((f) => usage.byFormat[f.value] ?? 0))
+
+  const fmtLabel = (v: string) => REPORT_FORMATS.find((f) => f.value === v)?.label ?? v
+
+  const cells: [string, string, string][] = [
+    [String(todayCount), 'Today', usage.isPro ? 'unlimited' : `${usage.today.remaining} of ${usage.limit ?? 0} left`],
+    [String(usage.week), 'This week', 'last 7 days'],
+    [String(usage.totals.reports), 'All-time', 'reports generated'],
+    [linesDoc.toLocaleString(), 'Lines', 'documented'],
+  ]
+
+  return (
+    <div className="dash" style={{ padding: '16px 18px' }}>
+      <div className="stat-grid">
+        {cells.map(([v, k, sub]) => (
+          <div key={k} className="stat">
+            <div className="sk">{k}</div>
+            <div className="sv">{v}</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid-cards" style={{ gridTemplateColumns: '1.6fr 1fr', marginTop: 14 }}>
+        <div className="card2">
+          <div className="card2-head">
+            <div>
+              <div className="card2-title">Reports per day</div>
+              <div className="card2-sub">last 30 days</div>
+            </div>
+          </div>
+          <div className="bars">
+            {days.map((d, i) => (
+              <div key={d.date} className="bar-col">
+                <div className="bar" style={{ height: Math.round((d.count / maxDay) * 100) + '%' }} title={`${d.date}: ${d.count}`} />
+                <div className="bar-lbl">{i % 5 === 0 ? d.date.slice(8) : ''}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card2">
+          <div className="card2-head"><div className="card2-title">By format</div></div>
+          {REPORT_FORMATS.map((f) => {
+            const n = usage.byFormat[f.value] ?? 0
+            return (
+              <div key={f.value} style={{ marginBottom: 14 }}>
+                <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: 12.5 }}>{f.label}</span>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--ink-2)' }}>{n}</span>
+                </div>
+                <div className="meter"><div className="fill" style={{ width: Math.round((n / maxFmt) * 100) + '%' }} /></div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="card2" style={{ marginTop: 14 }}>
+        <div className="card2-head">
+          <div className="card2-title">Recent reports</div>
+          <span className="tag" style={{ marginLeft: 'auto' }}>{usage.totals.reports} total</span>
+        </div>
+        {usage.recent.length === 0 ? (
+          <div className="muted" style={{ padding: '12px 0' }}>No reports yet</div>
+        ) : usage.recent.map((r, i) => (
+          <div key={i} className="rep-file-row">
+            <span className="tag accent">{fmtLabel(r.format)}</span>
+            <span style={{ flex: 1, fontSize: 12, color: 'var(--muted)' }}>{r.commits} commits · {r.files} files</span>
+            <span className="rep-diff">+{r.additions} −{r.deletions}</span>
+            <span style={{ fontSize: 11, color: 'var(--faint)', width: 84, textAlign: 'right' }}>{timeAgo(r.ts)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function ReportOutput() {
   const generating = useReporterStore((s) => s.generating)
   const report = useReporterStore((s) => s.report)
@@ -230,7 +355,10 @@ function ReportOutput() {
   const source = useReporterStore((s) => s.source)
   const format = useReporterStore((s) => s.format)
   const omitTimes = useReporterStore((s) => s.omitTimes)
+  const loadUsage = useReporterStore((s) => s.loadUsage)
+  const usageLoading = useReporterStore((s) => s.usageLoading)
   const [copied, setCopied] = useState(false)
+  const [view, setView] = useState<'report' | 'insights'>('report')
 
   // "Copy without time" applies live (no re-generation needed): toggling the
   // config instantly filters times out of both the displayed and copied text.
@@ -276,16 +404,29 @@ function ReportOutput() {
           {omitTimes && <span className="tag">no times</span>}
         </div>
         <div className="main-actions">
-          <button type="button" className="btn sm" onClick={copy} disabled={!report}>
-            {copied ? <IconCheckSm size={14} style={{ color: 'var(--ok)' }} /> : <IconCopy size={14} />} {copied ? 'Copied' : 'Copy'}
-          </button>
-          <button type="button" className="btn sm primary" onClick={download} disabled={!report}>
-            <IconReport size={14} /> Download .md
-          </button>
+          <div className="seg" style={{ marginRight: 8 }}>
+            <button type="button" className={view === 'report' ? 'on' : ''} onClick={() => setView('report')}>Report</button>
+            <button type="button" className={view === 'insights' ? 'on' : ''} onClick={() => { setView('insights'); void loadUsage() }}>Insights</button>
+          </div>
+          {view === 'report' ? (
+            <>
+              <button type="button" className="btn sm" onClick={copy} disabled={!report}>
+                {copied ? <IconCheckSm size={14} style={{ color: 'var(--ok)' }} /> : <IconCopy size={14} />} {copied ? 'Copied' : 'Copy'}
+              </button>
+              <button type="button" className="btn sm primary" onClick={download} disabled={!report}>
+                <IconReport size={14} /> Download .md
+              </button>
+            </>
+          ) : (
+            <button type="button" className="btn sm ghost icon" onClick={() => void loadUsage()} aria-label="Refresh usage" disabled={usageLoading}>
+              <IconRefresh size={15} />
+            </button>
+          )}
         </div>
       </div>
 
       <div className="main-body scroll">
+        {view === 'insights' ? <UsageInsights /> : (
         <div className="pad" style={{ maxWidth: 880 }}>
           {/* Errors (bad repo folder, failed generate) must show even when no
               report exists yet — render above the empty/generating states. */}
@@ -328,6 +469,7 @@ function ReportOutput() {
             </>
           )}
         </div>
+        )}
       </div>
     </div>
   )

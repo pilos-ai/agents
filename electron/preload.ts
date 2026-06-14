@@ -186,6 +186,8 @@ contextBridge.exposeInMainWorld('api', {
     preview: (opts: { commits: unknown[]; dateStr: string; format: 'standup' | 'detailed' | 'manager' | 'timesheet'; omitTimes?: boolean; metadataOnly?: boolean }) =>
       ipcRenderer.invoke('reporter:preview', opts),
     hostedAvailable: () => ipcRenderer.invoke('reporter:hostedAvailable'),
+    usage: (opts: { licenseKey?: string; email?: string; machineId?: string }) =>
+      ipcRenderer.invoke('reporter:usage', opts),
     keyHas: () => ipcRenderer.invoke('reporter:key:has'),
     keySet: (key: string) => ipcRenderer.invoke('reporter:key:set', key),
     keyClear: () => ipcRenderer.invoke('reporter:key:clear'),
