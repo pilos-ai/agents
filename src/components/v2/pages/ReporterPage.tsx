@@ -275,16 +275,19 @@ function UsageInsights() {
 
   const fmtLabel = (v: string) => REPORT_FORMATS.find((f) => f.value === v)?.label ?? v
 
+  const tokens = usage.totals.tokensIn + usage.totals.tokensOut
   const cells: [string, string, string][] = [
     [String(todayCount), 'Today', usage.isPro ? 'unlimited' : `${usage.today.remaining} of ${usage.limit ?? 0} left`],
     [String(usage.week), 'This week', 'last 7 days'],
-    [String(usage.totals.reports), 'All-time', 'reports generated'],
+    [String(usage.totals.reports), 'Reports', 'all-time'],
+    [usage.totals.commits.toLocaleString(), 'Commits', 'summarised'],
+    [usage.totals.files.toLocaleString(), 'Files', 'changed'],
     [linesDoc.toLocaleString(), 'Lines', 'documented'],
   ]
 
   return (
     <div className="dash" style={{ padding: '16px 18px' }}>
-      <div className="stat-grid">
+      <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
         {cells.map(([v, k, sub]) => (
           <div key={k} className="stat">
             <div className="sk">{k}</div>
@@ -330,7 +333,10 @@ function UsageInsights() {
 
       <div className="card2" style={{ marginTop: 14 }}>
         <div className="card2-head">
-          <div className="card2-title">Recent reports</div>
+          <div>
+            <div className="card2-title">Recent reports</div>
+            <div className="card2-sub">{tokens.toLocaleString()} AI tokens used</div>
+          </div>
           <span className="tag" style={{ marginLeft: 'auto' }}>{usage.totals.reports} total</span>
         </div>
         {usage.recent.length === 0 ? (
@@ -338,7 +344,7 @@ function UsageInsights() {
         ) : usage.recent.map((r, i) => (
           <div key={i} className="rep-file-row">
             <span className="tag accent">{fmtLabel(r.format)}</span>
-            <span style={{ flex: 1, fontSize: 12, color: 'var(--muted)' }}>{r.commits} commits · {r.files} files</span>
+            <span style={{ flex: 1, fontSize: 12, color: 'var(--muted)' }}>{r.commits} commits · {r.files} files · {r.tokensOut.toLocaleString()} tok</span>
             <span className="rep-diff">+{r.additions} −{r.deletions}</span>
             <span style={{ fontSize: 11, color: 'var(--faint)', width: 84, textAlign: 'right' }}>{timeAgo(r.ts)}</span>
           </div>
