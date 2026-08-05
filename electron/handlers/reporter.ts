@@ -16,6 +16,7 @@ import {
 import { getApiKey, setApiKey, clearApiKey, hasApiKey } from '../services/anthropic-key'
 import { redactSecrets } from '../services/secret-redaction'
 import { generateViaCli, generateViaProxy, previewViaProxy, fetchUsageViaProxy, hostedAvailable, QuotaExceededError } from '../services/reporter-transports'
+import { logMainError } from '../utils/main-log'
 
 export type ReportFormat = 'standup' | 'detailed' | 'manager' | 'timesheet'
 /** How a report is generated. hosted = Pilos proxy; byok = user key; cli = Claude CLI. */
@@ -276,8 +277,20 @@ function mapGenerateError(err: unknown, mode: ReporterMode): string {
   if (err instanceof Anthropic.APIError) return `Claude API error (${err.status}) — showing a basic summary.`
   if (err instanceof Error && err.message === 'HOSTED_NOT_AVAILABLE') return "Hosted reports aren't available yet — switch to your own API key or the Claude CLI."
   if (mode === 'cli') return 'Claude CLI report failed — is the CLI installed and logged in? Showing a basic summary.'
-  console.error('[reporter] generate failed:', err)
-  return 'Failed to generate report — showing a basic summary.'
+
+  // Always record the underlying error — this is the only path where the
+  // message is the sole source of diagnosis.
+  logMainError('reporter', 'generate failed', err)
+
+  // A failed fetch surfaces as TypeError — almost always offline / DNS / TLS.
+  if (err instanceof TypeError) {
+    return "Couldn't reach Pilos Cloud — check your internet connection, then try again."
+  }
+
+  // Otherwise keep the real cause (e.g. "Pilos Cloud error (503)") rather than
+  // collapsing every failure into one opaque string.
+  const detail = err instanceof Error && err.message ? ` (${err.message})` : ''
+  return `Failed to generate report${detail} — showing a basic summary.`
 }
 
 async function generateReport(o: GenerateOpts): Promise<GenerateReportResult> {
