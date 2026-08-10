@@ -50,6 +50,7 @@ async function applyAccountSession(
   const licenseKey = data.license?.key ?? null
   const expiresAt = data.license?.expiresAt ?? null
   const isTrial = !!data.license?.isTrial
+  const emailVerified = !!data.emailVerified
 
   if (typeof data.monetizationEnabled === 'boolean') {
     setMonetizationEnabledValue(data.monetizationEnabled)
@@ -61,6 +62,7 @@ async function applyAccountSession(
     tier,
     features,
     token: data.token,
+    emailVerified,
     expiresAt,
     isTrial,
     ...(licenseKey ? { licenseKey } : {}),
@@ -71,6 +73,7 @@ async function applyAccountSession(
     tier,
     email,
     token: data.token ?? null,
+    emailVerified,
     licenseKey,
     flags: applyFeatures(getFlagsForTier(tier), features),
     expiresAt,
@@ -109,6 +112,7 @@ interface PilosAuth {
   isTrial?: boolean
   /** Account session token from /v1/account (email + password signup). */
   token?: string
+  emailVerified?: boolean
 }
 
 interface AccountResponse {
@@ -116,6 +120,7 @@ interface AccountResponse {
   token?: string
   error?: string
   user?: { email: string; createdAt: string | null }
+  emailVerified?: boolean
   plan?: LicenseTier
   features?: string[]
   monetizationEnabled?: boolean
@@ -128,6 +133,11 @@ interface LicenseStore {
   email: string | null
   /** Account session token. Null when signed out — the app still works. */
   token: string | null
+  /**
+   * Whether the account's email has been confirmed. Only device pairing
+   * depends on it — the app, sign-in and the Reporter all work regardless.
+   */
+  emailVerified: boolean
   isValidating: boolean
   isAuthenticated: boolean
   authLoaded: boolean
@@ -147,6 +157,7 @@ interface LicenseStore {
   registerAccount: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   loginAccount: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   requestPasswordReset: (email: string) => Promise<{ ok: boolean; error?: string }>
+  resendVerification: () => Promise<{ ok: boolean; error?: string }>
   refreshMonetization: () => Promise<void>
   checkLicense: () => Promise<void>
   activateLicense: (key: string) => Promise<{ valid: boolean; error?: string }>
@@ -163,6 +174,7 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
   licenseKey: null,
   email: null,
   token: null,
+  emailVerified: false,
   isValidating: false,
   isAuthenticated: false,
   authLoaded: false,
@@ -246,6 +258,22 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
     }
   },
 
+  resendVerification: async () => {
+    const email = get().email
+    if (!email) return { ok: false, error: 'Not signed in' }
+    try {
+      const res = await fetch(`${ACCOUNT_SERVER}/resend-verification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      // Always reports success (no account enumeration).
+      return res.ok ? { ok: true } : { ok: false, error: 'Could not send the email' }
+    } catch {
+      return { ok: false, error: 'Could not reach Pilos — check your connection' }
+    }
+  },
+
   requestPasswordReset: async (email: string) => {
     try {
       const res = await fetch(`${ACCOUNT_SERVER}/request-reset`, {
@@ -276,6 +304,7 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
         set({
           email: auth.email,
           token: auth.token || null,
+          emailVerified: !!auth.emailVerified,
           licenseKey: auth.licenseKey || null,
           tier: auth.tier || 'free',
           flags: applyFeatures(getFlagsForTier(auth.tier || 'free'), auth.features),
@@ -406,6 +435,7 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
       licenseKey: null,
       email: null,
       token: null,
+      emailVerified: false,
       flags: getFlagsForTier('free'),
       expiresAt: null,
       isTrial: false,

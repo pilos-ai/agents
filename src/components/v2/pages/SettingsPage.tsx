@@ -183,6 +183,8 @@ function AccountSection() {
   const cliVersion = useAppStore((s) => s.cliVersion)
   const showPaidUi = useShowPaidUi()
   const email = useLicenseStore((s) => s.email)
+  const emailVerified = useLicenseStore((s) => s.emailVerified)
+  const resendVerification = useLicenseStore((s) => s.resendVerification)
   const tier = useLicenseStore((s) => s.tier)
   const licenseKey = useLicenseStore((s) => s.licenseKey)
   const isValidating = useLicenseStore((s) => s.isValidating)
@@ -199,6 +201,7 @@ function AccountSection() {
   const [showKeyInput, setShowKeyInput] = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [portalLoading, setPortalLoading] = useState(false)
+  const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [showRecover, setShowRecover] = useState(false)
   const [recoverEmail, setRecoverEmail] = useState('')
   const [recoverMsg, setRecoverMsg] = useState<string | null>(null)
@@ -299,6 +302,43 @@ function AccountSection() {
       ) : (
         <div className="tile" style={{ marginBottom: 14 }}>
           <AuthPanel />
+        </div>
+      )}
+
+      {/* Unconfirmed address. Deliberately low-key: nothing about the app is
+          blocked by this — only device pairing — so it informs rather than nags. */}
+      {email && !emailVerified && (
+        <div className="tile" style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <Icon icon="lucide:mail" style={{ fontSize: 16, color: 'var(--warn)', flexShrink: 0, marginTop: 2 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h3 className="section-label" style={{ margin: 0 }}>Confirm your email</h3>
+              <p className="muted" style={{ fontSize: 11.5, marginTop: 6, marginBottom: 0 }}>
+                We sent a link to <strong>{email}</strong>. Everything in the app works without it —
+                confirming only enables pairing a phone and syncing across devices.
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              type="button"
+              className="btn sm"
+              disabled={resendState === 'sending'}
+              onClick={async () => {
+                setResendState('sending')
+                const result = await resendVerification()
+                setResendState(result.ok ? 'sent' : 'error')
+              }}
+            >
+              {resendState === 'sending' ? 'Sending...' : 'Resend confirmation email'}
+            </button>
+            {resendState === 'sent' && (
+              <span className="muted" style={{ fontSize: 11.5, color: 'var(--ok)' }}>Sent — check your inbox.</span>
+            )}
+            {resendState === 'error' && (
+              <span className="muted" style={{ fontSize: 11.5, color: 'var(--err)' }}>Could not send. Try again shortly.</span>
+            )}
+          </div>
         </div>
       )}
 
