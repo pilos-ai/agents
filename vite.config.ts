@@ -159,5 +159,12 @@ export default defineConfig({
     '__APP_VERSION__': JSON.stringify(
       JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')).version
     ),
+    // Monetization kill switch — build-time default only. Ships false: Pilos is
+    // free, so no paid tier, trial, license or upgrade surface is rendered.
+    // The runtime value can still be raised by the server (GET /v1/config),
+    // which is what will turn paid plans back on without a new release.
+    '__MONETIZATION_ENABLED__': JSON.stringify(
+      process.env.VITE_MONETIZATION_ENABLED === 'true'
+    ),
   },
 })

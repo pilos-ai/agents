@@ -564,6 +564,13 @@ export interface ReporterRecentReport {
 export interface ReporterUsage {
   tier: 'free' | 'pro' | 'teams'
   isPro: boolean
+  /**
+   * Whether hosted generation is uncapped. Prefer this over `isPro` for UI:
+   * while Pilos is free nobody is "pro", yet the cap may be absent entirely.
+   * Optional because older servers don't send it.
+   */
+  unlimited?: boolean
+  monetizationEnabled?: boolean
   limit: number | null
   today: { count: number; remaining: number }
   week: number
@@ -730,6 +737,11 @@ export interface ElectronAPI {
   repetition?: import('@pilos/repetition-detection/adapters/electron-preload').RepetitionRendererApi
   metrics: {
     setLicenseKey: (key: string) => Promise<void>
+    /**
+     * Tell the main process an account session started/ended, so device
+     * pairing can connect without a licence key (Pilos is free).
+     */
+    setAccount: (email: string | null) => Promise<void>
     getMachineId: () => Promise<string>
   }
   updater: {

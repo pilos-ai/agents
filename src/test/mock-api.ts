@@ -97,6 +97,7 @@ export function createMockApi() {
     },
     metrics: {
       setLicenseKey: vi.fn().mockResolvedValue(null),
+      setAccount: vi.fn().mockResolvedValue(null),
       getMachineId: vi.fn().mockResolvedValue('test-machine-id'),
     },
     updater: {

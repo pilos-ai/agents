@@ -1,4 +1,5 @@
 import type { LicenseTier, ProFeatureFlags } from '../types'
+import { isMonetizationEnabled } from './monetization'
 
 export const FREE_LIMITS: ProFeatureFlags = {
   tier: 'free',
@@ -33,7 +34,27 @@ const TEAMS_LIMITS: ProFeatureFlags = {
   enabledFeatures: [],
 }
 
+/**
+ * Everything unlocked, regardless of tier — what every user gets while Pilos is
+ * free. `tier` is left as the user's real tier so account UI can still say
+ * "Free" honestly; it just no longer restricts anything.
+ */
+const UNRESTRICTED_LIMITS: Omit<ProFeatureFlags, 'tier'> = {
+  maxAgents: Infinity,
+  maxMcpServers: Infinity,
+  maxProjects: Infinity,
+  teamMode: true,
+  teamSync: true,
+  premiumAgents: true,
+  enabledFeatures: [],
+}
+
 export function getFlagsForTier(tier: LicenseTier): ProFeatureFlags {
+  // Free product: the tier table below is bypassed entirely. This single branch
+  // is what lifts the project/agent/MCP caps and unlocks team mode, premium
+  // agents and team sync for everyone. See src/lib/monetization.ts.
+  if (!isMonetizationEnabled()) return { ...UNRESTRICTED_LIMITS, tier }
+
   switch (tier) {
     case 'teams': return { ...TEAMS_LIMITS }
     case 'pro': return { ...PRO_LIMITS }

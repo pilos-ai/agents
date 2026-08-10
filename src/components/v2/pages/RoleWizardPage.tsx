@@ -14,6 +14,7 @@ import type { ClaudeEvent } from '../../../types'
 import type { WorkflowNodeData } from '../../../types/workflow'
 import type { Node, Edge } from '@xyflow/react'
 import type { TaskPriority } from '../../../store/useTaskStore'
+import { useIsPro } from '../../../lib/entitlements'
 
 // ── Types ──
 
@@ -286,8 +287,7 @@ function IntegrationCheckStep({ onContinue, onBack }: {
   onContinue: (integrations: string[]) => void
   onBack: () => void
 }) {
-  const tier = useLicenseStore((s) => s.tier)
-  const isPro = tier === 'pro' || tier === 'teams'
+  const isPro = useIsPro()
 
   const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
   const openProjects = useProjectStore((s) => s.openProjects)

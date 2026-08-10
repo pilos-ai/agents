@@ -5,6 +5,7 @@ import { McpServerEditModal } from './McpServerEditModal'
 import { useLicenseStore } from '../../store/useLicenseStore'
 import { ProBadge } from '../common/ProBadge'
 import { loadProModule } from '../../lib/pro'
+import { useIsPro } from '../../lib/entitlements'
 import { McpIcon } from './McpIcon'
 
 interface Props {
@@ -22,11 +23,12 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
   const [premiumTemplates, setPremiumTemplates] = useState<McpServerTemplate[]>([])
 
   const flags = useLicenseStore((s) => s.flags)
+  const isPro = useIsPro()
   const atLimit = servers.length >= flags.maxMcpServers
 
-  // Load premium templates for pro/teams users
+  // Premium MCP templates — available to everyone while Pilos is free.
   useEffect(() => {
-    if (flags.tier !== 'pro' && flags.tier !== 'teams') {
+    if (!isPro) {
       setPremiumTemplates([])
       return
     }
@@ -35,7 +37,7 @@ export function McpServerManager({ servers, onAdd, onRemove, onUpdate, onToggle 
       const templates = pro.getPremiumMcpTemplates() as McpServerTemplate[]
       setPremiumTemplates(templates)
     })
-  }, [flags.tier])
+  }, [isPro])
 
   const allTemplates = [...MCP_SERVER_TEMPLATES, ...premiumTemplates]
   const existingIds = new Set(servers.map((s) => s.id))

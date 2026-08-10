@@ -2,6 +2,7 @@ import { Icon } from '../../common/Icon'
 import { useLicenseStore } from '../../../store/useLicenseStore'
 import { ProBadge } from '../../common/ProBadge'
 import type { WorkflowSuggestion } from '../../../store/useConversationStore'
+import { useIsPro } from '../../../lib/entitlements'
 
 interface Props {
   suggestion: WorkflowSuggestion
@@ -20,7 +21,7 @@ export function WorkflowSuggestionBanner({
   onRun,
 }: Props) {
   const tier = useLicenseStore((s) => s.tier)
-  const isPro = tier === 'pro' || tier === 'teams'
+  const isPro = useIsPro()
 
   const isMatched = suggestion.tier === 'matched_workflow'
   const isRepeated = suggestion.tier === 'repeated'

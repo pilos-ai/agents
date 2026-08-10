@@ -19,6 +19,21 @@ export function registerMetricsHandlers(
     }
   })
 
+  // An account session started (sign-in) or ended (sign-out). With Pilos free,
+  // an account — not a licence key — is what device pairing binds to, so this is
+  // what brings the relay up without waiting for an app restart.
+  ipcMain.handle('metrics:setAccount', (_event, email: string | null) => {
+    const relay = getRelayClient()
+    if (!relay) return
+    if (!email) {
+      relay.disconnect()
+      return
+    }
+    const pilosAuth = settings.get('pilos_auth') as { features?: string[] } | null
+    const hasDevices = pilosAuth?.features?.includes('devices') ?? false
+    if (hasDevices && !relay.isConnected()) relay.connect()
+  })
+
   ipcMain.handle('metrics:getMachineId', () => {
     let id = settings.get('machineId') as string | null
     if (!id) {

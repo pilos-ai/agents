@@ -8,6 +8,7 @@ import { useProjectStore } from '../../../store/useProjectStore'
 import { useLicenseStore } from '../../../store/useLicenseStore'
 import { ProBadge } from '../../common/ProBadge'
 import type { McpToolCategory, McpToolDefinition } from '../../../types/workflow'
+import { useIsPro } from '../../../lib/entitlements'
 
 // Map MCP server configs to workflow tool categories
 function mcpServerToCategory(server: { id: string; name: string; icon: string; description: string; config: { type: string } }): McpToolCategory {
@@ -113,8 +114,7 @@ export function WorkflowToolsPanel() {
   const showGenerate = useWorkflowStore((s) => s.showGenerateModal)
   const setShowGenerate = useWorkflowStore((s) => s.setShowGenerateModal)
   const toggleChatMode = useWorkflowStore((s) => s.toggleChatMode)
-  const tier = useLicenseStore((s) => s.tier)
-  const isPro = tier === 'pro' || tier === 'teams'
+  const isPro = useIsPro()
   const search = useWorkflowStore((s) => s.toolSearchQuery)
   const setSearch = useWorkflowStore((s) => s.setToolSearchQuery)
   const tab = useWorkflowStore((s) => s.toolFilterTab)

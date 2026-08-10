@@ -12,6 +12,7 @@ vi.mock('../api', () => ({
     metrics: {
       getMachineId: vi.fn().mockResolvedValue('machine-abc'),
       setLicenseKey: vi.fn().mockResolvedValue(undefined),
+      setAccount: vi.fn().mockResolvedValue(undefined),
     },
   },
 }))

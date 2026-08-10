@@ -142,6 +142,7 @@ const stubAPI: ElectronAPI = {
   },
   metrics: {
     setLicenseKey: noopAsync,
+    setAccount: noopAsync,
     getMachineId: () => Promise.resolve('stub-machine-id'),
   },
   updater: {

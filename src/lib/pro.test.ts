@@ -1,7 +1,42 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { getFlagsForTier, loadProModule, FREE_LIMITS } from './pro'
+import { setMonetizationEnabledValue } from './monetization'
 
-describe('getFlagsForTier', () => {
+// Pilos ships free: monetization is off, so getFlagsForTier ignores the tier
+// table entirely. Both modes are covered here — the paid tables still have to
+// be correct for the day the switch is flipped back on.
+afterEach(() => {
+  setMonetizationEnabledValue(false)
+})
+
+describe('getFlagsForTier — free product (monetization off)', () => {
+  beforeEach(() => setMonetizationEnabledValue(false))
+
+  it.each(['free', 'pro', 'teams'] as const)('unlocks everything for the "%s" tier', (tier) => {
+    const flags = getFlagsForTier(tier)
+    expect(flags.maxAgents).toBe(Infinity)
+    expect(flags.maxMcpServers).toBe(Infinity)
+    expect(flags.maxProjects).toBe(Infinity)
+    expect(flags.teamMode).toBe(true)
+    expect(flags.teamSync).toBe(true)
+    expect(flags.premiumAgents).toBe(true)
+  })
+
+  it('reports the real tier so account UI stays honest', () => {
+    expect(getFlagsForTier('free').tier).toBe('free')
+    expect(getFlagsForTier('pro').tier).toBe('pro')
+  })
+
+  it('lifts the free tier caps that used to block the 4th project/agent/server', () => {
+    const flags = getFlagsForTier('free')
+    expect(flags.maxProjects).not.toBe(FREE_LIMITS.maxProjects)
+    expect(Number.isFinite(flags.maxAgents)).toBe(false)
+  })
+})
+
+describe('getFlagsForTier — monetization on', () => {
+  beforeEach(() => setMonetizationEnabledValue(true))
+
   it('returns teams flags for "teams" tier', () => {
     const flags = getFlagsForTier('teams')
     expect(flags.tier).toBe('teams')

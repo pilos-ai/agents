@@ -8,9 +8,10 @@
  * (and it still produces a basic summary without one).
  */
 import { useEffect, useState, type ReactNode } from 'react'
-import { useReporterStore, REPORT_FORMATS, HOSTED_FREE_DAILY, todayISO } from '../../../store/useReporterStore'
+import { useReporterStore, REPORT_FORMATS, hostedDailyLimitFor, todayISO } from '../../../store/useReporterStore'
 import { useProjectStore } from '../../../store/useProjectStore'
 import { useLicenseStore } from '../../../store/useLicenseStore'
+import { useShowPaidUi } from '../../../lib/entitlements'
 import {
   IconReport, IconBolt, IconCopy, IconCheckSm, IconCalendar, IconChevR,
   IconPlus, IconTrash, IconShield, IconAnalytics, IconRefresh,
@@ -63,14 +64,18 @@ function ConfigColumn() {
   const loadPreview = useReporterStore((s) => s.loadPreview)
   const previewLoading = useReporterStore((s) => s.previewLoading)
   const hostedUsedToday = useReporterStore((s) => s.hostedUsedToday)
-  const tier = useLicenseStore((s) => s.tier)
+  const usage = useReporterStore((s) => s.usage)
   const generate = useReporterStore((s) => s.generate)
   const generating = useReporterStore((s) => s.generating)
+  const tier = useLicenseStore((s) => s.tier)
+  const monetizationEnabled = useLicenseStore((s) => s.monetizationEnabled)
+  const showPaidUi = useShowPaidUi()
 
   const selCount = repos.filter((r) => r.selected).length
-  // Reports always generate via Pilos Cloud (the backend). Free = N/day, Pro = unlimited.
-  const isPro = tier === 'pro' || tier === 'teams'
-  const remaining = Math.max(0, HOSTED_FREE_DAILY - hostedUsedToday)
+  // Hosted reports may carry a daily cap (0 = none). The server decides it; see
+  // hostedDailyLimitFor. BYOK / Claude CLI are always unlimited.
+  const dailyLimit = hostedDailyLimitFor(usage, { tier, monetizationEnabled })
+  const remaining = Math.max(0, dailyLimit - hostedUsedToday)
 
   return (
     <div className="rep-conf">
@@ -144,21 +149,23 @@ function ConfigColumn() {
       </div>
 
       <div className="rep-conf-foot">
-        {!isPro && (
+        {dailyLimit > 0 && (
           <div className="rep-quota">
             <span style={{ color: remaining > 0 ? 'var(--ink-2)' : 'var(--warn)' }}>
               {remaining > 0
-                ? `${remaining} of ${HOSTED_FREE_DAILY} free Pilos Cloud reports left today`
-                : 'Daily free limit reached'}
+                ? `${remaining} of ${dailyLimit} Pilos Cloud reports left today`
+                : 'Daily limit reached — resets at midnight UTC'}
             </span>
-            <button
-              type="button"
-              className="btn sm"
-              style={{ marginLeft: 'auto' }}
-              onClick={() => void window.api.dialog.openExternal('https://pilos.net/pricing')}
-            >
-              Upgrade
-            </button>
+            {showPaidUi && (
+              <button
+                type="button"
+                className="btn sm"
+                style={{ marginLeft: 'auto' }}
+                onClick={() => void window.api.dialog.openExternal('https://pilos.net/')}
+              >
+                Upgrade
+              </button>
+            )}
           </div>
         )}
         <button
@@ -277,7 +284,7 @@ function UsageInsights() {
 
   const tokens = usage.totals.tokensIn + usage.totals.tokensOut
   const cells: [string, string, string][] = [
-    [String(todayCount), 'Today', usage.isPro ? 'unlimited' : `${usage.today.remaining} of ${usage.limit ?? 0} left`],
+    [String(todayCount), 'Today', (usage.unlimited ?? usage.isPro) ? 'unlimited' : `${usage.today.remaining} of ${usage.limit ?? 0} left`],
     [String(usage.week), 'This week', 'last 7 days'],
     [String(usage.totals.reports), 'Reports', 'all-time'],
     [usage.totals.commits.toLocaleString(), 'Commits', 'summarised'],

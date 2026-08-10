@@ -15,6 +15,7 @@ import { useState } from 'react'
 import { Prism as SyntaxHighlighter, createElement } from 'react-syntax-highlighter'
 import { useLicenseStore } from '../../store/useLicenseStore'
 import { ProBadge } from '../common/ProBadge'
+import { useIsPro } from '../../lib/entitlements'
 
 interface Props {
   language: string
@@ -102,7 +103,7 @@ function tlineRenderer({ rows }: { rows: Node[] }) {
 export function CodeBlock({ language, code }: Props) {
   const [copied, setCopied] = useState(false)
   const tier = useLicenseStore((s) => s.tier)
-  const isPro = tier === 'pro' || tier === 'teams'
+  const isPro = useIsPro()
 
   const handleCopy = async () => {
     if (!isPro) return

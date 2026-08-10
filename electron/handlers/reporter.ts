@@ -272,7 +272,9 @@ function assemblePrompt(o: Pick<GenerateOpts, 'commits' | 'dateStr' | 'format' |
 }
 
 function mapGenerateError(err: unknown, mode: ReporterMode): string {
-  if (err instanceof QuotaExceededError) return 'Daily report limit reached — upgrade to Pro for unlimited, or use your own API key / Claude CLI.'
+  // The server sends the authoritative wording (it knows whether paid plans
+  // exist); this is only the fallback when no message came back.
+  if (err instanceof QuotaExceededError) return 'Daily Pilos Cloud report limit reached — it resets at midnight UTC, or use your own API key / Claude CLI for unlimited.'
   if (err instanceof Anthropic.AuthenticationError) return 'Invalid Claude API key — showing a basic summary.'
   if (err instanceof Anthropic.APIError) return `Claude API error (${err.status}) — showing a basic summary.`
   if (err instanceof Error && err.message === 'HOSTED_NOT_AVAILABLE') return "Hosted reports aren't available yet — switch to your own API key or the Claude CLI."

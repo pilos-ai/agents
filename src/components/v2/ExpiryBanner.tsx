@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { Icon } from '../common/Icon'
 import { useLicenseStore } from '../../store/useLicenseStore'
+import { useShowPaidUi } from '../../lib/entitlements'
 import { api } from '../../api'
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24
 const SESSION_DISMISS_KEY = 'pilos:expiry-banner-dismissed'
-const PRICING_URL = 'https://pilos.net/pricing'
+const PRICING_URL = 'https://pilos.net/'
 
 type Severity = 'hidden' | 'info' | 'warn' | 'urgent' | 'expired'
 
@@ -21,6 +22,7 @@ export function ExpiryBanner() {
   const expiresAt = useLicenseStore((s) => s.expiresAt)
   const isTrial = useLicenseStore((s) => s.isTrial)
   const tier = useLicenseStore((s) => s.tier)
+  const showPaidUi = useShowPaidUi()
   const [dismissed, setDismissed] = useState(() => {
     try { return sessionStorage.getItem(SESSION_DISMISS_KEY) === '1' } catch { return false }
   })
@@ -30,6 +32,10 @@ export function ExpiryBanner() {
     return Math.ceil((new Date(expiresAt).getTime() - Date.now()) / MS_PER_DAY)
   }, [expiresAt])
 
+  // Nothing expires while Pilos is free. Users who still hold a legacy licence
+  // keep it, but they lose nothing when it lapses, so a countdown would be a
+  // pure false alarm.
+  if (!showPaidUi) return null
   if (tier === 'free' && !isTrial) return null
   if (daysLeft === null) return null
 

@@ -42,6 +42,7 @@ import {
 } from '../PilosIcons'
 import type { WorkflowNodeData } from '../../../types/workflow'
 import type { Node } from '@xyflow/react'
+import { useIsPro } from '../../../lib/entitlements'
 
 // ── Node kind metadata (colors + icons) ──
 type NodeKind = 'Schedule' | 'Agent' | 'Prompt' | 'MCP' | 'Condition' | 'Notify'
@@ -261,8 +262,7 @@ function WorkflowsView() {
   const updateSchedule = useTaskStore((s) => s.updateSchedule)
   const activeExecutions = useTaskStore((s) => s.activeExecutions)
   const activeProjectPath = useProjectStore((s) => s.activeProjectPath)
-  const tier = useLicenseStore((s) => s.tier)
-  const isPro = tier === 'pro' || tier === 'teams'
+  const isPro = useIsPro()
   const [search, setSearch] = useState('')
   // Inline schedule popover (anchored to the Schedule toolbar button)
   const [showSchedule, setShowSchedule] = useState(false)

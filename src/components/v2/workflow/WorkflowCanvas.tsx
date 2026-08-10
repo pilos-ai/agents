@@ -22,6 +22,7 @@ import { useWorkflowStore } from '../../../store/useWorkflowStore'
 import { useLicenseStore } from '../../../store/useLicenseStore'
 import { ProBadge } from '../../common/ProBadge'
 import type { WorkflowNodeData, McpToolDefinition } from '../../../types/workflow'
+import { useIsPro } from '../../../lib/entitlements'
 
 const nodeTypes = {
   start: StartNode,
@@ -66,8 +67,7 @@ export function WorkflowCanvas() {
   const duplicateNode = useWorkflowStore((s) => s.duplicateNode)
   const selectedNodeId = useWorkflowStore((s) => s.selectedNodeId)
   const setShowGenerateModal = useWorkflowStore((s) => s.setShowGenerateModal)
-  const tier = useLicenseStore((s) => s.tier)
-  const isPro = tier === 'pro' || tier === 'teams'
+  const isPro = useIsPro()
 
   const reactFlowRef = useRef<ReactFlowInstance<Node<WorkflowNodeData>> | null>(null)
 

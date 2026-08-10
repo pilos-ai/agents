@@ -10,6 +10,8 @@ import { MCP_SERVER_TEMPLATES } from '../../../data/mcp-server-templates'
 import { api } from '../../../api'
 import { PluginsSection } from '../../settings/PluginsSection'
 import type { StorageStats } from '../../../types'
+import { useIsPro, useShowPaidUi } from '../../../lib/entitlements'
+import { AuthPanel } from '../AuthPanel'
 
 function UpgradeModal({ onClose }: { onClose: () => void }) {
   return (
@@ -49,12 +51,12 @@ function UpgradeModal({ onClose }: { onClose: () => void }) {
 
         <button
           type="button"
-          onClick={() => { api.dialog.openExternal('https://pilos.net/pricing'); onClose() }}
+          onClick={() => { api.dialog.openExternal('https://pilos.net/'); onClose() }}
           className="btn primary"
           style={{ width: '100%', justifyContent: 'center' }}
         >
           <Icon icon="lucide:credit-card" style={{ fontSize: 14 }} />
-          Pay with Card — pilos.net/pricing
+          Pay with Card — pilos.net
         </button>
 
         <p className="muted" style={{ fontSize: 10.5, textAlign: 'center', margin: 0 }}>
@@ -179,6 +181,7 @@ function ProjectSection() {
 
 function AccountSection() {
   const cliVersion = useAppStore((s) => s.cliVersion)
+  const showPaidUi = useShowPaidUi()
   const email = useLicenseStore((s) => s.email)
   const tier = useLicenseStore((s) => s.tier)
   const licenseKey = useLicenseStore((s) => s.licenseKey)
@@ -267,28 +270,77 @@ function AccountSection() {
         Your account information and subscription
       </p>
 
-      {/* User Profile */}
-      <div className="tile" style={{ marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div className="cav cav-grad-claude" style={{ width: 44, height: 44, borderRadius: 12, fontSize: 16 }}>
-            {email ? email[0].toUpperCase() : 'U'}
+      {/* User Profile — or the sign-up form when signed out. The app works
+          either way; an account only adds cloud sync. */}
+      {email ? (
+        <div className="tile" style={{ marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div className="cav cav-grad-claude" style={{ width: 44, height: 44, borderRadius: 12, fontSize: 16 }}>
+              {email[0].toUpperCase()}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email}</div>
+              <div style={{ marginTop: 4 }}>
+                {showPaidUi
+                  ? <span className={tierTagClass[tier] || tierTagClass.free}>{tier}</span>
+                  : <span className="tag pro">All features unlocked</span>}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={logout}
+              className="btn sm"
+              style={{ color: 'var(--err)' }}
+            >
+              Sign Out
+            </button>
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email || 'Unknown'}</div>
-            <div style={{ marginTop: 4 }}>
-              <span className={tierTagClass[tier] || tierTagClass.free}>{tier}</span>
+        </div>
+      ) : (
+        <div className="tile" style={{ marginBottom: 14 }}>
+          <AuthPanel />
+        </div>
+      )}
+
+      {/* Free-product notice. Replaces the whole upsell surface: there is
+          nothing to buy, so say so plainly rather than leaving a blank gap. */}
+      {!showPaidUi && (
+        <div className="tile" style={{ marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <Icon icon="lucide:gift" style={{ fontSize: 16, color: 'var(--ok)', flexShrink: 0, marginTop: 2 }} />
+            <div>
+              <h3 className="section-label" style={{ margin: 0 }}>Pilos Agents is free</h3>
+              <p className="muted" style={{ fontSize: 11.5, marginTop: 6, marginBottom: 0 }}>
+                Every feature is unlocked — unlimited projects, agents and MCP servers, team mode,
+                the AI workflow builder and all agent templates. No licence key, no trial, no card.
+              </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={logout}
-            className="btn sm"
-            style={{ color: 'var(--err)' }}
-          >
-            Sign Out
-          </button>
         </div>
-      </div>
+      )}
+
+      {/* Legacy subscription — only for the few users still on a paid plan from
+          before the switch. They keep everything; this is purely so they can
+          stop being charged for something that is now free. */}
+      {!showPaidUi && licenseKey && (
+        <div className="tile" style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <h3 className="section-label" style={{ margin: 0 }}>Your previous subscription</h3>
+          <p className="muted" style={{ fontSize: 11.5, margin: 0 }}>
+            Pilos is now free for everyone, so you no longer need a paid plan. Your licence still
+            works — you can cancel any time and lose nothing.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              onClick={handleManageSubscription}
+              disabled={portalLoading}
+              className="btn sm"
+            >
+              {portalLoading ? 'Loading...' : 'Manage or cancel subscription'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Workspace Setup */}
       <div className="tile" style={{ marginBottom: 14 }}>
@@ -310,7 +362,9 @@ function AccountSection() {
         </div>
       </div>
 
-      {/* License Management */}
+      {/* License Management — hidden entirely while Pilos is free. Kept intact
+          (rather than deleted) so re-enabling monetization restores it as-is. */}
+      {showPaidUi && (
       <div className="tile" style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h3 className="section-label" style={{ margin: 0 }}>License</h3>
@@ -494,6 +548,7 @@ function AccountSection() {
           </div>
         )}
       </div>
+      )}
 
       {/* Version Info */}
       <div className="tile">
@@ -510,7 +565,7 @@ function AccountSection() {
       </div>
 
       {/* Upgrade Modal */}
-      {showUpgradeModal && (
+      {showPaidUi && showUpgradeModal && (
         <UpgradeModal onClose={() => setShowUpgradeModal(false)} />
       )}
     </div>
@@ -620,7 +675,7 @@ function GeneralSection() {
 
 function IntegrationsSection() {
   const tier = useLicenseStore((s) => s.tier)
-  const isPro = tier === 'pro' || tier === 'teams'
+  const isPro = useIsPro()
   const [jiraLoaded, setJiraLoaded] = useState(!!PmJiraIntegrationCard)
   const [jiraConnected, setJiraConnected] = useState(false)
   const [jiraConnecting, setJiraConnecting] = useState(false)

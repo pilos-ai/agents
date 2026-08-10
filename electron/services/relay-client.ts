@@ -80,10 +80,16 @@ export class RelayClient {
   connect(): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) return
 
+    // Identity for the relay room. Device pairing used to require a paid licence
+    // key; now that Pilos is free, a registered account email works too — the
+    // server namespaces those rooms as `account:<email>`. A licence key still
+    // wins when present so existing paired devices keep their room.
     const licenseKey = this.settings.get('licenseKey') as string
+    const pilosAuth = this.settings.get('pilos_auth') as { email?: string } | null
+    const accountEmail = pilosAuth?.email
     const machineId = this.getOrCreateMachineId()
-    if (!licenseKey || !machineId) {
-      devLog('[RelayClient] No license key or machineId — skipping connect')
+    if ((!licenseKey && !accountEmail) || !machineId) {
+      devLog('[RelayClient] No account or licence identity — skipping connect')
       return
     }
 
@@ -109,7 +115,7 @@ export class RelayClient {
       // Authenticate as desktop
       this.safeSend({
         type: 'auth',
-        licenseKey,
+        ...(licenseKey ? { licenseKey } : { accountEmail }),
         role: 'desktop',
         machineId,
       })

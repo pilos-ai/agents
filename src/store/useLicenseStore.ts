@@ -1,9 +1,16 @@
 import { create } from 'zustand'
 import type { LicenseTier, ProFeatureFlags } from '../types'
-import { FREE_LIMITS, getFlagsForTier, loadProModule } from '../lib/pro'
+import { getFlagsForTier, loadProModule } from '../lib/pro'
+import {
+  MONETIZATION_SETTING_KEY,
+  isMonetizationEnabled,
+  resolveMonetization,
+  setMonetizationEnabledValue,
+} from '../lib/monetization'
 import { api } from '../api'
 
 const LICENSE_SERVER = 'https://license.pilos.net/v1/licenses'
+const ACCOUNT_SERVER = 'https://license.pilos.net/v1/account'
 
 /** Fetch server-side feature flags for a plan, merging them into flags. */
 function applyFeatures(flags: ProFeatureFlags, features?: string[]): ProFeatureFlags {
@@ -24,6 +31,64 @@ async function fetchFreeFeatures(email?: string): Promise<string[]> {
   return []
 }
 
+type LicenseSet = (partial: Partial<LicenseStore>) => void
+
+/**
+ * Persist an account session (register / login) into settings + store.
+ *
+ * An account is an identity, not an entitlement: while Pilos is free it unlocks
+ * nothing on its own. `license` is only populated for users who still hold a
+ * paid key from before the switch, so they keep their plan.
+ */
+async function applyAccountSession(
+  set: LicenseSet,
+  email: string,
+  data: AccountResponse
+): Promise<void> {
+  const tier = (data.license?.plan ?? data.plan ?? 'free') as LicenseTier
+  const features = data.features || []
+  const licenseKey = data.license?.key ?? null
+  const expiresAt = data.license?.expiresAt ?? null
+  const isTrial = !!data.license?.isTrial
+
+  if (typeof data.monetizationEnabled === 'boolean') {
+    setMonetizationEnabledValue(data.monetizationEnabled)
+    api.settings.set(MONETIZATION_SETTING_KEY, data.monetizationEnabled).catch(() => {})
+  }
+
+  const authData: PilosAuth = {
+    email,
+    tier,
+    features,
+    token: data.token,
+    expiresAt,
+    isTrial,
+    ...(licenseKey ? { licenseKey } : {}),
+  }
+  await api.settings.set('pilos_auth', authData)
+
+  set({
+    tier,
+    email,
+    token: data.token ?? null,
+    licenseKey,
+    flags: applyFeatures(getFlagsForTier(tier), features),
+    expiresAt,
+    isTrial,
+    monetizationEnabled: isMonetizationEnabled(),
+    error: null,
+    isValidating: false,
+    isAuthenticated: true,
+    machineMismatch: false,
+  })
+
+  if (licenseKey) {
+    api.metrics.setLicenseKey(licenseKey).catch((err) => console.error('[LicenseStore]', err))
+  }
+  // Bring device pairing up now rather than at next launch.
+  api.metrics.setAccount(email).catch((err) => console.error('[LicenseStore]', err))
+}
+
 let fallbackMachineId: string | null = null
 async function getSafeMachineId(): Promise<string> {
   try {
@@ -42,12 +107,27 @@ interface PilosAuth {
   features?: string[]
   expiresAt?: string | null
   isTrial?: boolean
+  /** Account session token from /v1/account (email + password signup). */
+  token?: string
+}
+
+interface AccountResponse {
+  success?: boolean
+  token?: string
+  error?: string
+  user?: { email: string; createdAt: string | null }
+  plan?: LicenseTier
+  features?: string[]
+  monetizationEnabled?: boolean
+  license?: { key: string; plan: LicenseTier; expiresAt: string | null; isTrial: boolean } | null
 }
 
 interface LicenseStore {
   tier: LicenseTier
   licenseKey: string | null
   email: string | null
+  /** Account session token. Null when signed out — the app still works. */
+  token: string | null
   isValidating: boolean
   isAuthenticated: boolean
   authLoaded: boolean
@@ -57,7 +137,17 @@ interface LicenseStore {
   pendingActivation: { key: string; email: string } | null
   expiresAt: string | null
   isTrial: boolean
+  /**
+   * Whether paid plans exist at all. False = Pilos is free: every feature is
+   * unlocked and no upgrade/license/trial UI is rendered. Mirrors the server's
+   * GET /v1/config so paid mode can be restored without shipping a build.
+   */
+  monetizationEnabled: boolean
 
+  registerAccount: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
+  loginAccount: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
+  requestPasswordReset: (email: string) => Promise<{ ok: boolean; error?: string }>
+  refreshMonetization: () => Promise<void>
   checkLicense: () => Promise<void>
   activateLicense: (key: string) => Promise<{ valid: boolean; error?: string }>
   deactivateLicense: () => Promise<void>
@@ -72,25 +162,120 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
   tier: 'free',
   licenseKey: null,
   email: null,
+  token: null,
   isValidating: false,
   isAuthenticated: false,
   authLoaded: false,
   machineMismatch: false,
   error: null,
-  flags: { ...FREE_LIMITS },
+  flags: getFlagsForTier('free'),
   pendingActivation: null,
   expiresAt: null,
   isTrial: false,
+  monetizationEnabled: isMonetizationEnabled(),
 
   setPendingActivation: (data) => set({ pendingActivation: data }),
 
+  /**
+   * Re-resolve the monetization flag (local setting → server) and rebuild the
+   * feature flags from it. Safe to call repeatedly; never throws.
+   */
+  refreshMonetization: async () => {
+    const enabled = await resolveMonetization()
+    if (enabled === get().monetizationEnabled) return
+    setMonetizationEnabledValue(enabled)
+    set({
+      monetizationEnabled: enabled,
+      flags: applyFeatures(getFlagsForTier(get().tier), get().flags.enabledFeatures),
+    })
+  },
+
+  registerAccount: async (email: string, password: string) => {
+    set({ isValidating: true, error: null })
+    try {
+      let machineId: string | undefined
+      try { machineId = await api.metrics.getMachineId() } catch { /* IPC unavailable */ }
+
+      const res = await fetch(`${ACCOUNT_SERVER}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, machineId, source: 'app' }),
+      })
+      const data = (await res.json()) as AccountResponse
+
+      if (!res.ok || !data.token) {
+        const error = data.error || 'Could not create your account'
+        set({ isValidating: false, error })
+        return { ok: false, error }
+      }
+
+      await applyAccountSession(set, email, data)
+      return { ok: true }
+    } catch {
+      const error = 'Could not reach Pilos — check your connection'
+      set({ isValidating: false, error })
+      return { ok: false, error }
+    }
+  },
+
+  loginAccount: async (email: string, password: string) => {
+    set({ isValidating: true, error: null })
+    try {
+      let machineId: string | undefined
+      try { machineId = await api.metrics.getMachineId() } catch { /* IPC unavailable */ }
+
+      const res = await fetch(`${ACCOUNT_SERVER}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, machineId }),
+      })
+      const data = (await res.json()) as AccountResponse
+
+      if (!res.ok || !data.token) {
+        const error = data.error || 'Incorrect email or password'
+        set({ isValidating: false, error })
+        return { ok: false, error }
+      }
+
+      await applyAccountSession(set, email, data)
+      return { ok: true }
+    } catch {
+      const error = 'Could not reach Pilos — check your connection'
+      set({ isValidating: false, error })
+      return { ok: false, error }
+    }
+  },
+
+  requestPasswordReset: async (email: string) => {
+    try {
+      const res = await fetch(`${ACCOUNT_SERVER}/request-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      // The server always reports success (no account enumeration).
+      return res.ok ? { ok: true } : { ok: false, error: 'Could not send the reset email' }
+    } catch {
+      return { ok: false, error: 'Could not reach Pilos — check your connection' }
+    }
+  },
+
   loadAuthState: async () => {
+    // Resolve monetization first: it decides whether `flags` come out gated or
+    // unrestricted, so doing it after would briefly render a paywalled UI.
+    try {
+      const enabled = await resolveMonetization()
+      setMonetizationEnabledValue(enabled)
+      set({ monetizationEnabled: enabled })
+    } catch { /* keep the build default */ }
+
     try {
       const raw = await api.settings.get('pilos_auth')
       const auth = raw as PilosAuth | null
       if (auth?.email) {
         set({
           email: auth.email,
+          token: auth.token || null,
           licenseKey: auth.licenseKey || null,
           tier: auth.tier || 'free',
           flags: applyFeatures(getFlagsForTier(auth.tier || 'free'), auth.features),
@@ -105,6 +290,14 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
         }
       } else {
         set({ authLoaded: true })
+        // Signed out, but the app is fully usable — pull the server feature
+        // flags anyway so feature-flagged UI isn't hidden from anonymous users.
+        fetchFreeFeatures()
+          .then((features) => {
+            if (!features.length || get().email) return
+            set({ flags: applyFeatures(getFlagsForTier(get().tier), features) })
+          })
+          .catch(() => { /* best effort */ })
       }
     } catch {
       set({ authLoaded: true })
@@ -207,10 +400,12 @@ export const useLicenseStore = create<LicenseStore>((set, get) => ({
     }
 
     await api.settings.set('pilos_auth', null)
+    api.metrics.setAccount(null).catch((err) => console.error('[LicenseStore]', err))
     set({
       tier: 'free',
       licenseKey: null,
       email: null,
+      token: null,
       flags: getFlagsForTier('free'),
       expiresAt: null,
       isTrial: false,

@@ -7,6 +7,7 @@ import { api } from '../../api'
 import { extractJson } from '../../utils/workflow-ai'
 import { useLicenseStore } from '../../store/useLicenseStore'
 import type { AgentDefinition, AgentCapabilities, PermissionLevel, ClaudeEvent } from '../../types'
+import { useIsPro } from '../../lib/entitlements'
 
 interface AddAgentDialogProps {
   open: boolean
@@ -93,8 +94,7 @@ export function AddAgentDialog({ open, onClose, onAdd, existingIds, agent, onUpd
     setCustomCaps((c) => ({ ...c, tools: c.tools.includes(id) ? c.tools.filter((t) => t !== id) : [...c.tools, id] }))
 
   // License check
-  const tier = useLicenseStore((s) => s.tier)
-  const isPro = tier === 'pro' || tier === 'teams'
+  const isPro = useIsPro()
 
   // AI generation
   const [aiPrompt, setAiPrompt] = useState('')

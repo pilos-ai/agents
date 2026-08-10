@@ -81,9 +81,30 @@ function saveDismissed(paths: string[]) {
   try { localStorage.setItem(REPORTER_DISMISSED_KEY, JSON.stringify(paths)) } catch { /* best-effort */ }
 }
 
-// Hosted free-tier daily quota. The client counter is OPTIMISTIC/informational;
-// the server is authoritative (P2). BYOK/CLI are always unlimited.
+// Hosted daily quota under monetization. The client counter is
+// OPTIMISTIC/informational; the server is authoritative (P2). BYOK/CLI are
+// always unlimited.
 export const HOSTED_FREE_DAILY = 2
+
+/**
+ * Effective client-side daily cap for hosted generation. `0` = unlimited.
+ *
+ * The server decides the real number and sends it back on /usage — while Pilos
+ * is free that is a generous spend guardrail rather than a paywall, so we never
+ * hardcode it here. Before /usage has loaded we assume no cap in free mode
+ * rather than inventing a low one; the server still rejects if it must.
+ */
+export function hostedDailyLimitFor(
+  usage: ReporterUsage | null,
+  lic: { tier: string; monetizationEnabled: boolean }
+): number {
+  if (lic.tier === 'pro' || lic.tier === 'teams') return 0
+  if (usage) {
+    if (usage.unlimited ?? usage.isPro) return 0
+    return usage.limit ?? 0
+  }
+  return lic.monetizationEnabled ? HOSTED_FREE_DAILY : 0
+}
 const HOSTED_USAGE_KEY = 'pilos:reporter-usage'
 function utcDay(): string { return new Date().toISOString().slice(0, 10) }
 
@@ -113,7 +134,7 @@ export const REPORTER_MODELS: { value: string; label: string }[] = [
 ]
 
 export const REPORTER_MODES: { value: ReporterMode; label: string; desc: string }[] = [
-  { value: 'hosted', label: 'Pilos Cloud', desc: 'No setup — generate via Pilos (5/day free, Pro = unlimited)' },
+  { value: 'hosted', label: 'Pilos Cloud', desc: 'No setup — generate via Pilos, free' },
   { value: 'byok', label: 'Your Anthropic key', desc: 'Bring your own API key — unlimited, code stays on your machine' },
   { value: 'cli', label: 'Claude CLI', desc: 'Use your Claude Code subscription — unlimited, fully local' },
 ]
@@ -236,7 +257,7 @@ export const useReporterStore = create<ReporterStore>((set, get) => ({
         machineId: get().machineId || undefined,
       })
       const patch: Partial<ReporterStore> = { usage, usageLoading: false }
-      if (usage && !usage.isPro) patch.hostedUsedToday = usage.today.count
+      if (usage && !(usage.unlimited ?? usage.isPro)) patch.hostedUsedToday = usage.today.count
       set(patch)
     } catch {
       set({ usageLoading: false })
@@ -367,14 +388,17 @@ export const useReporterStore = create<ReporterStore>((set, get) => ({
     // Resolve the transport now (the persisted choice may be unavailable).
     const effectiveMode = usableMode(mode, { cliAvailable, hostedAvailable })
     const lic = useLicenseStore.getState()
-    const isPro = lic.tier === 'pro' || lic.tier === 'teams'
-    // Hosted free tier is metered (BYOK/CLI/Pro are unlimited). Client check is a
-    // courtesy gate; the server enforces authoritatively (P2).
-    const hostedLimited = effectiveMode === 'hosted' && !isPro
+    // Hosted generation may be metered (BYOK/CLI are always unlimited). Client
+    // check is a courtesy gate; the server enforces authoritatively (P2).
+    const dailyLimit = hostedDailyLimitFor(get().usage, lic)
+    const hostedLimited = effectiveMode === 'hosted' && dailyLimit > 0
     // Recompute from localStorage — the in-memory count goes stale across a UTC-midnight boundary.
     const usedNow = loadHostedUsedToday()
-    if (hostedLimited && usedNow >= HOSTED_FREE_DAILY) {
-      set({ hostedUsedToday: usedNow, error: `You've used your ${HOSTED_FREE_DAILY} free reports today — upgrade to Pro for unlimited, or switch to your own API key / Claude CLI.` })
+    if (hostedLimited && usedNow >= dailyLimit) {
+      const upsell = lic.monetizationEnabled
+        ? 'upgrade to Pro for unlimited, or switch to your own API key / Claude CLI.'
+        : 'it resets at midnight UTC — or switch to your own API key / Claude CLI for unlimited.'
+      set({ hostedUsedToday: usedNow, error: `You've used your ${dailyLimit} Pilos Cloud reports today — ${upsell}` })
       return
     }
     set({ generating: true, error: null, hostedUsedToday: usedNow })

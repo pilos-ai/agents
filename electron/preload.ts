@@ -317,6 +317,7 @@ contextBridge.exposeInMainWorld('api', {
   // Metrics
   metrics: {
     setLicenseKey: (key: string) => ipcRenderer.invoke('metrics:setLicenseKey', key),
+    setAccount: (email: string | null) => ipcRenderer.invoke('metrics:setAccount', email),
     getMachineId: () => ipcRenderer.invoke('metrics:getMachineId') as Promise<string>,
   },
 
